@@ -4,6 +4,7 @@ import {
   Entity,
   PrimaryGeneratedColumn,
 } from 'typeorm';
+import { DATE_TYPE } from '../config/db';
 
 @Entity('reviews')
 export class Review {
@@ -25,6 +26,6 @@ export class Review {
   @Column({ type: 'text', nullable: true })
   comment?: string;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: DATE_TYPE })
   createdAt: Date;
 }

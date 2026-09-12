@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { FieldSchema, getSchemaForSlugs } from './category-schemas';
 import { Category } from './category.entity';
+import { Listing } from '../listings/listing.entity';
 
 interface SeedNode {
   slug: string;
@@ -210,9 +211,9 @@ export class CategoriesService {
         for (const o of orphans) {
           const moved = await this.categoriesRepo.manager
             .createQueryBuilder()
-            .update('listings')
+            .update(Listing)
             .set({ categoryId: root.id })
-            .where('categoryId = :id', { id: o.id })
+            .where({ categoryId: o.id })
             .execute();
           await this.categoriesRepo.delete(o.id);
           this.logger.log(`Sous-catégorie ${o.slug} fusionnée dans ${root.slug} (${moved.affected ?? 0} annonce(s) déplacée(s)).`);

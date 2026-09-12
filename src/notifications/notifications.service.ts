@@ -33,6 +33,12 @@ class MockNotificationProvider implements INotificationProvider {
   }
 }
 
+/** NOTIFICATION_PROVIDER=none : notifications in-app uniquement (table notifications), ni push ni SMS. Autorisé en production. */
+class NoopNotificationProvider implements INotificationProvider {
+  async push(): Promise<void> {}
+  async sms(): Promise<void> {}
+}
+
 class UnconfiguredNotificationProvider implements INotificationProvider {
   constructor(private name: string) {}
   async push(): Promise<void> {
@@ -54,7 +60,8 @@ export class NotificationsService {
     config: ConfigService,
   ) {
     const name = config.get<string>('NOTIFICATION_PROVIDER') || 'mock';
-    this.provider = name === 'mock' ? new MockNotificationProvider() : new UnconfiguredNotificationProvider(name);
+    this.provider =
+      name === 'mock' ? new MockNotificationProvider() : name === 'none' ? new NoopNotificationProvider() : new UnconfiguredNotificationProvider(name);
   }
 
   /**

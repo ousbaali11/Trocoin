@@ -1,4 +1,5 @@
 import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
+import { DATE_TYPE } from '../config/db';
 
 /**
  * Multi-utilisateurs : `memberId` peut gérer les annonces de la boutique
@@ -24,6 +25,6 @@ export class ShopMember {
   @Column()
   invitedBy: string;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: DATE_TYPE })
   createdAt: Date;
 }

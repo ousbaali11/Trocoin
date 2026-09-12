@@ -28,6 +28,6 @@ export class Notification {
   @Column({ type: DATE_TYPE, nullable: true })
   readAt?: Date;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: DATE_TYPE })
   createdAt: Date;
 }

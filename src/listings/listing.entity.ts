@@ -30,7 +30,7 @@ export const CONDITIONS: ListingCondition[] = ['neuf', 'tres_bon_etat', 'bon_eta
 export const LISTING_LIFETIME_DAYS = 60;
 
 @Entity('listings')
-@Index(['userId', 'externalRef'], { unique: true, where: 'externalRef IS NOT NULL' })
+@Index(['userId', 'externalRef'], { unique: true, where: '"externalRef" IS NOT NULL' })
 export class Listing {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -121,9 +121,9 @@ export class Listing {
   @Column({ type: DATE_TYPE, nullable: true })
   expiresAt?: Date;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: DATE_TYPE })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: DATE_TYPE })
   updatedAt: Date;
 }

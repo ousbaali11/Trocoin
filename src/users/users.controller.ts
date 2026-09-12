@@ -28,6 +28,7 @@ import { BecomeProDto, UpdateProfileDto } from './dto/update-profile.dto';
 import { StripeConnectService } from './stripe-connect.service';
 import { User } from './user.entity';
 import { UsersService } from './users.service';
+import { AuthService } from '../auth/auth.service';
 
 const singleImageUpload = () =>
   FileInterceptor('file', {
@@ -41,6 +42,7 @@ export class UsersController {
   constructor(
     private usersService: UsersService,
     private stripeConnect: StripeConnectService,
+    private auth: AuthService,
   ) {}
 
   @UseGuards(JwtAuthGuard)
@@ -129,6 +131,7 @@ export class UsersController {
   @HttpCode(204)
   async deleteMe(@Req() req: any) {
     await this.usersService.deleteAccount(req.user.userId);
+    await this.auth.revokeAllSessions(req.user.userId);
   }
 
   // Vitrine / profil public — pas de garde JWT, mais aucune donnée

@@ -1,4 +1,5 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { PAYMENT_DISABLED_MESSAGE } from '../payments/disabled-payment.provider';
 import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
 import { UsersService } from './users.service';
@@ -25,7 +26,7 @@ import { UsersService } from './users.service';
 export class StripeConnectService {
   private readonly logger = new Logger('StripeConnect');
   private readonly stripe?: Stripe;
-  private readonly mode: 'mock' | 'stripe';
+  private readonly mode: 'mock' | 'stripe' | 'disabled';
 
   constructor(
     private config: ConfigService,
@@ -36,6 +37,8 @@ export class StripeConnectService {
     if (provider === 'stripe' && key) {
       this.stripe = new Stripe(key);
       this.mode = 'stripe';
+    } else if (provider === 'disabled') {
+      this.mode = 'disabled';
     } else {
       this.mode = 'mock';
     }
@@ -49,6 +52,8 @@ export class StripeConnectService {
       this.config.get<string>('STRIPE_CONNECT_RETURN_URL') || 'http://localhost:3001/compte/paiements?stripe=retour';
     const refreshUrl =
       this.config.get<string>('STRIPE_CONNECT_REFRESH_URL') || 'http://localhost:3001/compte/paiements?stripe=rafraichir';
+
+    if (this.mode === 'disabled') throw new ServiceUnavailableException(PAYMENT_DISABLED_MESSAGE);
 
     if (this.mode === 'mock') {
       const accountId = user.stripeAccountId || `acct_mock_${user.id.slice(0, 8)}`;

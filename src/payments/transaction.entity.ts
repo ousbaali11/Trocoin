@@ -83,9 +83,9 @@ export class Transaction {
   @Column({ type: DATE_TYPE, nullable: true })
   resolvedAt?: Date;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: DATE_TYPE })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: DATE_TYPE })
   updatedAt: Date;
 }

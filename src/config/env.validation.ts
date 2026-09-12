@@ -27,10 +27,26 @@ export function validateEnv(env: Record<string, unknown>): Record<string, unknow
 
     if (!env.CORS_ORIGINS) errors.push("CORS_ORIGINS est obligatoire en production (liste d'origines séparées par des virgules).");
     if ((env.SMS_PROVIDER || 'mock') === 'mock') errors.push('SMS_PROVIDER=mock est interdit en production (les codes OTP seraient exposés dans les logs).');
-    if ((env.PAYMENT_PROVIDER || 'mock') === 'mock') errors.push('PAYMENT_PROVIDER=mock est interdit en production.');
-    if ((env.NOTIFICATION_PROVIDER || 'mock') === 'mock') errors.push('NOTIFICATION_PROVIDER=mock est interdit en production.');
+    if ((env.PAYMENT_PROVIDER || 'mock') === 'mock') errors.push('PAYMENT_PROVIDER=mock est interdit en production (utilisez "disabled" tant que Stripe/PayPal ne sont pas configurés).');
+    if ((env.NOTIFICATION_PROVIDER || 'mock') === 'mock') errors.push('NOTIFICATION_PROVIDER=mock est interdit en production (utilisez "none" : notifications in-app uniquement).');
     if (env.DB_TYPE !== 'postgres') errors.push('DB_TYPE doit valoir "postgres" en production.');
     if (env.THROTTLE_DISABLED === 'true') errors.push('THROTTLE_DISABLED=true est interdit en production.');
+  }
+
+  // Fournisseur SMS réel : les identifiants doivent être présents dès le démarrage,
+  // sinon chaque inscription échouerait en 503. Noms exacts attendus :
+  const smsRequired: Record<string, string[]> = {
+    vonage: ['VONAGE_API_KEY', 'VONAGE_API_SECRET', 'SMS_SENDER'],
+    twilio: ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_FROM'],
+  };
+  const smsProvider = (env.SMS_PROVIDER as string | undefined) || 'mock';
+  if (smsProvider !== 'mock') {
+    const required = smsRequired[smsProvider];
+    if (!required) errors.push(`SMS_PROVIDER="${smsProvider}" inconnu (valeurs : mock, vonage, twilio).`);
+    else {
+      const missing = required.filter((k) => !env[k]);
+      if (missing.length) errors.push(`SMS_PROVIDER=${smsProvider} : variables manquantes ${missing.join(', ')}.`);
+    }
   }
 
   if (env.PAYMENT_PROVIDER === 'stripe' && !env.STRIPE_SECRET_KEY) {

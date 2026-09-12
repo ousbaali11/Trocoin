@@ -7,6 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import { Sentry, SENTRY_ENABLED } from '../../monitoring/sentry';
 
 /**
  * Filtre global : les erreurs HTTP prévues sont renvoyées telles quelles ;
@@ -50,6 +51,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     }
 
     this.logger.error(`${req.method} ${req.url} -> 500 : ${anyErr?.message}`, anyErr?.stack);
+    if (SENTRY_ENABLED) Sentry.captureException(exception, { tags: { route: req.url, method: req.method } });
     return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       statusCode: 500,
       message: 'Erreur interne. Réessayez plus tard.',

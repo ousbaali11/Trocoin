@@ -1,4 +1,5 @@
 import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
+import { DATE_TYPE } from '../config/db';
 
 /**
  * Journal d'audit : qui a fait quoi, quand, sur quelle ressource.
@@ -32,6 +33,6 @@ export class AdminAuditLog {
   @Column({ nullable: true })
   ip?: string;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: DATE_TYPE })
   createdAt: Date;
 }

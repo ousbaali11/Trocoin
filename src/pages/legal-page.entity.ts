@@ -1,4 +1,5 @@
 import { Column, Entity, PrimaryColumn, UpdateDateColumn } from 'typeorm';
+import { DATE_TYPE } from '../config/db';
 
 /**
  * CMS minimal : pages légales et d'aide modifiables depuis le back-office
@@ -22,6 +23,6 @@ export class LegalPage {
   @Column({ nullable: true })
   updatedBy?: string;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: DATE_TYPE })
   updatedAt: Date;
 }

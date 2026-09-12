@@ -22,6 +22,6 @@ export class PhoneVerification {
   @Column({ type: DATE_TYPE, nullable: true })
   verifiedAt?: Date;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: DATE_TYPE })
   createdAt: Date;
 }

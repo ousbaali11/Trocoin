@@ -44,6 +44,6 @@ export class SavedSearch {
   @Column({ default: 0 })
   matchesNotified: number;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: DATE_TYPE })
   createdAt: Date;
 }

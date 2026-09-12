@@ -658,7 +658,7 @@ export class ListingsService {
     if (query.city) qb.andWhere('LOWER(l.city) LIKE :city', { city: `%${escapeLike(query.city.toLowerCase())}%` });
     if (query.postal_code) qb.andWhere('l.postalCode LIKE :cp', { cp: `${query.postal_code}%` });
     if (query.seller) qb.andWhere('l.userId = :sellerId', { sellerId: query.seller });
-    if (query.seller_type) qb.andWhere('l.userId IN (SELECT u.id FROM users u WHERE u.accountType = :sellerType)', { sellerType: query.seller_type });
+    if (query.seller_type) qb.andWhere('l.userId IN (SELECT CAST(u.id AS varchar) FROM users u WHERE u."accountType" = :sellerType)', { sellerType: query.seller_type });
     if (query.q) {
       const q = `%${escapeLike(query.q.toLowerCase())}%`;
       qb.andWhere('(LOWER(l.title) LIKE :q OR LOWER(l.description) LIKE :q)', { q });
@@ -667,7 +667,7 @@ export class ListingsService {
     if (query.price_max !== undefined) qb.andWhere('l.price <= :priceMax', { priceMax: query.price_max });
     if (query.condition && query.condition.length > 0) qb.andWhere('l.condition IN (:...conditions)', { conditions: query.condition });
     if (query.delivery === 'true') qb.andWhere('l.deliveryAvailable = :delivery', { delivery: true });
-    if (query.with_photo === 'true') qb.andWhere('EXISTS (SELECT 1 FROM listing_photos p WHERE p.listingId = l.id)');
+    if (query.with_photo === 'true') qb.andWhere('EXISTS (SELECT 1 FROM listing_photos p WHERE p."listingId" = CAST(l.id AS varchar))');
     if (query.urgent === 'true') qb.andWhere('l.urgentUntil > :now', { now });
     if (query.since_days) qb.andWhere('l.publishedAt > :since', { since: new Date(Date.now() - query.since_days * 86_400_000) });
     if (useDistance) {

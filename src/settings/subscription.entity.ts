@@ -31,6 +31,6 @@ export class Subscription {
   @Column({ type: DATE_TYPE, nullable: true })
   endsAt?: Date;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: DATE_TYPE })
   createdAt: Date;
 }

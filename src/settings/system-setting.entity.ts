@@ -1,4 +1,5 @@
 import { Column, Entity, PrimaryColumn, UpdateDateColumn } from 'typeorm';
+import { DATE_TYPE } from '../config/db';
 
 /**
  * Réglages globaux modifiables depuis le back-office sans redéploiement.
@@ -15,6 +16,6 @@ export class SystemSetting {
   @Column({ nullable: true })
   updatedBy?: string;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: DATE_TYPE })
   updatedAt: Date;
 }

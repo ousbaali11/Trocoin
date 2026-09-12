@@ -1,0 +1,15 @@
+node_modules
+frontend
+dist
+data
+uploads/*
+!uploads/.gitkeep
+test
+.env
+.env.*
+!.env.example
+*.md
+maquette-premium.html
+public
+.git
+.github

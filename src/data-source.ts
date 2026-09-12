@@ -24,17 +24,27 @@ export function buildDataSourceOptions(env: Record<string, unknown> = process.en
     synchronize: !isProd && env.DB_SYNCHRONIZE !== 'false',
     migrationsRun: isProd || env.DB_MIGRATIONS_RUN === 'true',
     logging: env.DB_LOGGING === 'true',
+    // Taille du pool (offres gratuites : peu de connexions ; PGlite en test : 1)
+    extra: env.DB_POOL_MAX ? { max: Number(env.DB_POOL_MAX) } : undefined,
   };
 
   if (env.DB_TYPE === 'postgres') {
+    // DATABASE_URL (Render, Railway, Neon, Supabase…) a priorité sur les variables séparées.
+    const url = env.DATABASE_URL as string | undefined;
     return {
       type: 'postgres',
-      host: (env.DB_HOST as string) || 'localhost',
-      port: env.DB_PORT ? Number(env.DB_PORT) : 5432,
-      username: env.DB_USERNAME as string,
-      password: env.DB_PASSWORD as string,
-      database: env.DB_NAME as string,
-      ssl: env.DB_SSL === 'true' ? { rejectUnauthorized: false } : undefined,
+      ...(url
+        ? { url }
+        : {
+            host: (env.DB_HOST as string) || 'localhost',
+            port: env.DB_PORT ? Number(env.DB_PORT) : 5432,
+            username: env.DB_USERNAME as string,
+            password: env.DB_PASSWORD as string,
+            database: env.DB_NAME as string,
+          }),
+      ssl: env.DB_SSL === 'true' || (url && /sslmode=require/.test(url)) ? { rejectUnauthorized: false } : undefined,
+      // gen_random_uuid() (pgcrypto / natif ≥ PG13) plutôt que uuid-ossp
+      uuidExtension: 'pgcrypto',
       ...common,
     };
   }

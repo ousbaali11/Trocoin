@@ -14,6 +14,7 @@ import { Review } from '../reviews/review.entity';
 import { User } from '../users/user.entity';
 import { AdminAuditLog } from './admin-audit-log.entity';
 import { PagesService } from '../pages/pages.service';
+import { AuthService } from '../auth/auth.service';
 import { SettingsService } from '../settings/settings.service';
 import {
   AdminPageDto,
@@ -52,6 +53,7 @@ export class AdminService {
     private categoriesService: CategoriesService,
     private settings: SettingsService,
     private pages: PagesService,
+    private auth: AuthService,
   ) {}
 
   // ---------------------------------------------------- réglages / formules
@@ -175,7 +177,7 @@ export class AdminService {
     if (query.q) {
       const q = `%${query.q.toLowerCase()}%`;
       qb.andWhere(
-        '(LOWER(u.phoneNumber) LIKE :q OR LOWER(u.displayName) LIKE :q OR LOWER(u.email) LIKE :q OR u.siret LIKE :q OR LOWER(u.shopName) LIKE :q OR u.id = :exact)',
+        '(LOWER(u.phoneNumber) LIKE :q OR LOWER(u.displayName) LIKE :q OR LOWER(u.email) LIKE :q OR u.siret LIKE :q OR LOWER(u.shopName) LIKE :q OR CAST(u.id AS varchar) = :exact)',
         { q, exact: query.q },
       );
     }
@@ -228,6 +230,7 @@ export class AdminService {
       patch.suspensionReason = dto.suspensionReason || 'Suspendu par un administrateur';
       changed.suspended = { to: true, reason: patch.suspensionReason };
       await this.listingsRepo.update({ userId: id, status: 'en_ligne' }, { status: 'desactivee', moderationReason: 'Compte suspendu' });
+      await this.auth.revokeAllSessions(id);
     } else if (dto.suspended === false && user.suspendedAt) {
       patch.suspendedAt = null as any;
       patch.suspensionReason = null as any;
@@ -261,7 +264,7 @@ export class AdminService {
     const qb = this.listingsRepo.createQueryBuilder('l').orderBy('l.createdAt', 'DESC');
     if (query.q) {
       const q = `%${query.q.toLowerCase()}%`;
-      qb.andWhere('(LOWER(l.title) LIKE :q OR LOWER(l.description) LIKE :q OR l.id = :exact)', { q, exact: query.q });
+      qb.andWhere('(LOWER(l.title) LIKE :q OR LOWER(l.description) LIKE :q OR CAST(l.id AS varchar) = :exact)', { q, exact: query.q });
     }
     if (query.status) qb.andWhere('l.status = :status', { status: query.status });
     if (query.flagged === 'true') qb.andWhere('l.status = :pending', { pending: 'en_attente' });

@@ -6,7 +6,11 @@ par SMS. Tout autre indicatif est refusé à l'inscription.
 
 Documents : `cahier-des-charges.md`, `architecture-technique.md`,
 `analyse-concurrentielle.md` (étude leboncoin + écarts), `AUDIT.md` (sécurité,
-complétude, ce qui n'a pas pu être testé, recommandations avant lancement).
+complétude, ce qui n'a pas pu être testé, recommandations avant lancement),
+`DEPLOIEMENT.md` (mise en ligne pas à pas : Neon + Render + Vercel, sauvegardes, SMS).
+
+**URL de production : _non déployé à ce jour_** — voir `DEPLOIEMENT.md` (comptes hébergeur
+et identifiants SMS à créer par le propriétaire du projet).
 
 ## Démarrage rapide (développement)
 
@@ -31,7 +35,9 @@ cd frontend && npm install && cp .env.example .env.local && npm run dev -- -p 30
 ## Tests
 
 ```bash
-npm test                 # 49 tests e2e (Jest + supertest, SQLite en mémoire)
+npm test                 # 54 tests e2e (Jest + supertest, SQLite en mémoire)
+# Les mêmes tests sur PostgreSQL (schéma créé par les migrations) :
+E2E_DB=postgres DB_TYPE=postgres DATABASE_URL=postgresql://... DB_SYNCHRONIZE=false npm test
 node test/ws-smoke.js    # messagerie temps réel contre un serveur lancé
 cd frontend && npx tsc --noEmit && npx next build
 ```
@@ -65,8 +71,25 @@ libération), journal d'audit.
 ## Configuration
 
 Voir `.env.example`. En production, le démarrage est **refusé** si : `JWT_SECRET`
-absent/faible, `CORS_ORIGINS` absent, `DB_TYPE≠postgres`, ou un fournisseur (`SMS`,
-`PAYMENT`, `NOTIFICATION`) laissé en `mock`.
+absent/faible, `CORS_ORIGINS` absent, `DB_TYPE≠postgres`, un fournisseur (`SMS`,
+`PAYMENT`, `NOTIFICATION`) laissé en `mock`, ou les clés du fournisseur SMS absentes.
+Modes autorisés en production sans prestataire : `PAYMENT_PROVIDER=disabled` (503 explicite)
+et `NOTIFICATION_PROVIDER=none` (in-app uniquement).
+
+### Sessions
+
+Jeton d'accès JWT court (`JWT_EXPIRES_IN`, 15 min) + **refresh token** opaque stocké haché
+en base (`refresh_tokens`), tourné à chaque `POST /auth/refresh`, révoqué à la déconnexion
+(`POST /auth/logout`), à la suspension par un admin et à la suppression du compte. La
+réutilisation d'un refresh token déjà consommé révoque toute la famille de sessions.
+`GET /auth/sessions` liste les sessions actives, `DELETE /auth/sessions` les ferme toutes.
+
+### Production
+
+`Dockerfile` multi-étapes (image finale sans dépendances de dev, utilisateur non-root,
+`HEALTHCHECK` sur `GET /health`). CI GitHub Actions (`.github/workflows/ci.yml`) : tsc,
+tests e2e SQLite + PostgreSQL 16, build, `npm audit`, `next build`, image Docker.
+Monitoring Sentry activé par `SENTRY_DSN`. Guide complet : `DEPLOIEMENT.md`.
 
 ### Base de données et migrations
 
@@ -75,7 +98,9 @@ migrations exécutées au démarrage. Générer la première migration **contre 
 cible** :
 
 ```bash
-DB_TYPE=postgres DB_HOST=... DB_NAME=... npm run migration:generate
+# Migration initiale déjà générée et exécutée contre PostgreSQL (src/migrations/*-InitialPostgres.ts).
+# Pour une évolution du schéma :
+DB_TYPE=postgres DATABASE_URL=postgresql://... DB_SYNCHRONIZE=false npm run migration:generate
 npm run migration:run
 ```
 
@@ -91,7 +116,8 @@ npm run migration:run
 ## Principales routes API
 
 ```
-POST /auth/register/phone · POST /auth/otp/verify
+POST /auth/register/phone · POST /auth/otp/verify · POST /auth/refresh · POST /auth/logout · /auth/sessions
+GET  /health
 GET  /users/me · PATCH /users/me · POST /users/me/become-pro · GET /users/:id/profile
 GET  /users/me/export · DELETE /users/me · /users/me/blocks · /users/me/saved-searches
 GET  /categories/tree · GET /categories/:slug/schema · GET /listings/suggest?q=

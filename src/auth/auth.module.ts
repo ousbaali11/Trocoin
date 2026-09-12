@@ -1,6 +1,7 @@
 import { Global, Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { resolveJwtSecret } from '../config/env.validation';
 import { OtpModule } from '../otp/otp.module';
 import { UsersModule } from '../users/users.module';
@@ -10,21 +11,23 @@ import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { JwtStrategy } from './jwt.strategy';
 import { OptionalJwtAuthGuard } from './optional-jwt-auth.guard';
+import { RefreshToken } from './refresh-token.entity';
 
 /**
  * Module global : une seule configuration JWT pour toute l'application
- * (HTTP et WebSocket). Le secret est résolu une fois, sans valeur par
- * défaut possible en production (voir env.validation.ts).
+ * (HTTP et WebSocket). Access token court (JWT_EXPIRES_IN, défaut 15 min) ;
+ * la persistance de session repose sur les refresh tokens en base.
  */
 @Global()
 @Module({
   imports: [
     OtpModule,
     UsersModule,
+    TypeOrmModule.forFeature([RefreshToken]),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({
       secret: resolveJwtSecret(),
-      signOptions: { expiresIn: (process.env.JWT_EXPIRES_IN as any) || '7d' },
+      signOptions: { expiresIn: (process.env.JWT_EXPIRES_IN as any) || '15m' },
     }),
   ],
   controllers: [AuthController],

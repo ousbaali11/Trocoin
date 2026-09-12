@@ -1,11 +1,14 @@
 /**
  * Client HTTP unique vers l'API NestJS.
- * - côté navigateur : ajoute le JWT stocké localement ;
+ * - côté navigateur : ajoute l'access token (15 min) ; sur 401, tente UNE
+ *   rotation du refresh token puis rejoue la requête ; si la rotation échoue,
+ *   la session locale est effacée ;
  * - côté serveur (rendu SSR des pages publiques) : appels anonymes.
  */
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3001";
 const TOKEN_KEY = "trocoin_token";
+const REFRESH_KEY = "trocoin_refresh";
 
 export class ApiError extends Error {
   status: number;
@@ -17,23 +20,77 @@ export class ApiError extends Error {
   }
 }
 
-export function getToken(): string | null {
+function read(key: string): string | null {
   if (typeof window === "undefined") return null;
   try {
-    return window.localStorage.getItem(TOKEN_KEY);
+    return window.localStorage.getItem(key);
   } catch {
     return null;
   }
 }
-
-export function setToken(token: string | null) {
+function write(key: string, value: string | null) {
   if (typeof window === "undefined") return;
   try {
-    if (token) window.localStorage.setItem(TOKEN_KEY, token);
-    else window.localStorage.removeItem(TOKEN_KEY);
+    if (value) window.localStorage.setItem(key, value);
+    else window.localStorage.removeItem(key);
   } catch {
     /* stockage indisponible (navigation privée) : session en mémoire uniquement */
   }
+}
+
+export function getToken(): string | null {
+  return read(TOKEN_KEY);
+}
+export function getRefreshToken(): string | null {
+  return read(REFRESH_KEY);
+}
+export function setSession(accessToken: string | null, refreshToken?: string | null) {
+  write(TOKEN_KEY, accessToken);
+  if (refreshToken !== undefined) write(REFRESH_KEY, refreshToken);
+}
+/** Compatibilité : anciens appels setToken(token). */
+export function setToken(token: string | null) {
+  setSession(token, token === null ? null : undefined);
+}
+
+let refreshing: Promise<string | null> | null = null;
+/** Rotation du refresh token (une seule à la fois, partagée entre requêtes concurrentes). */
+export async function refreshSession(): Promise<string | null> {
+  if (refreshing) return refreshing;
+  refreshing = (async () => {
+    const rt = getRefreshToken();
+    if (!rt) return null;
+    try {
+      const res = await fetch(`${API_URL}/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken: rt }),
+      });
+      if (!res.ok) {
+        setSession(null, null);
+        return null;
+      }
+      const data = (await res.json()) as { accessToken: string; refreshToken: string };
+      setSession(data.accessToken, data.refreshToken);
+      return data.accessToken;
+    } catch {
+      return null;
+    } finally {
+      refreshing = null;
+    }
+  })();
+  return refreshing;
+}
+
+/** Déconnexion : révocation serveur puis effacement local. */
+export async function logoutSession(): Promise<void> {
+  const rt = getRefreshToken();
+  try {
+    await fetch(`${API_URL}/auth/logout`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ refreshToken: rt ?? undefined }) });
+  } catch {
+    /* hors ligne : on efface quand même localement */
+  }
+  setSession(null, null);
 }
 
 function extractMessage(body: unknown, fallback: string): string {
@@ -50,13 +107,15 @@ interface RequestOptions {
   body?: unknown;
   formData?: FormData;
   token?: string | null;
-  /** Rendu serveur : durée de cache Next (secondes). */
   revalidate?: number | false;
   signal?: AbortSignal;
+  /** interne : évite une boucle de refresh */
+  _retried?: boolean;
 }
 
 export async function api<T = unknown>(path: string, opts: RequestOptions = {}): Promise<T> {
-  const token = opts.token === undefined ? getToken() : opts.token;
+  const explicitToken = opts.token !== undefined;
+  const token = explicitToken ? opts.token : getToken();
   const headers: Record<string, string> = {};
   if (opts.body !== undefined) headers["Content-Type"] = "application/json";
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -79,6 +138,12 @@ export async function api<T = unknown>(path: string, opts: RequestOptions = {}):
     throw new ApiError(0, "Impossible de joindre le serveur. Vérifiez votre connexion.");
   }
 
+  // Access token expiré : rotation puis rejeu (une seule fois, hors appels anonymes explicites)
+  if (res.status === 401 && !explicitToken && !opts._retried && typeof window !== "undefined" && getRefreshToken()) {
+    const fresh = await refreshSession();
+    if (fresh) return api<T>(path, { ...opts, _retried: true });
+  }
+
   if (res.status === 204) return undefined as T;
   const text = await res.text();
   let data: unknown = null;
@@ -93,6 +158,7 @@ export async function api<T = unknown>(path: string, opts: RequestOptions = {}):
       res.status === 403 ? "Accès refusé." :
       res.status === 404 ? "Introuvable." :
       res.status === 429 ? "Trop de tentatives, réessayez dans quelques instants." :
+      res.status === 503 ? "Service momentanément indisponible." :
       "Une erreur est survenue.";
     throw new ApiError(res.status, extractMessage(data, fallback), data);
   }

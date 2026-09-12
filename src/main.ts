@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { SENTRY_ENABLED } from './monitoring/sentry';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
@@ -64,6 +65,7 @@ async function bootstrap() {
   const port = process.env.PORT || 3000;
   await app.listen(port);
   logger.log(`API Trocoin démarrée sur http://localhost:${port} (env=${process.env.NODE_ENV || 'development'})`);
+  logger.log(`Monitoring Sentry : ${SENTRY_ENABLED ? "actif" : "désactivé (SENTRY_DSN absent)"}`);
   logger.log(`CORS autorisé pour : ${corsOrigins.join(', ') || '(aucune origine navigateur)'}`);
 }
 bootstrap();

@@ -67,7 +67,14 @@ export class OtpService {
     });
     await this.otpRepo.save(entry);
 
-    await this.smsService.sendOtp(phoneNumber, code);
+    try {
+      await this.smsService.sendOtp(phoneNumber, code);
+    } catch (err) {
+      // Le SMS n'est pas parti : on retire la demande pour que l'utilisateur
+      // puisse réessayer immédiatement (pas de cooldown ni de code fantôme).
+      await this.otpRepo.delete({ id: entry.id });
+      throw err;
+    }
   }
 
   /** Retourne true si le code est valide et vient d'être consommé. */

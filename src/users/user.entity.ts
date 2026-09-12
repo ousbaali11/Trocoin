@@ -92,10 +92,10 @@ export class User {
   @Column({ default: false })
   notifySms: boolean;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: DATE_TYPE })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: DATE_TYPE })
   updatedAt: Date;
 
   @Column({ type: DATE_TYPE, nullable: true })

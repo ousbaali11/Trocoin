@@ -1,4 +1,5 @@
 import { Column, CreateDateColumn, Entity, PrimaryColumn } from 'typeorm';
+import { DATE_TYPE } from '../config/db';
 
 @Entity('favorites')
 export class Favorite {
@@ -8,6 +9,6 @@ export class Favorite {
   @PrimaryColumn()
   listingId: string;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: DATE_TYPE })
   createdAt: Date;
 }

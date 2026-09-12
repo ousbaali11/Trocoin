@@ -1,0 +1,111 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    name: API — typecheck, tests e2e, audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Installer les dépendances
+        run: npm ci --legacy-peer-deps --no-audit --no-fund
+      - name: Typecheck (tsc)
+        run: npx tsc -p tsconfig.json --noEmit
+      - name: Tests e2e (SQLite en mémoire)
+        run: npm test
+      - name: Build de production
+        run: npm run build
+      - name: Audit des dépendances (échec si vulnérabilité ≥ haute)
+        run: npm audit --audit-level=high
+
+  api-postgres:
+    name: API — tests e2e sur PostgreSQL 16
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: trocoin
+          POSTGRES_PASSWORD: trocoin
+          POSTGRES_DB: trocoin_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U trocoin"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DB_TYPE: postgres
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      DB_USERNAME: trocoin
+      DB_PASSWORD: trocoin
+      DB_NAME: trocoin_test
+      DB_SYNCHRONIZE: "false"
+      E2E_DB: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --legacy-peer-deps --no-audit --no-fund
+      - name: Migrations (schéma créé uniquement par les migrations)
+        run: npm run migration:run
+      - name: Tests e2e sur Postgres
+        run: npm test
+
+  frontend:
+    name: Front — typecheck et next build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      NEXT_PUBLIC_API_URL: https://api.trocoin.example
+      NEXT_PUBLIC_SITE_URL: https://trocoin.example
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Typecheck (tsc)
+        run: npx tsc --noEmit -p tsconfig.json
+      - name: next build (URL d'API de production injectée)
+        run: npx next build
+      - name: Audit des dépendances
+        run: npm audit --audit-level=high
+
+  docker:
+    name: Image Docker de l'API
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build (sans push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: trocoin-api:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

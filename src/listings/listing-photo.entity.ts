@@ -1,4 +1,5 @@
 import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
+import { DATE_TYPE } from '../config/db';
 
 @Entity('listing_photos')
 export class ListingPhoto {
@@ -15,6 +16,6 @@ export class ListingPhoto {
   @Column({ default: 0 })
   sortOrder: number;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: DATE_TYPE })
   createdAt: Date;
 }

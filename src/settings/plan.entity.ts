@@ -1,4 +1,5 @@
 import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { DATE_TYPE } from '../config/db';
 
 /**
  * Formules professionnelles. Les limites ne s'appliquent QUE si la
@@ -46,9 +47,9 @@ export class Plan {
   @Column({ default: 0 })
   sortOrder: number;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: DATE_TYPE })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: DATE_TYPE })
   updatedAt: Date;
 }

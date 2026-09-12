@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { api, ApiError, getToken, setToken } from "./api";
+import { api, ApiError, getToken, logoutSession, setSession } from "./api";
 import type { Me } from "./types";
 
 interface AuthState {
@@ -11,7 +11,7 @@ interface AuthState {
   loading: boolean;
   unreadMessages: number;
   unreadNotifications: number;
-  login: (token: string) => Promise<void>;
+  login: (token: string, refreshToken?: string) => Promise<void>;
   logout: () => void;
   refresh: () => Promise<void>;
   refreshCounters: () => Promise<void>;
@@ -40,7 +40,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(me);
     } catch (err) {
       if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
-        setToken(null);
+        setSession(null, null);
         setTok(null);
         setUser(null);
       }
@@ -76,8 +76,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user, refreshCounters, pathname]);
 
   const login = useCallback(
-    async (tok: string) => {
-      setToken(tok);
+    async (tok: string, refreshToken?: string) => {
+      setSession(tok, refreshToken);
       setTok(tok);
       await loadUser(tok);
     },
@@ -85,7 +85,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const logout = useCallback(() => {
-    setToken(null);
+    void logoutSession();
     setTok(null);
     setUser(null);
     setUnreadMessages(0);

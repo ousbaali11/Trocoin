@@ -23,6 +23,6 @@ export class Conversation {
   @Column({ type: DATE_TYPE, nullable: true })
   lastMessageAt?: Date;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: DATE_TYPE })
   createdAt: Date;
 }

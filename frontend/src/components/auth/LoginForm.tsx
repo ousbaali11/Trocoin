@@ -67,8 +67,8 @@ export function LoginForm() {
     setError(null);
     setBusy(true);
     try {
-      const res = await api<{ accessToken: string }>("/auth/otp/verify", { method: "POST", body: { phoneNumber: normalized, code }, token: null });
-      await login(res.accessToken);
+      const res = await api<{ accessToken: string; refreshToken: string }>("/auth/otp/verify", { method: "POST", body: { phoneNumber: normalized, code }, token: null });
+      await login(res.accessToken, res.refreshToken);
       router.replace(next);
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Code invalide.";

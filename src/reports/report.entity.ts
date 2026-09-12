@@ -56,6 +56,6 @@ export class Report {
   @Column({ type: DATE_TYPE, nullable: true })
   handledAt?: Date;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: DATE_TYPE })
   createdAt: Date;
 }
