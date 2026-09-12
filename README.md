@@ -1,0 +1,108 @@
+# Trocoin — plateforme de petites annonces (France)
+
+Monorepo : **API NestJS 12 + TypeORM** (racine) et **front Next.js 16** (`frontend/`).
+Règle non négociable : un compte = un numéro de **mobile français (+33 6/7)** vérifié
+par SMS. Tout autre indicatif est refusé à l'inscription.
+
+Documents : `cahier-des-charges.md`, `architecture-technique.md`,
+`analyse-concurrentielle.md` (étude leboncoin + écarts), `AUDIT.md` (sécurité,
+complétude, ce qui n'a pas pu être testé, recommandations avant lancement).
+
+## Démarrage rapide (développement)
+
+```bash
+# API (port 3000) — SQLite locale, SMS / paiement / notifications simulés
+npm install
+cp .env.example .env
+npm run dev
+
+# Front (port 3001)
+cd frontend && npm install && cp .env.example .env.local && npm run dev -- -p 3001
+```
+
+- Site public : http://localhost:3001 — le code OTP s'affiche dans la page de
+  connexion (raccourci actif uniquement avec `SMS_PROVIDER=mock` hors production).
+- Données de démonstration : `node test/seed-demo.js` (3 comptes, 12 annonces avec photos,
+  1 annonce bloquée par la pré-modération, 1 signalement, 1 conversation).
+- Premier administrateur : `npm run create-admin -- 0611223344 "Admin"` puis
+  connexion normale par OTP → menu « Console d'administration » → `/admin`.
+- Page de test interne historique : `public/index.html` (servie uniquement hors production).
+
+## Tests
+
+```bash
+npm test                 # 49 tests e2e (Jest + supertest, SQLite en mémoire)
+node test/ws-smoke.js    # messagerie temps réel contre un serveur lancé
+cd frontend && npx tsc --noEmit && npx next build
+```
+
+## Fonctionnalités
+
+**Public** : accueil, recherche (catégorie/sous-catégorie, prix, état, livraison,
+particulier/pro, date, rayon km avec carte, filtres spécifiques par catégorie, tri),
+détail d'annonce (galerie, caractéristiques, carte approximative, vendeur, similaires,
+partage, signalement), vitrine vendeur/pro, pages légales, sitemap, robots.
+
+**Compte** (OTP) : dépôt d'annonce par étapes (champs dynamiques par catégorie,
+photos réordonnables, brouillon, aperçu), gestion des annonces (pause, vendue,
+renouvellement, duplication), favoris, messagerie temps réel (WebSocket, réponses
+rapides, blocage, signalement), paiement sécurisé (séquestre, expédition ou remise en
+main propre avec code, annulation, litige), avis, alertes de recherche, notifications,
+passage en compte pro (SIRET) et vitrine, onboarding Stripe Connect, export RGPD,
+suppression de compte.
+
+**Administration** (`/admin`, rôle admin relu en base à chaque requête) : statistiques,
+utilisateurs (suspension, rôle, badge identité), annonces (approbation, refus motivé,
+correction, retrait), signalements (traitement avec action), litiges (remboursement /
+libération), journal d'audit.
+
+## Phase 2 (gratuit par défaut)
+
+- **Monétisation désactivée par défaut** (`system_settings.monetization_enabled = false`) : annonces illimitées, mises en avant gratuites, formules sans effet pour tous les comptes. L'admin l'active depuis « Monétisation et formules ».
+- Mise en avant (boost 7 j, urgent 7 j), import de catalogue CSV/XML et gestion multi-utilisateurs (comptes pro), recadrage et glisser-déposer des photos, historique de consultation, photo et proposition de prix dans la messagerie, CMS des pages légales, suggestions de recherche, fournisseur PayPal (simulé).
+- Catégories : 12 familles dans l'ordre de référence ; Locations de vacances sans sous-catégorie (champs dynamiques filtrables) ; Services 15 sous-catégories ; Animaux 5.
+
+## Configuration
+
+Voir `.env.example`. En production, le démarrage est **refusé** si : `JWT_SECRET`
+absent/faible, `CORS_ORIGINS` absent, `DB_TYPE≠postgres`, ou un fournisseur (`SMS`,
+`PAYMENT`, `NOTIFICATION`) laissé en `mock`.
+
+### Base de données et migrations
+
+Dev : SQLite + `synchronize`. Production : PostgreSQL, `synchronize` désactivé,
+migrations exécutées au démarrage. Générer la première migration **contre la base
+cible** :
+
+```bash
+DB_TYPE=postgres DB_HOST=... DB_NAME=... npm run migration:generate
+npm run migration:run
+```
+
+### Fournisseurs à brancher
+
+| Service | Interface | Fichier |
+|---|---|---|
+| SMS (Vonage, Twilio, OVH) | `ISmsProvider` | `src/sms/sms.service.ts` |
+| Paiement (Stripe Connect, implémenté, non testé en réel) | `IPaymentProvider` | `src/payments/stripe-payment.provider.ts` |
+| Onboarding vendeur Stripe | — | `src/users/stripe-connect.service.ts` |
+| Push / SMS de notification (FCM) | `INotificationProvider` | `src/notifications/notifications.service.ts` |
+
+## Principales routes API
+
+```
+POST /auth/register/phone · POST /auth/otp/verify
+GET  /users/me · PATCH /users/me · POST /users/me/become-pro · GET /users/:id/profile
+GET  /users/me/export · DELETE /users/me · /users/me/blocks · /users/me/saved-searches
+GET  /categories/tree · GET /categories/:slug/schema · GET /listings/suggest?q=
+GET  /settings/public · GET /plans · /users/me/entitlements · /users/me/subscription/:planId
+/users/me/shop/members · /users/me/shops · POST /listings/import · POST /listings/:id/promote
+/listings/history · /conversations/:id/images · /conversations/:id/offers · GET /pages/:slug
+/admin/settings · /admin/plans · /admin/pages
+GET  /listings (filtres) · POST /listings · GET/PATCH/DELETE /listings/:id
+POST /listings/:id/photos · PATCH /listings/:id/photos/order · /listings/:id/similar
+/listings/:id/favorite · /conversations · /transactions (quote, ship, handover, dispute…)
+/transactions/:id/review · /reports · /notifications
+/admin/stats · /admin/users · /admin/listings · /admin/reports · /admin/transactions · /admin/audit-log
+WebSocket : join / leave / message (JWT dans handshake.auth.token)
+```

@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Troc — Petites annonces entre Français</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#1E1B16;
+    --bottle:#1F3B2E;
+    --bottle-dark:#152A20;
+    --ivory:#F7F3EA;
+    --ivory-warm:#F1EADA;
+    --ochre:#D8A23B;
+    --ochre-dark:#B9832A;
+    --brick:#B54A2C;
+    --sage:#CBD8C4;
+    --line:#DED5C0;
+    --white:#FFFDF9;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    font-family:'Public Sans', sans-serif;
+    background:var(--ivory);
+    color:var(--ink);
+    line-height:1.5;
+  }
+  h1,h2,h3, .display{
+    font-family:'Fraunces', serif;
+    font-weight:600;
+    letter-spacing:-0.01em;
+  }
+  a{color:inherit; text-decoration:none;}
+  img{max-width:100%; display:block;}
+
+  /* ---------- Header ---------- */
+  header{
+    background:var(--bottle);
+    color:var(--ivory);
+    padding:18px 32px;
+  }
+  .header-inner{
+    max-width:1180px;
+    margin:0 auto;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:24px;
+  }
+  .logo{
+    font-family:'Fraunces', serif;
+    font-size:1.5rem;
+    font-weight:700;
+    display:flex;
+    align-items:center;
+    gap:8px;
+    color:var(--white);
+  }
+  .logo-mark{
+    width:30px; height:30px;
+    background:var(--ochre);
+    border-radius:3px;
+    display:flex; align-items:center; justify-content:center;
+    color:var(--bottle-dark);
+    font-weight:700;
+    font-size:1rem;
+    transform:rotate(-4deg);
+  }
+  nav{display:flex; gap:28px; font-size:0.94rem;}
+  nav a{opacity:0.88; transition:opacity .15s;}
+  nav a:hover{opacity:1;}
+  .header-actions{display:flex; align-items:center; gap:14px;}
+  .btn{
+    padding:10px 18px;
+    border-radius:7px;
+    font-size:0.92rem;
+    font-weight:600;
+    cursor:pointer;
+    border:none;
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+  }
+  .btn-ochre{background:var(--ochre); color:var(--bottle-dark);}
+  .btn-ochre:hover{background:var(--ochre-dark);}
+  .btn-ghost{background:transparent; color:var(--ivory); border:1px solid rgba(247,243,234,0.35);}
+  .btn-ghost:hover{border-color:rgba(247,243,234,0.7);}
+
+  /* ---------- Hero ---------- */
+  .hero{
+    background:var(--bottle);
+    color:var(--ivory);
+    padding:64px 32px 96px;
+    position:relative;
+    overflow:hidden;
+  }
+  .hero-inner{
+    max-width:1180px;
+    margin:0 auto;
+    position:relative;
+    z-index:2;
+  }
+  .hero h1{
+    font-size:clamp(2.4rem, 5vw, 3.6rem);
+    max-width:780px;
+    line-height:1.08;
+    color:var(--white);
+  }
+  .hero p.lead{
+    margin-top:18px;
+    font-size:1.08rem;
+    max-width:520px;
+    color:var(--sage);
+  }
+  .search-panel{
+    margin-top:36px;
+    background:var(--white);
+    border-radius:12px;
+    padding:10px;
+    display:flex;
+    gap:8px;
+    max-width:760px;
+    box-shadow:0 20px 40px rgba(0,0,0,0.25);
+  }
+  .search-panel input{
+    flex:1;
+    border:none;
+    outline:none;
+    padding:14px 16px;
+    font-size:1rem;
+    font-family:'Public Sans', sans-serif;
+    color:var(--ink);
+    background:transparent;
+  }
+  .search-panel .divider{width:1px; background:var(--line); margin:8px 0;}
+  .search-panel .loc{
+    display:flex; align-items:center; gap:8px;
+    padding:14px 12px;
+    color:#6B6455;
+    font-size:0.95rem;
+    white-space:nowrap;
+  }
+  .search-panel button{
+    background:var(--bottle);
+    color:var(--white);
+    border:none;
+    border-radius:7px;
+    padding:0 24px;
+    font-weight:600;
+    font-size:0.95rem;
+    cursor:pointer;
+  }
+  .search-panel button:hover{background:var(--bottle-dark);}
+  .trust-row{
+    margin-top:22px;
+    display:flex;
+    gap:22px;
+    flex-wrap:wrap;
+    font-size:0.86rem;
+    color:var(--sage);
+  }
+  .trust-row span{display:flex; align-items:center; gap:6px;}
+  .dot{width:5px; height:5px; border-radius:50%; background:var(--ochre); display:inline-block;}
+
+  .hero-decor{
+    position:absolute;
+    right:-60px; top:-40px;
+    width:480px; height:480px;
+    border:1px solid rgba(247,243,234,0.12);
+    border-radius:50%;
+  }
+  .hero-decor::before{
+    content:'';
+    position:absolute;
+    inset:60px;
+    border:1px solid rgba(247,243,234,0.12);
+    border-radius:50%;
+  }
+
+  /* ---------- Categories ---------- */
+  .categories{
+    max-width:1180px;
+    margin:-40px auto 0;
+    padding:0 32px;
+    position:relative;
+    z-index:3;
+  }
+  .cat-scroller{
+    background:var(--white);
+    border-radius:14px;
+    box-shadow:0 12px 30px rgba(30,27,22,0.08);
+    padding:20px 22px;
+    display:flex;
+    gap:10px;
+    overflow-x:auto;
+  }
+  .cat-chip{
+    flex:0 0 auto;
+    display:flex;
+    align-items:center;
+    gap:8px;
+    padding:10px 16px;
+    border-radius:999px;
+    border:1px solid var(--line);
+    font-size:0.88rem;
+    font-weight:600;
+    color:var(--ink);
+    background:var(--ivory);
+    cursor:pointer;
+    transition:all .15s;
+  }
+  .cat-chip.active, .cat-chip:hover{
+    background:var(--bottle);
+    color:var(--white);
+    border-color:var(--bottle);
+  }
+  .cat-chip svg{width:16px; height:16px;}
+
+  /* ---------- Section ---------- */
+  section{max-width:1180px; margin:0 auto; padding:64px 32px;}
+  .section-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-end;
+    margin-bottom:28px;
+    gap:20px;
+  }
+  .section-head h2{font-size:1.7rem;}
+  .section-head p{color:#6B6455; font-size:0.95rem; margin-top:4px;}
+  .link-more{font-size:0.9rem; font-weight:600; color:var(--bottle); border-bottom:1px solid var(--bottle); padding-bottom:2px;}
+
+  /* ---------- Listing grid ---------- */
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(4, 1fr);
+    gap:22px;
+  }
+  .card{
+    background:var(--white);
+    border:1px solid var(--line);
+    border-radius:10px;
+    overflow:hidden;
+    transition:transform .18s, box-shadow .18s;
+    cursor:pointer;
+  }
+  .card:hover{transform:translateY(-3px); box-shadow:0 14px 28px rgba(30,27,22,0.1);}
+  .card-img{
+    aspect-ratio:4/3;
+    background:linear-gradient(135deg, var(--sage), #E4E9DF);
+    position:relative;
+  }
+  .card-fav{
+    position:absolute; top:10px; right:10px;
+    width:30px; height:30px;
+    background:rgba(255,253,249,0.9);
+    border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .price-tag{
+    position:absolute;
+    left:0; bottom:12px;
+    background:var(--bottle);
+    color:var(--white);
+    font-family:'Fraunces', serif;
+    font-weight:600;
+    font-size:1.05rem;
+    padding:6px 14px 6px 12px;
+    border-radius:0 6px 6px 0;
+  }
+  .card-body{padding:14px 16px 16px;}
+  .card-title{font-size:0.96rem; font-weight:600; margin-bottom:4px;}
+  .card-meta{font-size:0.82rem; color:#7A7364; display:flex; justify-content:space-between;}
+
+  /* ---------- Split promo ---------- */
+  .promo{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:0;
+    background:var(--ivory-warm);
+    border-radius:16px;
+    overflow:hidden;
+    margin:0 32px;
+    max-width:1180px;
+    margin-left:auto; margin-right:auto;
+  }
+  .promo-text{padding:56px;}
+  .promo-text .eyebrow-free{font-size:0.88rem; color:var(--brick); font-weight:600; margin-bottom:10px;}
+  .promo-text h2{font-size:2rem; max-width:380px; line-height:1.15;}
+  .promo-text p{margin-top:14px; color:#5C5648; max-width:400px; font-size:0.96rem;}
+  .promo-text .btn{margin-top:24px;}
+  .promo-visual{
+    background:var(--bottle);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:40px;
+  }
+  .promo-visual .ticket{
+    background:var(--white);
+    border-radius:10px;
+    padding:26px 30px;
+    width:100%;
+    max-width:300px;
+    box-shadow:0 20px 40px rgba(0,0,0,0.2);
+    transform:rotate(-2deg);
+  }
+  .ticket-row{display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px dashed var(--line); font-size:0.86rem;}
+  .ticket-row:last-child{border-bottom:none;}
+  .ticket-total{font-family:'Fraunces', serif; font-weight:600; font-size:1.3rem; margin-top:10px; color:var(--bottle);}
+
+  /* ---------- Footer ---------- */
+  footer{
+    background:var(--bottle-dark);
+    color:var(--sage);
+    padding:56px 32px 28px;
+  }
+  .footer-inner{max-width:1180px; margin:0 auto;}
+  .footer-grid{
+    display:grid;
+    grid-template-columns:1.4fr 1fr 1fr 1fr;
+    gap:32px;
+    padding-bottom:36px;
+    border-bottom:1px solid rgba(203,216,196,0.15);
+  }
+  .footer-grid h4{color:var(--white); font-size:0.86rem; margin-bottom:14px; font-weight:600;}
+  .footer-grid ul{list-style:none; display:flex; flex-direction:column; gap:9px; font-size:0.86rem;}
+  .footer-grid ul a:hover{color:var(--white);}
+  .footer-bottom{
+    padding-top:22px;
+    display:flex;
+    justify-content:space-between;
+    font-size:0.8rem;
+    color:#8B9385;
+    flex-wrap:wrap;
+    gap:10px;
+  }
+
+  @media (max-width: 900px){
+    nav{display:none;}
+    .grid{grid-template-columns:repeat(2, 1fr);}
+    .promo{grid-template-columns:1fr; margin:0 16px;}
+    .footer-grid{grid-template-columns:1fr 1fr;}
+    section{padding:48px 18px;}
+    .search-panel{flex-direction:column;}
+    .search-panel .divider{display:none;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="logo"><span class="logo-mark">T</span>Troc</div>
+    <nav>
+      <a href="#">Véhicules</a>
+      <a href="#">Immobilier</a>
+      <a href="#">Mode</a>
+      <a href="#">Maison &amp; Jardin</a>
+      <a href="#">Multimédia</a>
+      <a href="#">Emploi</a>
+    </nav>
+    <div class="header-actions">
+      <a href="#" style="font-size:0.9rem; opacity:0.9;">Se connecter</a>
+      <button class="btn btn-ochre">Déposer une annonce</button>
+    </div>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="hero-decor"></div>
+  <div class="hero-inner">
+    <h1>Achetez et vendez entre voisins, en confiance.</h1>
+    <p class="lead">La marketplace pensée pour la France : dépôt d'annonce gratuit, paiement sécurisé et un numéro français vérifié pour chaque membre.</p>
+
+    <div class="search-panel">
+      <input type="text" placeholder="Que recherchez-vous ? (ex : canapé, Peugeot 208, appartement T2…)">
+      <div class="divider"></div>
+      <div class="loc">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s7-7.5 7-13a7 7 0 10-14 0c0 5.5 7 13 7 13z"/><circle cx="12" cy="9" r="2.5"/></svg>
+        Lyon, 69000
+      </div>
+      <button>Rechercher</button>
+    </div>
+
+    <div class="trust-row">
+      <span><span class="dot"></span>Numéro de téléphone français vérifié obligatoire</span>
+      <span><span class="dot"></span>Paiement protégé jusqu'à réception</span>
+      <span><span class="dot"></span>Annonces modérées 7j/7</span>
+    </div>
+  </div>
+</div>
+
+<div class="categories">
+  <div class="cat-scroller">
+    <div class="cat-chip active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l2-6h14l2 6M5 12h14v6H5z"/><circle cx="7.5" cy="18" r="1.5"/><circle cx="16.5" cy="18" r="1.5"/></svg>
+      Véhicules
+    </div>
+    <div class="cat-chip">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10.5L12 3l9 7.5V21H3z"/></svg>
+      Immobilier
+    </div>
+    <div class="cat-chip">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="7" width="18" height="14" rx="1"/><path d="M8 7V5a4 4 0 018 0v2"/></svg>
+      Mode
+    </div>
+    <div class="cat-chip">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12L12 3l9 9M5 10v10h14V10"/></svg>
+      Maison &amp; Jardin
+    </div>
+    <div class="cat-chip">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M9 18h6"/></svg>
+      Multimédia
+    </div>
+    <div class="cat-chip">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M8 8V5a2 2 0 012-2h4a2 2 0 012 2v3"/></svg>
+      Emploi
+    </div>
+    <div class="cat-chip">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.5-7 8-7s8 3 8 7"/></svg>
+      Services
+    </div>
+  </div>
+</div>
+
+<section>
+  <div class="section-head">
+    <div>
+      <h2>Près de chez vous</h2>
+      <p>Annonces publiées cette semaine à Lyon et ses environs</p>
+    </div>
+    <a class="link-more" href="#">Voir toutes les annonces</a>
+  </div>
+  <div class="grid">
+
+    <div class="card">
+      <div class="card-img"><div class="card-fav">♡</div><div class="price-tag">450 €</div></div>
+      <div class="card-body">
+        <div class="card-title">Canapé 3 places en velours</div>
+        <div class="card-meta"><span>Lyon 6e</span><span>Aujourd'hui</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-img"><div class="card-fav">♡</div><div class="price-tag">14 900 €</div></div>
+      <div class="card-body">
+        <div class="card-title">Peugeot 208 1.2 PureTech 2019</div>
+        <div class="card-meta"><span>Villeurbanne</span><span>Hier</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-img"><div class="card-fav">♡</div><div class="price-tag">590 €</div></div>
+      <div class="card-body">
+        <div class="card-title">iPhone 13 128 Go, très bon état</div>
+        <div class="card-meta"><span>Lyon 3e</span><span>Aujourd'hui</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-img"><div class="card-fav">♡</div><div class="price-tag">1 250 €/mois</div></div>
+      <div class="card-body">
+        <div class="card-title">Appartement T2, 45m², balcon</div>
+        <div class="card-meta"><span>Lyon 7e</span><span>2 jours</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-img"><div class="card-fav">♡</div><div class="price-tag">35 €</div></div>
+      <div class="card-body">
+        <div class="card-title">Vélo enfant 16 pouces</div>
+        <div class="card-meta"><span>Caluire</span><span>3 jours</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-img"><div class="card-fav">♡</div><div class="price-tag">Gratuit</div></div>
+      <div class="card-body">
+        <div class="card-title">Cartons de déménagement (lot de 20)</div>
+        <div class="card-meta"><span>Lyon 8e</span><span>Aujourd'hui</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-img"><div class="card-fav">♡</div><div class="price-tag">120 €</div></div>
+      <div class="card-body">
+        <div class="card-title">Table basse chêne massif</div>
+        <div class="card-meta"><span>Oullins</span><span>4 jours</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-img"><div class="card-fav">♡</div><div class="price-tag">2 200 €/mois</div></div>
+      <div class="card-body">
+        <div class="card-title">Local commercial 60m² centre-ville</div>
+        <div class="card-meta"><span>Lyon 2e</span><span>5 jours</span></div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<div class="promo">
+  <div class="promo-text">
+    <div class="eyebrow-free">Vendre n'a jamais été aussi simple</div>
+    <h2>Publiez votre annonce en 3 minutes, gratuitement.</h2>
+    <p>Photos, description, prix : notre formulaire s'adapte à chaque catégorie pour que votre annonce soit prête à être vue en quelques minutes.</p>
+    <button class="btn btn-ochre">Déposer une annonce</button>
+  </div>
+  <div class="promo-visual">
+    <div class="ticket">
+      <div class="ticket-row"><span>Titre</span><span>Vélo enfant</span></div>
+      <div class="ticket-row"><span>État</span><span>Très bon état</span></div>
+      <div class="ticket-row"><span>Localisation</span><span>Lyon 6e</span></div>
+      <div class="ticket-total">35 €</div>
+    </div>
+  </div>
+</div>
+
+<section style="padding-bottom:96px;">
+  <div class="section-head">
+    <div>
+      <h2>Vous êtes professionnel ?</h2>
+      <p>Vitrine boutique, import en masse et statistiques de performance</p>
+    </div>
+  </div>
+  <div class="grid" style="grid-template-columns:repeat(3, 1fr);">
+    <div class="card" style="padding:26px;">
+      <div style="width:34px;height:34px;background:var(--sage);border-radius:8px;margin-bottom:14px;"></div>
+      <div class="card-title" style="font-size:1.05rem; margin-bottom:6px;">Vitrine personnalisée</div>
+      <div style="font-size:0.88rem; color:#6B6455;">Votre boutique, votre logo, vos horaires — une page qui vous ressemble.</div>
+    </div>
+    <div class="card" style="padding:26px;">
+      <div style="width:34px;height:34px;background:var(--sage);border-radius:8px;margin-bottom:14px;"></div>
+      <div class="card-title" style="font-size:1.05rem; margin-bottom:6px;">Import en masse</div>
+      <div style="font-size:0.88rem; color:#6B6455;">Synchronisez votre catalogue via flux CSV ou XML en quelques clics.</div>
+    </div>
+    <div class="card" style="padding:26px;">
+      <div style="width:34px;height:34px;background:var(--sage);border-radius:8px;margin-bottom:14px;"></div>
+      <div class="card-title" style="font-size:1.05rem; margin-bottom:6px;">Statistiques avancées</div>
+      <div style="font-size:0.88rem; color:#6B6455;">Vues, contacts, taux de conversion : pilotez vos ventes au quotidien.</div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-inner">
+    <div class="footer-grid">
+      <div>
+        <div class="logo" style="margin-bottom:12px;"><span class="logo-mark">T</span>Troc</div>
+        <p style="font-size:0.86rem; max-width:280px; color:#9BA695;">La marketplace française d'annonces entre particuliers et professionnels.</p>
+      </div>
+      <div>
+        <h4>Catégories</h4>
+        <ul><li><a href="#">Véhicules</a></li><li><a href="#">Immobilier</a></li><li><a href="#">Mode</a></li><li><a href="#">Emploi</a></li></ul>
+      </div>
+      <div>
+        <h4>Assistance</h4>
+        <ul><li><a href="#">Centre d'aide</a></li><li><a href="#">Sécurité &amp; confiance</a></li><li><a href="#">Nous contacter</a></li></ul>
+      </div>
+      <div>
+        <h4>Légal</h4>
+        <ul><li><a href="#">CGU</a></li><li><a href="#">Confidentialité</a></li><li><a href="#">Mentions légales</a></li></ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 Troc — Plateforme réservée aux numéros de téléphone français</span>
+      <span>Fait avec soin en France</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+  document.querySelectorAll('.cat-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('.cat-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+    });
+  });
+  document.querySelectorAll('.card-fav').forEach(fav => {
+    fav.addEventListener('click', (e) => {
+      e.stopPropagation();
+      fav.textContent = fav.textContent.trim() === '♡' ? '♥' : '♡';
+      fav.style.color = fav.textContent === '♥' ? '#B54A2C' : '';
+    });
+  });
+</script>
+
+</body>
+</html>

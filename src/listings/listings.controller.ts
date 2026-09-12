@@ -1,0 +1,175 @@
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UploadedFile,
+  UploadedFiles,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+import { Throttle } from '@nestjs/throttler';
+import { IsIn, IsOptional, IsUUID } from 'class-validator';
+import { memoryStorage } from 'multer';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
+import { finalizeUploadedImages, imageDiskStorage, imageFileFilter, MAX_IMAGE_BYTES } from '../common/upload/image-upload';
+import { CreateListingDto } from './dto/create-listing.dto';
+import { SearchListingsDto } from './dto/search-listings.dto';
+import { ReorderPhotosDto, UpdateListingDto } from './dto/update-listing.dto';
+import { ListingOwnerGuard } from './listing-owner.guard';
+import { ListingsService, MAX_PHOTOS_PER_LISTING } from './listings.service';
+
+class PromoteDto {
+  @IsIn(['boost', 'urgent'])
+  type: 'boost' | 'urgent';
+}
+class ImportDto {
+  @IsOptional() @IsUUID()
+  onBehalfOf?: string;
+}
+
+@Controller('listings')
+export class ListingsController {
+  constructor(private listingsService: ListingsService) {}
+
+  @UseGuards(JwtAuthGuard)
+  @Post()
+  @Throttle({ default: { limit: 60, ttl: 3_600_000 } })
+  create(@Req() req: any, @Body() dto: CreateListingDto) {
+    return this.listingsService.create(req.user.userId, dto);
+  }
+
+  @Get()
+  search(@Query() query: SearchListingsDto, @Req() req: any) {
+    const attrFilters: Record<string, string> = {};
+    for (const [k, v] of Object.entries(req.query || {})) {
+      if (k.startsWith('attr.') && /^attr\.[a-z0-9_]{1,40}$/.test(k) && typeof v === 'string' && v.length <= 100) {
+        attrFilters[k] = v;
+        if (Object.keys(attrFilters).length >= 10) break;
+      }
+    }
+    return this.listingsService.search({ ...query, ...attrFilters });
+  }
+
+  @Get('suggest')
+  suggest(@Query('q') q?: string) {
+    return this.listingsService.suggest((q || '').slice(0, 60));
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('mine')
+  findMine(@Req() req: any) {
+    return this.listingsService.findMine(req.user.userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('mine/stats')
+  myStats(@Req() req: any) {
+    return this.listingsService.sellerStats(req.user.userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('history')
+  history(@Req() req: any) {
+    return this.listingsService.history(req.user.userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('history')
+  clearHistory(@Req() req: any) {
+    return this.listingsService.clearHistory(req.user.userId);
+  }
+
+  /** Import de catalogue CSV/XML (comptes professionnels). Fichier en mémoire, 2 Mo max. */
+  @UseGuards(JwtAuthGuard)
+  @Post('import')
+  @Throttle({ default: { limit: 10, ttl: 3_600_000 } })
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: 2 * 1024 * 1024, files: 1 } }))
+  importCatalog(@Req() req: any, @UploadedFile() file: { originalname: string; buffer: Buffer } | undefined, @Body() dto: ImportDto) {
+    if (!file) throw new BadRequestException('Aucun fichier reçu (champ "file").');
+    return this.listingsService.importCatalog(req.user.userId, file.originalname, file.buffer.toString('utf8'), dto.onBehalfOf);
+  }
+
+  @UseGuards(OptionalJwtAuthGuard)
+  @Get(':id')
+  findOne(@Req() req: any, @Param('id', ParseUUIDPipe) id: string) {
+    return this.listingsService.findOne(id, req.user);
+  }
+
+  @Get(':id/similar')
+  similar(@Param('id', ParseUUIDPipe) id: string) {
+    return this.listingsService.findSimilar(id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch(':id')
+  update(@Req() req: any, @Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateListingDto) {
+    return this.listingsService.updateOwn(id, req.user.userId, dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/renew')
+  renew(@Req() req: any, @Param('id', ParseUUIDPipe) id: string) {
+    return this.listingsService.renewOwn(id, req.user.userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/duplicate')
+  duplicate(@Req() req: any, @Param('id', ParseUUIDPipe) id: string) {
+    return this.listingsService.duplicateOwn(id, req.user.userId);
+  }
+
+  /** Mise en avant : boost (tête de liste) ou urgent (macaron). Gratuit si monétisation désactivée. */
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/promote')
+  @Throttle({ default: { limit: 30, ttl: 3_600_000 } })
+  promote(@Req() req: any, @Param('id', ParseUUIDPipe) id: string, @Body() dto: PromoteDto) {
+    return this.listingsService.promote(id, req.user.userId, dto.type);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete(':id')
+  @HttpCode(204)
+  async remove(@Req() req: any, @Param('id', ParseUUIDPipe) id: string) {
+    await this.listingsService.deleteOwn(id, req.user.userId);
+  }
+
+  @UseGuards(JwtAuthGuard, ListingOwnerGuard)
+  @Post(':id/photos')
+  @Throttle({ default: { limit: 60, ttl: 3_600_000 } })
+  @UseInterceptors(
+    FilesInterceptor('files', MAX_PHOTOS_PER_LISTING, {
+      storage: imageDiskStorage,
+      limits: { fileSize: MAX_IMAGE_BYTES, files: MAX_PHOTOS_PER_LISTING },
+      fileFilter: imageFileFilter,
+    }),
+  )
+  async uploadPhotos(@Req() req: any, @Param('id', ParseUUIDPipe) listingId: string, @UploadedFiles() files: Array<{ path: string; filename: string }>) {
+    if (!files || files.length === 0) throw new BadRequestException('Aucun fichier reçu (champ "files").');
+    const urls = await finalizeUploadedImages(files);
+    return this.listingsService.addPhotos(listingId, req.user.userId, urls);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch(':id/photos/order')
+  reorderPhotos(@Req() req: any, @Param('id', ParseUUIDPipe) listingId: string, @Body() dto: ReorderPhotosDto) {
+    return this.listingsService.reorderPhotos(listingId, req.user.userId, dto.photoIds);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete(':id/photos/:photoId')
+  @HttpCode(204)
+  async removePhoto(@Req() req: any, @Param('id', ParseUUIDPipe) listingId: string, @Param('photoId', ParseUUIDPipe) photoId: string) {
+    await this.listingsService.removePhoto(listingId, req.user.userId, photoId);
+  }
+}

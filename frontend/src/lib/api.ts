@@ -1,0 +1,107 @@
+/**
+ * Client HTTP unique vers l'API NestJS.
+ * - côté navigateur : ajoute le JWT stocké localement ;
+ * - côté serveur (rendu SSR des pages publiques) : appels anonymes.
+ */
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3001";
+const TOKEN_KEY = "trocoin_token";
+
+export class ApiError extends Error {
+  status: number;
+  details?: unknown;
+  constructor(status: number, message: string, details?: unknown) {
+    super(message);
+    this.status = status;
+    this.details = details;
+  }
+}
+
+export function getToken(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setToken(token: string | null) {
+  if (typeof window === "undefined") return;
+  try {
+    if (token) window.localStorage.setItem(TOKEN_KEY, token);
+    else window.localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    /* stockage indisponible (navigation privée) : session en mémoire uniquement */
+  }
+}
+
+function extractMessage(body: unknown, fallback: string): string {
+  if (body && typeof body === "object" && "message" in body) {
+    const m = (body as { message: unknown }).message;
+    if (Array.isArray(m)) return m.join(" ");
+    if (typeof m === "string") return m;
+  }
+  return fallback;
+}
+
+interface RequestOptions {
+  method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
+  body?: unknown;
+  formData?: FormData;
+  token?: string | null;
+  /** Rendu serveur : durée de cache Next (secondes). */
+  revalidate?: number | false;
+  signal?: AbortSignal;
+}
+
+export async function api<T = unknown>(path: string, opts: RequestOptions = {}): Promise<T> {
+  const token = opts.token === undefined ? getToken() : opts.token;
+  const headers: Record<string, string> = {};
+  if (opts.body !== undefined) headers["Content-Type"] = "application/json";
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const init: RequestInit & { next?: { revalidate?: number | false } } = {
+    method: opts.method || "GET",
+    headers,
+    body: opts.formData ?? (opts.body !== undefined ? JSON.stringify(opts.body) : undefined),
+    signal: opts.signal,
+  };
+  if (typeof window === "undefined") {
+    init.next = { revalidate: opts.revalidate ?? 0 };
+    if (opts.revalidate === false || opts.revalidate === 0) init.cache = "no-store";
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, init);
+  } catch {
+    throw new ApiError(0, "Impossible de joindre le serveur. Vérifiez votre connexion.");
+  }
+
+  if (res.status === 204) return undefined as T;
+  const text = await res.text();
+  let data: unknown = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  if (!res.ok) {
+    const fallback =
+      res.status === 401 ? "Connectez-vous pour continuer." :
+      res.status === 403 ? "Accès refusé." :
+      res.status === 404 ? "Introuvable." :
+      res.status === 429 ? "Trop de tentatives, réessayez dans quelques instants." :
+      "Une erreur est survenue.";
+    throw new ApiError(res.status, extractMessage(data, fallback), data);
+  }
+  return data as T;
+}
+
+/** URL absolue d'une image servie par l'API (/uploads/...). */
+export function mediaUrl(path?: string | null): string | undefined {
+  if (!path) return undefined;
+  if (path.startsWith("http")) return path;
+  return `${API_URL}${path}`;
+}

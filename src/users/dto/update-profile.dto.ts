@@ -1,0 +1,57 @@
+import {
+  IsBoolean,
+  IsOptional,
+  IsString,
+  IsUrl,
+  Matches,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
+
+/**
+ * Seuls ces champs sont modifiables par l'utilisateur lui-même.
+ * phoneNumber, phoneVerified, accountType, identityVerified, ratings,
+ * suspendedAt, stripe* sont réservés au système / à l'admin.
+ */
+export class UpdateProfileDto {
+  @IsOptional() @IsString() @MinLength(2) @MaxLength(50)
+  @Matches(/^[^<>{}\[\]\\\/]+$/, { message: 'Le pseudo contient des caractères interdits.' })
+  displayName?: string;
+
+  @IsOptional() @IsString() @MaxLength(100)
+  city?: string;
+
+  @IsOptional() @IsString() @Matches(/^\d{5}$/, { message: 'Code postal invalide (5 chiffres).' })
+  postalCode?: string;
+
+  @IsOptional() @IsString() @MaxLength(80)
+  shopName?: string;
+
+  @IsOptional() @IsString() @MaxLength(2000)
+  shopDescription?: string;
+
+  @IsOptional() @IsString() @MaxLength(200)
+  shopAddress?: string;
+
+  @IsOptional() @IsString() @MaxLength(200)
+  shopHours?: string;
+
+  @IsOptional() @IsUrl({ require_protocol: true, protocols: ['http', 'https'] }) @MaxLength(200)
+  shopWebsite?: string;
+
+  @IsOptional() @IsBoolean()
+  notifyPush?: boolean;
+
+  @IsOptional() @IsBoolean()
+  notifySms?: boolean;
+}
+
+export class BecomeProDto {
+  // SIRET : 14 chiffres (validation de format ; la vérification auprès de
+  // l'INSEE/KYC est une brique de production, voir AUDIT.md)
+  @IsString() @Matches(/^\d{14}$/, { message: 'Le SIRET doit contenir 14 chiffres.' })
+  siret: string;
+
+  @IsString() @MinLength(2) @MaxLength(80)
+  shopName: string;
+}

@@ -1,0 +1,23 @@
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { ListingPhoto } from '../listings/listing-photo.entity';
+import { Listing } from '../listings/listing.entity';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { UsersModule } from '../users/users.module';
+import { Conversation } from './conversation.entity';
+import { ConversationsController } from './conversations.controller';
+import { ConversationsGateway } from './conversations.gateway';
+import { ConversationsService } from './conversations.service';
+import { Message } from './message.entity';
+
+@Module({
+  imports: [
+    TypeOrmModule.forFeature([Conversation, Message, Listing, ListingPhoto]),
+    UsersModule,
+    NotificationsModule,
+  ],
+  controllers: [ConversationsController],
+  providers: [ConversationsService, ConversationsGateway],
+  exports: [ConversationsService],
+})
+export class ConversationsModule {}
