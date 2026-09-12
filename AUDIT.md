@@ -1,7 +1,7 @@
-# AUDIT.md — Trocoin (audit final, 12 septembre 2026 · phase 2, 13 septembre 2026)
+# AUDIT.md — Trocoin (audit final, 12 septembre 2026 · phase 2 et phase 3, 13 septembre 2026)
 
 Chaque affirmation de ce document est étiquetée :
-**[exécuté]** = vérifié par exécution réelle (tests e2e `npm test` 49/49 après la phase 2, appels HTTP,
+**[exécuté]** = vérifié par exécution réelle (tests e2e `npm test` 54/54 après la phase 3, sur SQLite et sur PostgreSQL, appels HTTP,
 `test/ws-smoke.js`, parcours complets dans le navigateur sur le front Next.js) ;
 **[lecture]** = vérifié par relecture du code seulement ;
 **[non testé]** = impossible à tester dans cet environnement, avec la raison.
@@ -331,6 +331,139 @@ Preuves d'exécution (test `phase2.e2e-spec.ts`, « flag désactivé : un compte
 - `createdAt` des messages à la seconde en SQLite : l'aperçu « dernier message » peut être ambigu pour deux messages envoyés dans la même seconde (sans incidence sur le fil, ordonné de façon stable ; PostgreSQL a une précision à la microseconde).
 - Import : les photos ne sont pas importées par URL (choix de sécurité : pas de récupération de ressources distantes côté serveur).
 - Le recadrage est facultatif (« Garder l'original ») : une image non recadrée reste envoyée telle quelle, jusqu'à 8 Mo.
+
+## 8. Phase 3 (13 septembre 2026) — SMS réel, mise en ligne, durcissement
+
+Objectif du brief : fournisseur SMS réel, bascule PostgreSQL, conteneur de production, CI,
+sessions révocables, monitoring, sauvegardes. Règle appliquée : rien n'est déclaré fait sans
+preuve d'exécution ; ce qui n'a pas pu être exécuté est listé en §8.6 et §8.7.
+
+### 8.1 SMS : ce qui a été fait, ce qui ne l'a pas été (et pourquoi)
+
+**Aucun identifiant SMS n'est présent dans `.env`** (vérifié : `SMS_PROVIDER=mock`, aucune
+clé Vonage/Twilio). Conformément au brief, l'appel HTTP vers Vonage ou Twilio **n'a pas été
+inventé** : il serait intestable. Variables attendues, noms exacts :
+
+| Fournisseur | Variables |
+|---|---|
+| Vonage | `SMS_PROVIDER=vonage`, `VONAGE_API_KEY`, `VONAGE_API_SECRET`, `SMS_SENDER` |
+| Twilio | `SMS_PROVIDER=twilio`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` |
+
+Ce qui est en place et **[exécuté]** :
+
+- `ISmsProvider` + `SmsDeliveryError(provider, reason)` ; `SmsService.sendOtp` borne l'appel à
+  10 s et convertit toute erreur (numéro refusé, crédit, délai, fournisseur non configuré) en
+  **503** avec un message utilisateur explicite — jamais de succès silencieux.
+- `OtpService` supprime le code créé si l'envoi échoue : pas de code fantôme, pas de cooldown
+  imposé à l'utilisateur pour un SMS jamais parti (vérifié en base après un échec : 0 ligne).
+- `validateEnv` refuse le démarrage si `SMS_PROVIDER=vonage|twilio` sans ses clés (message qui
+  nomme les variables manquantes) ; `SMS_PROVIDER=mock` reste interdit en production.
+- `/dev/last-otp/:phone` : **404** dès que `NODE_ENV=production` (quel que soit le fournisseur)
+  ou que `SMS_PROVIDER≠mock` — observé dans les deux cas (§8.3).
+- Test e2e `phase3 › SMS` : panne simulée (`SMS_MOCK_FAIL=true`) → 503, puis nouvel envoi
+  possible immédiatement.
+
+Reste à écrire, une fois les clés fournies : ~40 lignes d'appel `fetch` par fournisseur dans
+`src/sms/sms.service.ts`, puis un test sur un vrai numéro.
+
+### 8.2 Mise en ligne : ce qui a été fait
+
+| Élément | État | Preuve |
+|---|---|---|
+| Migration PostgreSQL | **[exécuté]** générée et exécutée contre un vrai moteur Postgres (PGlite 0.5.8 = PostgreSQL 18.3 embarqué, protocole wire sur `127.0.0.1:5433` — pas une instance hébergée ; la CI utilise un vrai `postgres:16-alpine`) : `src/migrations/1789255931367-InitialPostgres.ts`, 23 tables, 45 colonnes `timestamptz`, `gen_random_uuid()` (`pgcrypto`) | `Migration InitialPostgres1789255931367 has been executed successfully` ; `migration:generate` relancé ensuite → `No changes in database schema were found` |
+| Tests e2e sur Postgres | **[exécuté]** **54/54** avec `E2E_DB=postgres`, `DB_SYNCHRONIZE=false` (schéma issu uniquement de la migration) ; `createApp()` vide les tables de données entre suites | sortie Jest `Tests: 54 passed, 54 total` |
+| Cycle réel sur Postgres | **[exécuté]** API compilée (`node dist/main.js`) sur :3002, base Postgres : inscription 200 → OTP → vérification 200 (access JWT + refresh 64 caractères) → `POST /listings` 201 (`en_ligne`) → `GET /listings?q=Peugeot` → `total=1` ; rotation du refresh, réutilisation → 401, famille révoquée → 401 ; en base : 21 users, 68 listings, 22 refresh_tokens | script `cycle.sh`, log API |
+| `Dockerfile` | **[lecture + CI]** 3 étapes (build, deps `--omit=dev`, runtime `node:22-bookworm-slim`, utilisateur non-root, `HEALTHCHECK` sur `/health`, `CMD node dist/main.js`). Docker absent du poste : l'image est construite par le job CI « Image Docker de l'API » (résultat en §8.4) | `.dockerignore`, `ci.yml` |
+| `next build` avec URL de prod | **[exécuté]** `NEXT_PUBLIC_API_URL=https://api.trocoin.fr` → succès ; 1 chunk contient `api.trocoin.fr`, **0** chunk contient `localhost:3000`. Premier essai en échec : les pages légales étaient pré-rendues au build contre l'API → passées en `dynamic = "force-dynamic"` | sortie `next build` |
+| Démarrage en mode production | **[exécuté]** `NODE_ENV=production` + un fournisseur `mock` → démarrage **refusé** (3 erreurs nommées). Configuration valide (`JWT_SECRET` 48 octets aléatoires, `CORS_ORIGINS=https://www.trocoin.fr`, `TRUST_PROXY=true`, Postgres, `SMS_PROVIDER=vonage` + clés factices, `PAYMENT_PROVIDER=disabled`, `NOTIFICATION_PROVIDER=none`) → démarre, `GET /health` 200 `{"database":"postgres"}`, `GET /dev/last-otp/…` **404**, `OPTIONS` depuis une origine inconnue **403**, origine autorisée renvoyée dans `Access-Control-Allow-Origin`, en-têtes `Strict-Transport-Security`, `Content-Security-Policy`, `X-Content-Type-Options`, `X-Frame-Options` présents, inscription → 503 explicite (fournisseur SMS non implémenté) | log API :3004, `curl` |
+| Modes production sans prestataire | **[exécuté]** nouveaux modes `PAYMENT_PROVIDER=disabled` (`DisabledPaymentProvider` : 503 « Le paiement sécurisé n'est pas encore disponible… », y compris l'onboarding Stripe) et `NOTIFICATION_PROVIDER=none` (in-app seulement). Sans eux, la mise en ligne exigeait des clés Stripe et Firebase — le mock, lui, aurait fait croire à un paiement effectué | tests 54/54, démarrage prod ci-dessus |
+| Hébergement | **[non testé]** aucun compte Neon/Render/Railway/Vercel, aucune CLI (`railway`, `render`, `vercel`, `docker`, `psql` absents ; seul `gh` est authentifié). Guide pas à pas de 15–20 min : `DEPLOIEMENT.md` (Neon + Render Docker + Vercel, variables exactes, vérification externe, sauvegardes, Redis) | — |
+| `README.md` | mis à jour : « URL de production : non déployé à ce jour », tests 54, sessions, production | — |
+
+### 8.3 Bugs réels révélés par PostgreSQL (invisibles sur SQLite)
+
+Faire tourner la suite complète sur un vrai moteur Postgres a fait remonter cinq défauts
+qui auraient cassé la production au premier déploiement :
+
+1. **Casse des identifiants** : Postgres replie en minuscules les colonnes non citées ; les
+   fragments SQL bruts (`u.accountType`, `p.listingId`, index partiel `externalRef IS NOT NULL`)
+   sont désormais cités (`"accountType"`…).
+2. **`uuid` contre `varchar`** : `users.id` est un `uuid` natif alors que les clés étrangères
+   applicatives (`listings.userId`, `listing_photos.listingId`) sont des `varchar` →
+   `operator does not exist: character varying = uuid` sur le filtre `seller_type`, et
+   `invalid input syntax for type uuid` sur la recherche admin par téléphone (500). Corrigé par
+   `CAST(… AS varchar)` (portable SQLite/Postgres).
+3. **Fuseau horaire** : `@CreateDateColumn()` sans type produit `TIMESTAMP` sans fuseau ; le
+   pilote `pg` le relit en heure locale (+2 h) → le cooldown OTP ne se déclenchait jamais et le
+   brute-force devenait possible. Les 24 colonnes de date auto sont passées en `timestamptz`.
+4. **Fusion de catégories** : `UPDATE` par entité incorrect sur Postgres → `.update(Listing)`
+   explicite.
+5. **Pool de connexions** : `Promise.all` de 11 requêtes dans `/admin/stats` saturait le
+   serveur de test → option `DB_POOL_MAX` (recommandée à 5 sur les offres gratuites).
+
+### 8.4 Durcissement P1
+
+| Élément | État | Détail |
+|---|---|---|
+| Refresh tokens rotatifs + révocation | **[exécuté]** | Table `refresh_tokens` (hash SHA-256, `familyId`, `expiresAt`, `revokedAt`, `replacedById`, UA, IP). Access token **15 min** (`JWT_EXPIRES_IN`), refresh **30 jours** (`REFRESH_TOKEN_TTL_DAYS`). `POST /auth/refresh` : inconnu → 401 ; déjà consommé → **toute la famille révoquée** + 401 (vol détecté) ; expiré → 401 ; compte suspendu → 403. `POST /auth/logout` révoque la famille ; suspension admin et suppression de compte appellent `revokeAllSessions`. `GET/DELETE /auth/sessions`. Front : stockage access+refresh, rotation automatique sur 401 (vol unique), déconnexion serveur. 4 tests e2e dédiés. **Limite honnête** : un access token volé reste valable jusqu'à 15 min ; c'est le compromis choisi (pas de liste noire JWT). |
+| CI GitHub Actions | **[exécuté]** | `.github/workflows/ci.yml`, 4 jobs à chaque push/PR : `api` (tsc, 54 tests SQLite, build, `npm audit --audit-level=high`), `api-postgres` (service `postgres:16-alpine`, `migration:run`, 54 tests `E2E_DB=postgres`), `frontend` (tsc, `next build` avec URL d'API de production, audit), `docker` (build de l'image, sans push). Résultat réel après le push : **premier run rouge** (34726287040 : Jest sur Node 22 ne sait pas charger `@nestjs/typeorm` en ESM → « Must use import to load ES Module ») ; correction Node 24 dans la CI et le `Dockerfile` ; **second run vert, 4/4 jobs** : https://github.com/ousbaali11/Trocoin/actions/runs/34726419130 — `api` 54/54 + audit 0 vulnérabilité, `api-postgres` migration exécutée sur `postgres:16-alpine` puis 54/54, `frontend` build OK + audit 0, `docker` image construite |
+| Sentry | **[exécuté partiellement]** | `@sentry/nestjs` initialisé **uniquement si `SENTRY_DSN`** est défini (`src/monitoring/sentry.ts`, `sendDefaultPii:false`, corps de requête supprimé), `captureException` sur les 500 dans le filtre global. Sans DSN : log `Monitoring Sentry : désactivé`. **Aucune clé fournie → aucun évènement réel envoyé**. |
+| Sauvegardes | **[documenté, non exécuté]** | `DEPLOIEMENT.md` §6 : PITR Neon, `pg_dump --format=custom` hebdomadaire, `pg_restore --clean --if-exists`, redémarrage sans rejeu des migrations. Non exécuté : pas de `pg_dump` sur le poste ni de base hébergée. Les photos (`/uploads`) ne sont pas couvertes. |
+| Redis | **[non disponible, documenté]** | Aucun Redis. Rate limiting et cache restent en mémoire : corrects pour **une** instance, à brancher sur Upstash/Render Key Value avant tout passage à plusieurs instances (`DEPLOIEMENT.md` §8). Le cooldown OTP est en base et n'est pas concerné. |
+| `GET /health` | **[exécuté]** | `{status, database, uptimeSeconds, version}` ; 503 si la base ne répond pas ; utilisé par le `HEALTHCHECK` Docker et Render. |
+
+### 8.5 Vérifications exécutées (13 septembre 2026, phase 3)
+
+- `npx tsc --noEmit` API et front : 0 erreur.
+- `npm test` SQLite : **54/54** (5 suites) ; `E2E_DB=postgres … npm test` : **54/54** sur le
+  schéma issu de la migration (`DB_SYNCHRONIZE=false`).
+- `npm audit --audit-level=high` : 0 vulnérabilité (API et front).
+- `npm run build` puis `node dist/main.js` (commande du `Dockerfile`) sur Postgres : cycle
+  inscription → annonce → recherche → rotation/révocation de session (§8.2).
+- Démarrage `NODE_ENV=production` : refus avec config faible, succès avec config valide,
+  `/dev/last-otp` 404, CORS restreint, en-têtes de sécurité (§8.2).
+- `next build` avec `NEXT_PUBLIC_API_URL=https://api.trocoin.fr` : succès, aucun `localhost`
+  dans les bundles.
+- Push GitHub `2219d86` puis `56b23e8` → CI GitHub Actions réellement exécutée : run https://github.com/ousbaali11/Trocoin/actions/runs/34726419130 **vert** (4 jobs, dont 54 tests sur un vrai PostgreSQL 16 et le build de l'image Docker).
+
+### 8.6 Ce qu'il manque de votre côté (liste exacte)
+
+1. **SMS** — un compte Vonage **ou** Twilio et ses clés : `VONAGE_API_KEY`, `VONAGE_API_SECRET`,
+   `SMS_SENDER` ou `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`. Sans elles, aucune
+   inscription n'est possible en production (et je n'écris pas l'appel réseau sans pouvoir le tester).
+2. **Base PostgreSQL hébergée** — une `DATABASE_URL` (Neon recommandé, gratuit, UE).
+3. **Hébergeur API** — un compte Render (ou Railway) relié au dépôt GitHub.
+4. **Hébergeur front** — un compte Vercel relié au dépôt (dossier `frontend`).
+5. **Domaines** (facultatif pour tester) — sinon `*.onrender.com` / `*.vercel.app` ; à reporter
+   dans `CORS_ORIGINS`, `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_SITE_URL`.
+6. **Sentry** (facultatif) — `SENTRY_DSN`.
+7. **Redis** (facultatif tant qu'il n'y a qu'une instance) — `REDIS_URL` + branchement du throttler.
+8. **Stripe** (plus tard) — `STRIPE_SECRET_KEY` de test, sinon `PAYMENT_PROVIDER=disabled`.
+
+Dès les points 1 à 4 fournis, le déploiement suit `DEPLOIEMENT.md` en 15–20 min, puis la
+vérification externe §4 de ce guide (SMS reçu sur un vrai téléphone, annonce visible).
+
+### 8.7 Ce qui reste avant l'ouverture publique (liste honnête)
+
+**Bloquant**
+- Appel réel Vonage/Twilio + test sur plusieurs vrais numéros (latence, échecs, coût).
+- Déploiement effectif et test externe (jamais fait : aucun compte hébergeur).
+- Stockage persistant des photos (disque Render payant ou S3/R2) : sur l'offre gratuite, les
+  photos disparaissent à chaque déploiement.
+- Redimensionnement / purge EXIF des images (`sharp`), toujours non implémenté (§6 P0-4).
+- Textes légaux validés par un juriste (éditeur, hébergeur, médiateur).
+
+**Avant montée en charge**
+- Redis pour le rate limiting dès la 2ᵉ instance ; index full-text pour la recherche (§4).
+- Sauvegarde automatisée hebdomadaire hors Neon (script `pg_dump` planifié) et test de
+  restauration sur une base vide.
+- Sentry réellement alimenté et alertes configurées ; APM/logs centralisés.
+- Webhook Stripe signé et réconciliation (§6 P0-3) avant d'activer `PAYMENT_PROVIDER=stripe`.
+
+**Non testé dans cet environnement**
+- Exécution de l'image Docker (construite en CI seulement), TLS vers une base hébergée
+  (`sslmode=require`), comportement derrière le proxy Render (`TRUST_PROXY=true`), envoi
+  d'un évènement Sentry, `pg_dump`/`pg_restore`.
 
 ## Annexe — journal des vérifications exécutées le 12 septembre 2026
 
