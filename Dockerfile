@@ -1,5 +1,5 @@
 # ---------- Étape 1 : build (dépendances complètes + compilation TypeScript) ----------
-FROM node:22-bookworm-slim AS build
+FROM node:24-bookworm-slim AS build
 WORKDIR /app
 ENV CI=true
 COPY package.json package-lock.json ./
@@ -13,7 +13,7 @@ COPY src ./src
 RUN npm run build
 
 # ---------- Étape 2 : dépendances de production uniquement ----------
-FROM node:22-bookworm-slim AS deps
+FROM node:24-bookworm-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ \
@@ -22,7 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends python3 make g+
   && apt-get purge -y python3 make g++ && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
 
 # ---------- Étape 3 : image finale minimale ----------
-FROM node:22-bookworm-slim AS runtime
+FROM node:24-bookworm-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 RUN groupadd -r trocoin && useradd -r -g trocoin -d /app trocoin \
