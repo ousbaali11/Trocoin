@@ -66,6 +66,12 @@ export class ListingsController {
     return this.listingsService.suggest((q || '').slice(0, 60));
   }
 
+  /** Prix moyen constaté pour aider à fixer le prix au dépôt (public, sans données personnelles). */
+  @Get('price-estimate')
+  priceEstimate(@Query('category') category?: string, @Query('q') q?: string) {
+    return this.listingsService.priceEstimate((category || '').slice(0, 60), (q || '').slice(0, 150));
+  }
+
   @UseGuards(JwtAuthGuard)
   @Get('mine')
   findMine(@Req() req: any) {

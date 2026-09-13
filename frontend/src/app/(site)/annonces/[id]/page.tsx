@@ -86,6 +86,7 @@ export default async function ListingPage({ params }: { params: Promise<{ id: st
             <div className="row small muted">
               {listing.isUrgent && <span className="pill pill-brick">Urgent</span>}
               {listing.isBoosted && <span className="pill pill-ochre">À la une</span>}
+              {listing.completeness?.complete && <span className="pill pill-green" title="Le vendeur a renseigné les photos, une description détaillée et tous les critères de la catégorie">✓ Fiche complète</span>}
               <span>Publiée le {formatDate(listing.publishedAt || listing.createdAt)}</span>
               <span>·</span>
               <span>{listing.city || "France"}{listing.postalCode ? ` (${listing.postalCode})` : ""}</span>

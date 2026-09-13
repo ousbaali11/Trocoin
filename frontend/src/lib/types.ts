@@ -44,6 +44,8 @@ export interface SellerSummary {
 
 export interface ListingCard {
   id: string;
+  /** Badge « Fiche complète » (3 photos, description longue, tous les critères) */
+  isComplete?: boolean;
   userId: string;
   categoryId: number;
   rootCategoryId?: number;
@@ -93,6 +95,7 @@ export interface ListingDetail extends Omit<ListingCard, "coverUrl" | "photosCou
   rootCategory: { id: number; slug: string; name: string } | null;
   seller: SellerSummary | null;
   favoritesCount: number;
+  completeness?: { complete: boolean; score: number; missing: string[] };
   attributesLabeled: Array<{ key: string; label: string; value: string | number | boolean; unit?: string }>;
   isOwner: boolean;
   isBoosted: boolean;
@@ -331,4 +334,13 @@ export interface ImportReport {
   updated: number;
   pending: number;
   errors: Array<{ line: number; reference?: string; error: string }>;
+}
+
+/** GET /listings/price-estimate : prix moyen constaté (médiane, quartiles) */
+export interface PriceEstimate {
+  count: number;
+  median: number | null;
+  low: number | null;
+  high: number | null;
+  basis: "mots" | "categorie" | null;
 }

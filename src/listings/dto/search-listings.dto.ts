@@ -64,6 +64,9 @@ export class SearchListingsDto {
   @IsOptional() @IsBooleanString()
   urgent?: string; // "true" : annonces marquées urgentes uniquement
 
+  @IsOptional() @IsIn(['fixe', 'negociable', 'gratuit', 'echange', 'sur_demande'])
+  price_type?: string; // filtre rapide « Dons » (gratuit) / « Échanges » (echange)
+
   @IsOptional() @Transform(toNumber) @IsInt() @Min(1) @Max(365)
   since_days?: number;
 

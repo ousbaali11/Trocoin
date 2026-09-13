@@ -132,7 +132,7 @@ export function SearchPage() {
     setParams({ condition: next.join(",") || undefined });
   };
 
-  const activeCount = ["q", "category", "price_min", "price_max", "condition", "delivery", "seller_type", "with_photo", "urgent", "since_days", "lat", "postal_code"].filter((k) => get(k)).length;
+  const activeCount = ["q", "category", "price_min", "price_max", "condition", "delivery", "seller_type", "with_photo", "urgent", "since_days", "lat", "postal_code", "price_type"].filter((k) => get(k)).length;
 
   const saveSearch = async () => {
     if (!requireAuth()) return;
@@ -182,7 +182,12 @@ export function SearchPage() {
           <p className="muted" style={{ margin: 0 }}>
             {loading ? "Recherche…" : `${result?.total ?? 0} annonce${(result?.total ?? 0) > 1 ? "s" : ""}`}
             {get("city_label") && ` · ${get("city_label")} (${radius} km)`}
+            {!get("city_label") && !get("postal_code") && " · Toute la France"}
           </p>
+          <div className="row" style={{ marginTop: 8, gap: 6, flexWrap: "wrap" }} aria-label="Filtres rapides">
+            <button type="button" className={`btn btn-sm ${get("price_type") === "gratuit" ? "btn-primary" : "btn-outline"}`} aria-pressed={get("price_type") === "gratuit"} onClick={() => setParams({ price_type: get("price_type") === "gratuit" ? undefined : "gratuit" })}>🎁 Dons uniquement</button>
+            <button type="button" className={`btn btn-sm ${get("price_type") === "echange" ? "btn-primary" : "btn-outline"}`} aria-pressed={get("price_type") === "echange"} onClick={() => setParams({ price_type: get("price_type") === "echange" ? undefined : "echange" })}>🔁 Échanges uniquement</button>
+          </div>
         </div>
         <div className="row">
           <button className="btn btn-outline btn-sm" onClick={() => { setSaveName(defaultSaveName()); setSaveOpen(true); }}>
@@ -224,7 +229,7 @@ export function SearchPage() {
 
           <div className="field">
             <label htmlFor="f-city">Localisation</label>
-            <CityInput id="f-city" value={cityValue} onChange={onCity} />
+            <CityInput id="f-city" value={cityValue} onChange={onCity} allowAll />
             <button type="button" className="btn btn-ghost btn-sm" onClick={aroundMe} style={{ alignSelf: "flex-start" }}>📍 Autour de moi</button>
             {lat && lng && (
               <label className="hint">
@@ -240,6 +245,18 @@ export function SearchPage() {
               <input className="input" type="number" min={0} placeholder="Min" defaultValue={get("price_min")} key={"min" + get("price_min")} onBlur={(e) => setParams({ price_min: e.target.value || undefined })} aria-label="Prix minimum" />
               <input className="input" type="number" min={0} placeholder="Max" defaultValue={get("price_max")} key={"max" + get("price_max")} onBlur={(e) => setParams({ price_max: e.target.value || undefined })} aria-label="Prix maximum" />
             </div>
+          </div>
+
+          <div className="field">
+            <label htmlFor="f-price-type">Type d'annonce</label>
+            <select id="f-price-type" className="select" value={get("price_type")} onChange={(e) => setParams({ price_type: e.target.value || undefined })}>
+              <option value="">Toutes</option>
+              <option value="gratuit">Dons (gratuit)</option>
+              <option value="echange">Échanges</option>
+              <option value="fixe">Prix fixe</option>
+              <option value="negociable">Prix négociable</option>
+              <option value="sur_demande">Prix sur demande</option>
+            </select>
           </div>
 
           <div className="field">

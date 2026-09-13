@@ -9,6 +9,8 @@ import { CONDITION_LABELS, formatPrice, PRICE_TYPE_LABELS } from "@/lib/format";
 import type { CategoryNode, Condition, FieldSchema, ListingDetail, ListingPhoto, ManagedShop, PriceType } from "@/lib/types";
 import { CityInput, type CityValue } from "@/components/ui/CityInput";
 import { PhotoCropper } from "./PhotoCropper";
+import { PriceEstimate } from "./PriceEstimate";
+import { CompletenessHint } from "./CompletenessHint";
 
 const NO_DELIVERY_ROOTS = ["immobilier", "vehicules", "emploi", "services", "vacances", "animaux"];
 const NO_CONDITION_ROOTS = ["emploi", "services", "immobilier", "vacances"];
@@ -283,6 +285,7 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
               </div>
             )}
           </div>
+          <PriceEstimate categorySlug={form.categorySlug} title={form.title} price={form.price} enabled={needsPrice} />
           {showCondition && (
             <div className="field">
               <label htmlFor="condition">État</label>
@@ -327,6 +330,7 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
       {step === 2 && (
         <div>
           <h2>Ajoutez des photos</h2>
+          <CompletenessHint photosCount={photos.length + pending.length} description={form.description} price={form.price} priceType={form.priceType} attributes={form.attributes} schema={schema} />
           <p className="muted">Jusqu&apos;à {MAX_PHOTOS} photos (JPEG, PNG, WEBP, 8 Mo max). Un recadrage vous est proposé à l&apos;ajout. La première est la photo de couverture : <strong>glissez-déposez</strong> pour réorganiser.</p>
           <label className="card" style={{ display: "grid", placeItems: "center", padding: 32, borderStyle: "dashed", cursor: "pointer", marginBottom: 16 }}
             onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); addFiles(e.dataTransfer.files); }}>

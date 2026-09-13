@@ -36,7 +36,7 @@ cd frontend && npm install && cp .env.example .env.local && npm run dev -- -p 30
 ## Tests
 
 ```bash
-npm test                 # 54 tests e2e (Jest + supertest, SQLite en mémoire)
+npm test                 # 67 tests e2e (Jest + supertest, SQLite en mémoire)
 # Les mêmes tests sur PostgreSQL (schéma créé par les migrations) :
 E2E_DB=postgres DB_TYPE=postgres DATABASE_URL=postgresql://... DB_SYNCHRONIZE=false npm test
 node test/ws-smoke.js    # messagerie temps réel contre un serveur lancé
@@ -68,6 +68,14 @@ libération), journal d'audit.
 - **Monétisation désactivée par défaut** (`system_settings.monetization_enabled = false`) : annonces illimitées, mises en avant gratuites, formules sans effet pour tous les comptes. L'admin l'active depuis « Monétisation et formules ».
 - Mise en avant (boost 7 j, urgent 7 j), import de catalogue CSV/XML et gestion multi-utilisateurs (comptes pro), recadrage et glisser-déposer des photos, historique de consultation, photo et proposition de prix dans la messagerie, CMS des pages légales, suggestions de recherche, fournisseur PayPal (simulé).
 - Catégories : 12 familles dans l'ordre de référence ; Locations de vacances sans sous-catégorie (champs dynamiques filtrables) ; Services 15 sous-catégories ; Animaux 5.
+
+## Phase 4 (accueil et différenciateurs)
+
+- **Accueil utilitaire** : la recherche (mots-clés + localisation « Toute la France » par défaut + raccourcis) et l'accès direct aux 12 familles occupent le haut de page, sans slogan.
+- **« Toute la France »** dans le sélecteur de localisation (accueil et recherche) ; une ville reste requise au dépôt.
+- **Dons / Échanges uniquement** : filtre `price_type` (`gratuit`, `echange`, `fixe`, `negociable`, `sur_demande`) mis en avant sur l'accueil et en tête des résultats.
+- **Prix moyen constaté** au dépôt : `GET /listings/price-estimate?category=&q=` (médiane et quartiles des annonces en ligne comparables, ≥ 3 annonces).
+- **Badge « Fiche complète »** calculé automatiquement (`isComplete` sur les cartes, `completeness` sur le détail) : 3 photos, description ≥ 120 caractères, prix, tous les critères de la catégorie cohérents ; checklist affichée pendant le dépôt (`src/listings/listing-completeness.ts`).
 
 ## Configuration
 

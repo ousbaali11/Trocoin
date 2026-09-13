@@ -27,6 +27,7 @@ export function ListingCard({ listing, showStatus = false }: { listing: ListingC
           {listing.isUrgent && <span className="pill pill-brick">Urgent</span>}
           {listing.isBoosted && <span className="pill pill-ochre">À la une</span>}
           {isPro && <span className="pill pill-dark">Pro</span>}
+          {listing.isComplete && <span className="pill pill-green" title="Photos, description et tous les critères renseignés">Fiche complète</span>}
         </div>
       </Link>
       <div className={styles.fav}>

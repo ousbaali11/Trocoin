@@ -28,31 +28,21 @@ export default async function HomePage() {
     <>
       <section className={styles.hero}>
         <div className="container">
-          <p className="eyebrow">Petites annonces · France</p>
-          <h1 className={styles.heroTitle}>
-            Vendez, achetez, donnez.<br />
-            <em>Entre voisins, en confiance.</em>
-          </h1>
-          <p className={styles.heroText}>
-            Chaque membre est identifié par un numéro de mobile français vérifié. Paiement sécurisé, messagerie protégée, modération humaine.
-          </p>
-          <HomeSearch />
-          <div className={styles.heroStats}>
-            <span><strong>{total.toLocaleString("fr-FR")}</strong> annonces en ligne</span>
-            <span><strong>0 €</strong> pour déposer{free ? ", tout est gratuit" : " pour les particuliers"}</span>
-            <span><strong>100 %</strong> des comptes vérifiés par SMS</span>
+          <div className={styles.heroHead}>
+            <h1 className={styles.heroTitle}>Rechercher une annonce</h1>
+            <p className={styles.heroText}>
+              Dans toute la France ou près de chez vous. Membres vérifiés par SMS{free ? ", dépôt gratuit" : ""}.
+            </p>
           </div>
-        </div>
-      </section>
-
-      <section className="container" style={{ marginTop: 24 }}>
-        <div className={styles.categories}>
-          {tree.map((c) => (
-            <Link key={c.slug} href={`/recherche?category=${c.slug}`} className={styles.category}>
-              <span className={styles.categoryIcon}><CategoryIcon name={c.icon} /></span>
-              <span>{c.name}</span>
-            </Link>
-          ))}
+          <HomeSearch total={total} />
+          <nav className={styles.categories} aria-label="Catégories">
+            {tree.map((c) => (
+              <Link key={c.slug} href={`/recherche?category=${c.slug}`} className={styles.category}>
+                <span className={styles.categoryIcon}><CategoryIcon name={c.icon} /></span>
+                <span>{c.name}</span>
+              </Link>
+            ))}
+          </nav>
         </div>
       </section>
 

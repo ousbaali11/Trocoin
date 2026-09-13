@@ -7,9 +7,10 @@ import {
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, LessThan, Repository } from 'typeorm';
+import { Brackets, In, LessThan, Repository } from 'typeorm';
 import { CategoriesService } from '../categories/categories.service';
-import { getSchemaForSlugs, validateAttributes } from '../categories/category-schemas';
+import { computeCompleteness } from './listing-completeness';
+import { FieldSchema, getSchemaForSlugs, validateAttributes } from '../categories/category-schemas';
 import { Category } from '../categories/category.entity';
 import { approximateFromPostalCode, boundingBox, haversineKm, isWithinFrance } from '../common/geo/france-geo';
 import { deleteUploadedFile } from '../common/upload/image-upload';
@@ -49,6 +50,8 @@ export interface ListingCard extends Listing {
     identityVerified: boolean;
   };
 }
+
+const PRICE_STOPWORDS = new Set(['les', 'des', 'une', 'pour', 'avec', 'sans', 'tres', 'bon', 'etat', 'neuf', 'neuve', 'occasion', 'vends', 'vend', 'vente', 'lot', 'the', 'and', 'par', 'sur', 'dans', 'comme', 'plus']);
 
 @Injectable()
 export class ListingsService {
@@ -459,7 +462,63 @@ export class ListingsService {
       isOwner,
       isBoosted: !!listing.boostedUntil && new Date(listing.boostedUntil).getTime() > now,
       isUrgent: !!listing.urgentUntil && new Date(listing.urgentUntil).getTime() > now,
+      completeness: computeCompleteness(listing, photos.length, schema || []),
     };
+  }
+
+  /** Schéma de champs d'une catégorie (avec celui de sa famille) à partir du cache des catégories. */
+  private schemaForCategory(c: Category | undefined, catById: Map<number, Category>): FieldSchema[] {
+    if (!c) return [];
+    const parent = c.parentId ? catById.get(c.parentId) : undefined;
+    return getSchemaForSlugs(c.slug, parent && parent.slug !== c.slug ? parent.slug : undefined);
+  }
+
+  /**
+   * « Prix moyen constaté » : médiane et fourchette (quartiles) des annonces en
+   * ligne de la même catégorie, en priorité celles dont le titre partage des
+   * mots avec celui saisi. Aide le vendeur à fixer un prix réaliste au dépôt,
+   * ce que leboncoin ne propose pas pour les particuliers.
+   */
+  async priceEstimate(categorySlug?: string, rawQ?: string): Promise<{ count: number; median: number | null; low: number | null; high: number | null; basis: 'mots' | 'categorie' | null }> {
+    const none = { count: 0, median: null, low: null, high: null, basis: null as null };
+    if (!categorySlug) return none;
+    const ids = await this.categoriesService.idsIncludingChildren(categorySlug);
+    if (!ids) return none;
+    const words = (rawQ || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .split(/[^a-z0-9]+/)
+      .filter((w) => w.length >= 3 && !PRICE_STOPWORDS.has(w))
+      .slice(0, 4);
+    const base = () =>
+      this.listingsRepo
+        .createQueryBuilder('l')
+        .select(['l.price'])
+        .where('l.status = :status', { status: 'en_ligne' })
+        .andWhere('l.categoryId IN (:...ids)', { ids })
+        .andWhere("l.priceType IN ('fixe', 'negociable')")
+        .andWhere('l.price IS NOT NULL AND l.price > 0')
+        .orderBy('l.publishedAt', 'DESC')
+        .limit(300);
+    const stats = (prices: number[], basis: 'mots' | 'categorie') => {
+      const sorted = [...prices].sort((a, b) => a - b);
+      const q = (p: number) => sorted[Math.min(sorted.length - 1, Math.floor(p * (sorted.length - 1)))];
+      return { count: sorted.length, median: Math.round(q(0.5)), low: Math.round(q(0.25)), high: Math.round(q(0.75)), basis };
+    };
+    if (words.length) {
+      const qb = base();
+      qb.andWhere(
+        new Brackets((w) => {
+          words.forEach((word, i) => w.orWhere('LOWER(l.title) LIKE :w' + i, { ['w' + i]: '%' + escapeLike(word) + '%' }));
+        }),
+      );
+      const rows = await qb.getMany();
+      if (rows.length >= 3) return stats(rows.map((r) => Number(r.price)), 'mots');
+    }
+    const rows = await base().getMany();
+    if (rows.length >= 3) return stats(rows.map((r) => Number(r.price)), 'categorie');
+    return { ...none, count: rows.length };
   }
 
   async findSimilar(id: string, limit = 8): Promise<ListingCard[]> {
@@ -669,6 +728,7 @@ export class ListingsService {
     if (query.delivery === 'true') qb.andWhere('l.deliveryAvailable = :delivery', { delivery: true });
     if (query.with_photo === 'true') qb.andWhere('EXISTS (SELECT 1 FROM listing_photos p WHERE p."listingId" = CAST(l.id AS varchar))');
     if (query.urgent === 'true') qb.andWhere('l.urgentUntil > :now', { now });
+    if (query.price_type) qb.andWhere('l.priceType = :priceType', { priceType: query.price_type });
     if (query.since_days) qb.andWhere('l.publishedAt > :since', { since: new Date(Date.now() - query.since_days * 86_400_000) });
     if (useDistance) {
       const box = boundingBox(query.lat!, query.lng!, radius);
@@ -757,6 +817,7 @@ export class ListingsService {
         categoryName: c?.name,
         isBoosted: !!l.boostedUntil && new Date(l.boostedUntil).getTime() > now,
         isUrgent: !!l.urgentUntil && new Date(l.urgentUntil).getTime() > now,
+        isComplete: computeCompleteness(l, ph.length, this.schemaForCategory(c, catById)).complete,
         seller: u
           ? { id: u.id, displayName: u.deletedAt ? 'Compte supprimé' : u.displayName, accountType: u.accountType, shopName: u.shopName, identityVerified: u.identityVerified }
           : undefined,
