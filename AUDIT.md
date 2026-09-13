@@ -1,4 +1,4 @@
-# AUDIT.md — Trocoin (audit final, 12 septembre 2026 · phase 2 et phase 3, 13 septembre 2026)
+# AUDIT.md — Trocoin (audit final, 12 septembre 2026 · phases 2, 3 et mise en ligne, 13 septembre 2026)
 
 Chaque affirmation de ce document est étiquetée :
 **[exécuté]** = vérifié par exécution réelle (tests e2e `npm test` 54/54 après la phase 3, sur SQLite et sur PostgreSQL, appels HTTP,
@@ -464,6 +464,54 @@ vérification externe §4 de ce guide (SMS reçu sur un vrai téléphone, annonc
 - Exécution de l'image Docker (construite en CI seulement), TLS vers une base hébergée
   (`sslmode=require`), comportement derrière le proxy Render (`TRUST_PROXY=true`), envoi
   d'un évènement Sentry, `pg_dump`/`pg_restore`.
+
+## 9. Mise en ligne réelle (13 septembre 2026, suite de la phase 3)
+
+Le propriétaire a créé les comptes Neon, Render, Vercel et Vonage et transmis `DATABASE_URL`,
+les clés Vonage et `CORS_ORIGINS`. Tout ce qui suit a été **observé réellement** depuis le poste
+de développement, sauf mention contraire.
+
+### 9.1 SMS Vonage : implémenté et validé
+
+| Étape | Résultat |
+|---|---|
+| Implémentation | `src/sms/vonage-sms.provider.ts` : `POST https://rest.nexmo.com/sms/json` (form-encodé, numéro E.164 sans « + », `type=unicode` seulement hors GSM-7), délai 8 s via `AbortController`, chaque statut Vonage (1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 14, 15, 22, 29, 32, 33) traduit en `SmsDeliveryError` explicite ; sélectionné par `SMS_PROVIDER=vonage` dans `SmsService`. Twilio reste **non implémenté** (aucun identifiant). |
+| Tests unitaires **[exécuté]** | `src/sms/vonage-sms.provider.spec.ts`, **10/10** avec un `fetch` simulé : requête conforme, statuts 4/9/29/3/inconnu, numéro non français refusé sans appel réseau, HTTP 401, erreur réseau, délai dépassé, construction sans identifiants refusée. Suite complète : **64/64** (6 suites). |
+| Clés réelles **[exécuté]** | `GET rest.nexmo.com/account/get-balance` avec les clés fournies → `{"value":2.00,"autoReload":false}` : identifiants **valides**, solde **2,00 €** (≈ 25 SMS vers un mobile français). Aucun SMS envoyé à ce stade. |
+| Point d'attention | Un compte Vonage d'essai ne délivre qu'aux numéros ajoutés dans *Dashboard → Test numbers* (statut 29 sinon, remonté en clair dans les logs Render et en 503 côté utilisateur). |
+
+### 9.2 Infrastructure observée
+
+| Brique | Observation **[exécuté]** |
+|---|---|
+| Neon (PostgreSQL 18.6, région **us-east-2**) | Connexion TLS OK ; **23 tables** ; table `migrations` = `InitialPostgres1789255931367` (exécutée par Render au premier démarrage) ; 0 utilisateur. Remarque : région États-Unis — pour des données de résidents français, recréer le projet en `eu-central-1` (Francfort) avant l'ouverture publique (`DEPLOIEMENT.md` §1). |
+| Render — API `https://trocoin.onrender.com` | `GET /health` → `{"status":"ok","database":"postgres"}` ; `GET /dev/last-otp/…` → **404** ; `OPTIONS` avec `Origin: https://trocoin.vercel.app` → 204 + `access-control-allow-origin` correct ; origine inconnue → **403** ; `Strict-Transport-Security` présent ; `GET /categories/tree` → 12 familles seedées ; `GET /listings` → 0 annonce. Un redémarrage de l'instance a été observé après le push `e5b535f` (déploiement automatique), à confirmer dans *Render → Events*. |
+| CI GitHub | Run https://github.com/ousbaali11/Trocoin/actions/runs/34735085223 **vert** (4/4 jobs, 64 tests SQLite, 64 tests PostgreSQL 16, front, Docker). |
+| Vercel — front | Déploiements `Production` réussis (statuts GitHub « Vercel: success »), mais **le site n'est pas accessible publiquement** : `https://trocoin-devi-facto.vercel.app` redirige vers `vercel.com/sso-api` (**Deployment Protection / Vercel Authentication activée**), et `https://trocoin.vercel.app` (valeur de `CORS_ORIGINS`) répond `X-Vercel-Error: NOT_FOUND` (domaine non rattaché au projet). Un second projet `trocoin_alpha` existe (déploiement 410 Gone). |
+
+### 9.3 Vérification externe (§4 de DEPLOIEMENT.md) — état
+
+| Étape | État |
+|---|---|
+| 1. `/health` en production | **fait**, OK |
+| 2. `/dev/last-otp` neutralisé | **fait**, 404 |
+| 3. Inscription réelle avec SMS reçu, dépôt d'annonce, recherche | **en attente** : le numéro de téléphone n'a pas été transmis (« [votre numéro] » est resté un espace réservé) et le front Vercel est verrouillé par l'authentification Vercel. Aucun SMS n'a été envoyé : je n'utilise pas de numéro inventé. |
+| 4. Déconnexion → accès refusé | en attente (dépend de 3) |
+| 5. Compte administrateur | en attente du numéro ; exécutable depuis le poste avec `DATABASE_URL` Neon : `DB_TYPE=postgres DATABASE_URL=… node dist/admin/create-admin.js 06XXXXXXXX "Admin"` (aucune route HTTP ne permet de devenir admin). |
+
+### 9.4 Actions restant à votre charge
+
+1. **Vercel** : *Settings → Deployment Protection* → désactiver *Vercel Authentication* pour
+   Production (sinon aucun testeur n'entre), puis *Settings → Domains* → ajouter
+   `trocoin.vercel.app` (ou votre domaine). Vérifier que `NEXT_PUBLIC_API_URL=https://trocoin.onrender.com`
+   est bien défini dans le projet Vercel, puis *Redeploy*.
+2. **Render** : `CORS_ORIGINS` doit contenir l'URL réellement servie par Vercel (aujourd'hui
+   `https://trocoin.vercel.app` ne sert rien).
+3. **Vonage** : si le compte est encore en essai, ajouter votre numéro dans *Test numbers*.
+4. Me transmettre **votre numéro de mobile** pour dérouler l'inscription réelle et créer l'admin.
+5. **Sécurité** : les clés Vonage et le mot de passe Neon ont transité par cette conversation ;
+   il est prudent de les régénérer (Vonage → *API settings*, Neon → *Reset password*) et de
+   mettre à jour Render ensuite.
 
 ## Annexe — journal des vérifications exécutées le 12 septembre 2026
 

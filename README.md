@@ -9,8 +9,9 @@ Documents : `cahier-des-charges.md`, `architecture-technique.md`,
 complétude, ce qui n'a pas pu être testé, recommandations avant lancement),
 `DEPLOIEMENT.md` (mise en ligne pas à pas : Neon + Render + Vercel, sauvegardes, SMS).
 
-**URL de production : _non déployé à ce jour_** — voir `DEPLOIEMENT.md` (comptes hébergeur
-et identifiants SMS à créer par le propriétaire du projet).
+**Production** : API `https://trocoin.onrender.com` (Render, Docker, PostgreSQL Neon, SMS Vonage) ;
+front Next.js sur Vercel (URL à confirmer, `https://trocoin.vercel.app` répondait `NOT_FOUND` le
+13 septembre 2026). Procédure : `DEPLOIEMENT.md`.
 
 ## Démarrage rapide (développement)
 
