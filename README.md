@@ -108,7 +108,7 @@ npm run migration:run
 
 | Service | Interface | Fichier |
 |---|---|---|
-| SMS (Vonage, Twilio, OVH) | `ISmsProvider` | `src/sms/sms.service.ts` |
+| SMS — Vonage **implémenté** ; Twilio non implémenté | `ISmsProvider` | `src/sms/vonage-sms.provider.ts`, `src/sms/sms.service.ts` |
 | Paiement (Stripe Connect, implémenté, non testé en réel) | `IPaymentProvider` | `src/payments/stripe-payment.provider.ts` |
 | Onboarding vendeur Stripe | — | `src/users/stripe-connect.service.ts` |
 | Push / SMS de notification (FCM) | `INotificationProvider` | `src/notifications/notifications.service.ts` |

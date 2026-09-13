@@ -102,19 +102,26 @@ Depuis un téléphone **hors du réseau du développeur** :
 
 ## 5. SMS (obligatoire avant tout test réel)
 
-Aucun identifiant SMS n'était disponible lors du développement : l'appel HTTP vers le
-fournisseur n'est **pas** implémenté (voir `src/sms/sms.service.ts`, classe
-`UnconfiguredSmsProvider`). La couche est prête : interface `ISmsProvider`, délai
-d'attente 10 s, erreur explicite 503 pour l'utilisateur, aucun code OTP fantôme laissé
-en base en cas d'échec (test e2e `phase3 › SMS`), et le démarrage vérifie la présence des
-clés. Variables attendues, **noms exacts** :
+**Vonage est implémenté** (`src/sms/vonage-sms.provider.ts`, API `POST https://rest.nexmo.com/sms/json`).
+Variables, **noms exacts** : `SMS_PROVIDER=vonage`, `VONAGE_API_KEY`, `VONAGE_API_SECRET`,
+`SMS_SENDER` (expéditeur alphanumérique ≤ 11 caractères, ex. `Trocoin`). Le démarrage refuse
+une configuration incomplète.
 
-- Vonage : `SMS_PROVIDER=vonage`, `VONAGE_API_KEY`, `VONAGE_API_SECRET`, `SMS_SENDER` (ex. `Trocoin`, expéditeur alphanumérique autorisé en France)
-- Twilio : `SMS_PROVIDER=twilio`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` (numéro E.164 ou SID de Messaging Service)
+Comportement : délai d'attente 8 s (10 s au niveau du service), chaque statut d'erreur Vonage
+est traduit en message explicite dans les logs (identifiants invalides, crédit insuffisant,
+numéro bloqué, expéditeur refusé, **numéro non autorisé sur compte d'essai — statut 29**),
+l'utilisateur reçoit un 503 et aucun code OTP fantôme n'est laissé en base. Tests unitaires
+`src/sms/vonage-sms.provider.spec.ts` (10 cas, fetch simulé).
 
-Dès que l'un des deux jeux de clés est fourni, il reste à écrire ~40 lignes (appel `fetch`
-vers `https://rest.nexmo.com/sms/json` ou `https://api.twilio.com/2010-04-01/Accounts/{SID}/Messages.json`)
-et à les tester sur un vrai numéro. Ne pas déployer avant : chaque inscription répondrait 503.
+Points d'attention Vonage :
+- **Compte d'essai** : seuls les numéros ajoutés dans *Dashboard → Getting started → Test numbers*
+  reçoivent les SMS (statut 29 sinon). Créditer le compte lève la restriction.
+- Vérifier le solde sans envoyer : `GET https://rest.nexmo.com/account/get-balance?api_key=…&api_secret=…`.
+- Coût indicatif d'un SMS vers un mobile français : ~0,07 €.
+
+Twilio (`SMS_PROVIDER=twilio`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`) reste
+**non implémenté** faute d'identifiants pour le tester ; le démarrage l'accepte mais chaque envoi
+répond 503 explicitement.
 
 ## 6. Sauvegardes et restauration
 

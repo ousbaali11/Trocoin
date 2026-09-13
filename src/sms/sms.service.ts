@@ -1,17 +1,10 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { isProduction } from '../config/env.validation';
+import { ISmsProvider, SmsDeliveryError } from './sms-provider';
+import { VonageSmsProvider } from './vonage-sms.provider';
 
-export interface ISmsProvider {
-  send(toFrenchE164: string, message: string): Promise<void>;
-}
-
-/** Erreur d'envoi typée : le service OTP annule proprement la demande de code. */
-export class SmsDeliveryError extends Error {
-  constructor(public readonly provider: string, public readonly reason: string) {
-    super(`SMS non envoyé (${provider}) : ${reason}`);
-  }
-}
+export { ISmsProvider, SmsDeliveryError } from './sms-provider';
 
 /** Fournisseur de dev : n'envoie rien, journalise le code en console. */
 class MockSmsProvider implements ISmsProvider {
@@ -24,18 +17,29 @@ class MockSmsProvider implements ISmsProvider {
 }
 
 /**
- * Fournisseurs réels (Vonage, Twilio) : NON implémentés tant qu'aucun
- * identifiant n'est disponible pour les tester (voir AUDIT.md §8.1).
- * Variables attendues :
- *   SMS_PROVIDER=vonage  + VONAGE_API_KEY, VONAGE_API_SECRET, SMS_SENDER (ex. "Trocoin")
- *   SMS_PROVIDER=twilio  + TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM (numéro E.164 ou Messaging Service SID)
- * Ce fournisseur refuse explicitement l'envoi : jamais d'échec silencieux.
+ * Fournisseurs :
+ *   SMS_PROVIDER=vonage  + VONAGE_API_KEY, VONAGE_API_SECRET, SMS_SENDER → VonageSmsProvider (implémenté, testé en réel)
+ *   SMS_PROVIDER=twilio  + TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM → NON implémenté
+ *     (aucun identifiant Twilio disponible pour le tester ; voir AUDIT.md §8.1)
+ * Un fournisseur non implémenté ou sans identifiants refuse explicitement
+ * l'envoi : jamais d'échec silencieux.
  */
 class UnconfiguredSmsProvider implements ISmsProvider {
   constructor(private name: string) {}
   async send(): Promise<void> {
     throw new SmsDeliveryError(this.name, 'fournisseur non implémenté / identifiants absents');
   }
+}
+
+function buildProvider(name: string, config: ConfigService): ISmsProvider {
+  if (name === 'vonage') {
+    return new VonageSmsProvider(
+      config.get<string>('VONAGE_API_KEY') || '',
+      config.get<string>('VONAGE_API_SECRET') || '',
+      config.get<string>('SMS_SENDER') || '',
+    );
+  }
+  return new UnconfiguredSmsProvider(name);
 }
 
 @Injectable()
@@ -49,7 +53,7 @@ export class SmsService {
   constructor(private config: ConfigService) {
     this.providerName = this.config.get<string>('SMS_PROVIDER') || 'mock';
     this.isMock = this.providerName === 'mock' && !isProduction();
-    this.provider = this.isMock ? new MockSmsProvider() : new UnconfiguredSmsProvider(this.providerName);
+    this.provider = this.isMock ? new MockSmsProvider() : buildProvider(this.providerName, this.config);
   }
 
   /**
