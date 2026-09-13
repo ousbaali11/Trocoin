@@ -1,7 +1,17 @@
 import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
-import { version as packageVersion } from '../../package.json';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
+/** Version lue dans package.json à l'exécution (pas d'import JSON : il déplacerait la sortie de tsc hors de dist/). */
+const packageVersion: string = (() => {
+  try {
+    return JSON.parse(readFileSync(join(__dirname, '..', '..', 'package.json'), 'utf8')).version || 'dev';
+  } catch {
+    return 'dev';
+  }
+})();
 
 /**
  * Sonde de santé pour l'hébergeur (Render / Railway / Kubernetes) et le

@@ -28,6 +28,8 @@ jobs:
         run: npm test
       - name: Build de production
         run: npm run build
+      - name: Vérifier la sortie du build (dist/main.js attendu par le Dockerfile)
+        run: test -f dist/main.js && node -e "require('./dist/health/health.controller.js')" && echo OK
       - name: Audit des dépendances (échec si vulnérabilité ≥ haute)
         run: npm audit --audit-level=high
 
