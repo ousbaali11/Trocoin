@@ -513,6 +513,34 @@ de développement, sauf mention contraire.
    il est prudent de les régénérer (Vonage → *API settings*, Neon → *Reset password*) et de
    mettre à jour Render ensuite.
 
+## 10. Phase 4 (14 septembre 2026) — accueil utilitaire et différenciateurs
+
+### 10.1 Ce qui a changé
+
+| Volet | Réalisation | Fichiers |
+|---|---|---|
+| Haut de page | Ancien bloc (étiquette, slogan, sous-texte, statistiques) supprimé, texte non réutilisé. Nouveau haut de page calqué sur la logique de leboncoin (recherche intégrée, catégories en accès direct, pas de slogan) : titre sobre « Rechercher une annonce » + une ligne, bloc de recherche large (Quoi ? / Où ? / bouton), raccourcis, puis les 12 familles sur une ligne. Typographie : titre en police de titre 1,35–1,7 rem, libellés de champ en capitales espacées, hiérarchie resserrée, dégradé léger. | `frontend/src/app/(site)/page.tsx`, `home.module.css`, `components/home/HomeSearch.tsx` + `.module.css` |
+| « Toute la France » | Option par défaut du sélecteur de localisation (accueil et page de recherche), affichée dans le champ, proposée en premier dans la liste, correspond à une recherche sans restriction géographique. Non ajoutée au dépôt : une annonce doit avoir une ville (comme sur leboncoin). | `components/ui/CityInput.tsx` (prop `allowAll`) |
+| Dons / Échanges | Filtre `price_type` côté API (valeurs validées) ; raccourcis « Dons uniquement » / « Échanges » sur l'accueil et boutons à bascule en tête des résultats ; select « Type d'annonce » dans les filtres. **Valeur** : les dons et le troc sont noyés dans les prix sur leboncoin ; ici ils sont accessibles en un clic, ce qui sert directement la promesse « vendez, donnez, échangez ». | `search-listings.dto.ts`, `listings.service.ts`, `SearchPage.tsx` |
+| Prix moyen constaté | `GET /listings/price-estimate?category=&q=` : médiane et quartiles des annonces en ligne de la catégorie, en priorité celles au titre proche (≥ 3 annonces, repli catégorie). Panneau au dépôt avec alerte si le prix saisi est < 50 % ou > 150 % de la médiane. **Valeur** : un particulier fixe son prix à l'aveugle sur leboncoin ; l'estimation réduit les annonces invendables ou bradées, donc les échanges inutiles. | `listings.service.ts` (`priceEstimate`), `components/listing/PriceEstimate.tsx` |
+| Badge « Fiche complète » | Calculé automatiquement, sans intervention humaine (d'où « complète » et non « vérifiée ») : ≥ 3 photos, description ≥ 120 caractères, prix, tous les critères de la catégorie renseignés et cohérents (bornes, année ≤ année courante). `isComplete` sur les cartes, `completeness {complete, score, missing}` sur le détail, badge vert sur cartes et détail, checklist pendant le dépôt (étape Photos). **Valeur** : sur un véhicule ou un logement, l'acheteur n'a plus à demander l'année, le kilométrage ou la surface par message ; le vendeur est guidé pour tout remplir. | `src/listings/listing-completeness.ts`, `components/listing/CompletenessHint.tsx`, `ListingCard.tsx`, page détail |
+| Nettoyage | Diagnostic SMS temporaire retiré (ligne de log et champ `sms` de `/health`) : la cause du 503 était l'ancien build resté en ligne sur Render, pas les variables. | `sms.service.ts`, `health.controller.ts` |
+
+### 10.2 Preuves d'exécution
+
+- `npm test` : **67/67** (7 suites), dont 3 nouveaux tests `test/phase4.e2e-spec.ts` (filtre dons/échanges + valeur inconnue refusée ; estimation : médiane, repli catégorie, rien sous 3 annonces ; fiche complète : badge absent/présent, liste des manques, année future retirant le badge).
+- `tsc` API et front : 0 erreur. `next build` avec `NEXT_PUBLIC_API_URL=https://trocoin.onrender.com` : succès.
+- Navigateur en local (API :3000 + Next :3001, 25 annonces) : accueil rendu sans erreur console ; liste « Toute la France » + suggestions de villes ; `/recherche?price_type=gratuit` → 1 annonce « Gratuit », bouton « Dons uniquement » actif, localisation « Toute la France » ; dépôt Véhicules › Voitures : « Prix moyen constaté 11 900 €, fourchette 8 900 – 11 900 €, 3 annonces » avec l'alerte « bien en dessous du marché » pour 4 000 € ; étape Photos : checklist « Fiche complète 1/4 » listant les manques.
+- Push `9de8239` → CI GitHub **verte** (run 34787121335). Vercel : déploiement **réussi**, `https://trocoin.vercel.app` affiche le nouvel accueil (vérifié dans le navigateur).
+- **Render : pas de redéploiement automatique** (13 min après le push, `/health` expose encore le diagnostic retiré → build `b5978da` toujours en ligne). Comme à chaque push depuis la création du service : Render n'est pas relié au dépôt (aucun webhook GitHub, voir §9). **Un Manual Deploy est nécessaire.**
+
+### 10.3 État en production tant que Render n'est pas redéployé
+
+- Le nouvel accueil est en ligne ; le raccourci « Dons uniquement » envoie `price_type=gratuit` que l'ancienne API **ignore** (résultats non filtrés, pas d'erreur).
+- L'estimation de prix répond 400 sur l'ancienne API : le panneau reste simplement masqué au dépôt.
+- Le badge « Fiche complète » n'apparaît pas (champ absent des réponses).
+- Dès le Manual Deploy du commit `9de8239` (ou plus récent), ces trois points deviennent actifs sans autre action.
+
 ## Annexe — journal des vérifications exécutées le 12 septembre 2026
 
 - `npm test` : 3 suites, **36/36**.
