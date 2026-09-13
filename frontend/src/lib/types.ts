@@ -114,6 +114,10 @@ export interface Me {
   phoneNumber: string;
   phoneVerified: boolean;
   email?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  username?: string | null;
+  companyName?: string | null;
   displayName: string;
   avatarUrl?: string | null;
   accountType: AccountType;

@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Conversation } from '../conversations/conversation.entity';
@@ -66,6 +66,69 @@ export class UsersService {
 
   findById(id: string) {
     return this.usersRepo.findOne({ where: { id } });
+  }
+
+  findByEmail(email: string) {
+    return this.usersRepo.createQueryBuilder('u').where('LOWER(u.email) = :email', { email: email.trim().toLowerCase() }).getOne();
+  }
+
+  findByUsername(username: string) {
+    return this.usersRepo.createQueryBuilder('u').where('LOWER(u.username) = :username', { username: username.trim().toLowerCase() }).getOne();
+  }
+
+  /** Charge le hash du mot de passe (select:false) pour la connexion par e-mail ou username. */
+  findForLogin(identifier: string): Promise<User | null> {
+    const id = identifier.trim().toLowerCase();
+    return this.usersRepo
+      .createQueryBuilder('u')
+      .addSelect('u.passwordHash')
+      .where('LOWER(u.email) = :id OR LOWER(u.username) = :id', { id })
+      .getOne();
+  }
+
+  /**
+   * Inscription par formulaire (phase 5) : le compte est créé directement,
+   * téléphone marqué NON vérifié (aucun SMS envoyé — relaxation temporaire,
+   * voir AUDIT.md §11). Les doublons sont refusés avec un message explicite.
+   */
+  async createWithCredentials(input: {
+    accountType: 'particulier' | 'professionnel';
+    firstName: string;
+    lastName: string;
+    username: string;
+    email: string;
+    phoneNumber: string;
+    passwordHash: string;
+    companyName?: string;
+    siret?: string;
+  }): Promise<User> {
+    const email = input.email.trim().toLowerCase();
+    const username = input.username.trim();
+    if (await this.findByPhone(input.phoneNumber)) throw new ConflictException('Ce numéro de téléphone est déjà associé à un compte.');
+    if (await this.findByEmail(email)) throw new ConflictException('Cette adresse e-mail est déjà utilisée.');
+    if (await this.findByUsername(username)) throw new ConflictException("Ce nom d'utilisateur est déjà pris.");
+    if (input.accountType === 'professionnel') {
+      if (!input.siret || !isValidSiret(input.siret)) throw new BadRequestException('SIRET invalide (clé de contrôle incorrecte).');
+      if (await this.usersRepo.findOne({ where: { siret: input.siret } })) throw new ConflictException('Ce SIRET est déjà rattaché à un compte.');
+    }
+    const firstName = input.firstName.trim();
+    const lastName = input.lastName.trim();
+    const user = this.usersRepo.create({
+      phoneNumber: input.phoneNumber,
+      phoneVerified: false,
+      email,
+      username,
+      firstName,
+      lastName,
+      passwordHash: input.passwordHash,
+      accountType: input.accountType,
+      displayName: input.accountType === 'professionnel' ? input.companyName!.trim() : `${firstName} ${lastName.charAt(0).toUpperCase()}.`,
+      ...(input.accountType === 'professionnel' ? { companyName: input.companyName!.trim(), shopName: input.companyName!.trim(), siret: input.siret } : {}),
+    });
+    const saved = await this.usersRepo.save(user);
+    // Ne jamais renvoyer le hash à l'appelant
+    delete (saved as Partial<User>).passwordHash;
+    return saved;
   }
 
   async createFromPhone(phoneNumber: string): Promise<User> {

@@ -30,6 +30,26 @@ export class User {
   @Column({ nullable: true })
   avatarUrl?: string;
 
+  // ----- Identité (inscription par formulaire, phase 5). Nullable : les comptes
+  // créés par OTP avant cette phase n'ont pas ces champs. -----
+  @Column({ nullable: true })
+  firstName?: string;
+
+  @Column({ nullable: true })
+  lastName?: string;
+
+  /** Identifiant public unique (connexion possible avec l'e-mail ou l'username). */
+  @Column({ nullable: true, unique: true })
+  username?: string;
+
+  /** Hash scrypt (src/auth/password.ts). select:false : jamais chargé par défaut, donc jamais sérialisé. */
+  @Column({ nullable: true, select: false })
+  passwordHash?: string;
+
+  /** Raison sociale (compte professionnel). */
+  @Column({ nullable: true })
+  companyName?: string;
+
   @Index()
   @Column({ type: 'varchar', default: 'particulier' })
   accountType: AccountType;

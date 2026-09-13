@@ -177,7 +177,7 @@ export class AdminService {
     if (query.q) {
       const q = `%${query.q.toLowerCase()}%`;
       qb.andWhere(
-        '(LOWER(u.phoneNumber) LIKE :q OR LOWER(u.displayName) LIKE :q OR LOWER(u.email) LIKE :q OR u.siret LIKE :q OR LOWER(u.shopName) LIKE :q OR CAST(u.id AS varchar) = :exact)',
+        '(LOWER(u.phoneNumber) LIKE :q OR LOWER(u.displayName) LIKE :q OR LOWER(u.email) LIKE :q OR LOWER(u.username) LIKE :q OR u.siret LIKE :q OR LOWER(u.shopName) LIKE :q OR CAST(u.id AS varchar) = :exact)',
         { q, exact: query.q },
       );
     }

@@ -178,7 +178,8 @@ export function Header() {
               <button className="btn btn-outline" onClick={logout}>Se déconnecter</button>
             </>
           ) : (
-            <Link href="/connexion" className="btn btn-outline btn-block">Se connecter</Link>
+            <><Link href="/inscription" className="btn btn-primary btn-block">Créer un compte</Link>
+            <Link href="/connexion" className="btn btn-outline btn-block">Se connecter</Link></>
           )}
         </div>
       )}

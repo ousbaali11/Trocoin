@@ -6,9 +6,14 @@ import { Repository } from 'typeorm';
 import { normalizeFrenchMobile } from '../common/validators/french-phone';
 import { DATE_TYPE } from '../config/db';
 import { OtpService } from '../otp/otp.service';
+import { RegisterDto } from './dto/register.dto';
+import { hashPassword, verifyPassword } from './password';
 import { User } from '../users/user.entity';
 import { UsersService } from '../users/users.service';
 import { RefreshToken } from './refresh-token.entity';
+
+/** Hash factice : égalise le temps de réponse quand l'identifiant n'existe pas. */
+const DUMMY_HASH = 'scrypt$32768$8$1$AAAAAAAAAAAAAAAAAAAAAA==$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==';
 
 export const ACCESS_TOKEN_TTL = process.env.JWT_EXPIRES_IN || '15m';
 export const REFRESH_TOKEN_TTL_DAYS = Number(process.env.REFRESH_TOKEN_TTL_DAYS || 30);
@@ -69,6 +74,58 @@ export class AuthService {
       ...tokens,
       user: { id: user.id, phoneNumber: user.phoneNumber, displayName: user.displayName, accountType: user.accountType },
     };
+  }
+
+  /**
+   * Inscription par formulaire (phase 5). AUCUN SMS : le compte est créé
+   * immédiatement avec phoneVerified=false. Pour réactiver la vérification,
+   * appeler `this.otpService.requestOtp(normalized)` ici et n'ouvrir la session
+   * qu'après `verifyPhoneOtp` (voir AUDIT.md §11).
+   */
+  async register(dto: RegisterDto, meta: { userAgent?: string; ip?: string } = {}) {
+    const normalized = normalizeFrenchMobile(dto.phoneNumber);
+    if (!normalized) {
+      throw new BadRequestException('Seuls les numéros de mobile français (+33 6 ou 7) sont acceptés sur cette plateforme.');
+    }
+    if (dto.password !== dto.passwordConfirmation) throw new BadRequestException('Les deux mots de passe ne correspondent pas.');
+    if (dto.accountType === 'professionnel' && (!dto.companyName || !dto.siret)) {
+      throw new BadRequestException('Raison sociale et SIRET sont obligatoires pour un compte professionnel.');
+    }
+    const passwordHash = await hashPassword(dto.password);
+    const user = await this.usersService.createWithCredentials({
+      accountType: dto.accountType,
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+      username: dto.username,
+      email: dto.email,
+      phoneNumber: normalized,
+      passwordHash,
+      companyName: dto.companyName,
+      siret: dto.siret,
+    });
+    this.logger.log(`Inscription ${dto.accountType} ${user.id} (téléphone non vérifié : SMS désactivé, phase 5)`);
+    const tokens = await this.openSession(user, randomUUID(), meta);
+    return { ...tokens, user: this.sessionUser(user) };
+  }
+
+  /** Connexion e-mail ou nom d'utilisateur + mot de passe. Même message quel que soit le champ erroné. */
+  async loginWithPassword(identifier: string, password: string, meta: { userAgent?: string; ip?: string } = {}) {
+    const user = await this.usersService.findForLogin(identifier);
+    const ok = user ? await verifyPassword(password, user.passwordHash) : await verifyPassword(password, DUMMY_HASH); // temps constant
+    if (!user || !ok) {
+      if (user && !user.passwordHash) {
+        throw new UnauthorizedException("Ce compte a été créé par code SMS et n'a pas de mot de passe : utilisez la connexion par SMS.");
+      }
+      throw new UnauthorizedException('Identifiant ou mot de passe incorrect.');
+    }
+    if (user.deletedAt) throw new UnauthorizedException('Identifiant ou mot de passe incorrect.');
+    if (user.suspendedAt) throw new ForbiddenException('Ce compte est suspendu. Contactez le support.');
+    const tokens = await this.openSession(user, randomUUID(), meta);
+    return { ...tokens, user: this.sessionUser(user) };
+  }
+
+  private sessionUser(user: User) {
+    return { id: user.id, phoneNumber: user.phoneNumber, phoneVerified: user.phoneVerified, displayName: user.displayName, username: user.username, accountType: user.accountType };
   }
 
   private async openSession(user: User, familyId: string, meta: { userAgent?: string; ip?: string }): Promise<SessionTokens> {

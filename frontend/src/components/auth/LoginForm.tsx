@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 
@@ -12,68 +12,32 @@ function safeNext(raw: string | null): string {
   return raw;
 }
 
+/** Connexion par e-mail ou nom d'utilisateur + mot de passe. */
 export function LoginForm() {
   const { login, user, loading } = useAuth();
   const router = useRouter();
   const params = useSearchParams();
   const next = safeNext(params.get("next"));
 
-  const [step, setStep] = useState<"phone" | "code">("phone");
-  const [phone, setPhone] = useState("");
-  const [normalized, setNormalized] = useState("");
-  const [code, setCode] = useState("");
+  const [identifier, setIdentifier] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [cooldown, setCooldown] = useState(0);
-  const [devHint, setDevHint] = useState<string | null>(null);
-  const codeRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!loading && user) router.replace(next);
   }, [loading, user, next, router]);
 
-  useEffect(() => {
-    if (cooldown <= 0) return;
-    const t = setTimeout(() => setCooldown((c) => c - 1), 1000);
-    return () => clearTimeout(t);
-  }, [cooldown]);
-
-  const requestCode = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    setError(null);
-    setBusy(true);
-    try {
-      const res = await api<{ phoneNumber: string }>("/auth/register/phone", { method: "POST", body: { phoneNumber: phone }, token: null });
-      setNormalized(res.phoneNumber);
-      setStep("code");
-      setCooldown(60);
-      setTimeout(() => codeRef.current?.focus(), 50);
-      // Raccourci de développement : l'API ne répond ici qu'en mode SMS mock hors production.
-      try {
-        const dev = await api<{ code: string }>(`/dev/last-otp/${encodeURIComponent(res.phoneNumber)}`, { token: null });
-        setDevHint(dev.code);
-      } catch {
-        setDevHint(null);
-      }
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Impossible d'envoyer le code.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const verify = async (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setBusy(true);
     try {
-      const res = await api<{ accessToken: string; refreshToken: string }>("/auth/otp/verify", { method: "POST", body: { phoneNumber: normalized, code }, token: null });
+      const res = await api<{ accessToken: string; refreshToken: string }>("/auth/login", { method: "POST", body: { identifier: identifier.trim(), password }, token: null });
       await login(res.accessToken, res.refreshToken);
       router.replace(next);
     } catch (err) {
-      const msg = err instanceof ApiError ? err.message : "Code invalide.";
-      setError(msg);
-      if (err instanceof ApiError && err.status === 429) setStep("phone");
+      setError(err instanceof ApiError ? err.message : "Connexion impossible pour le moment.");
     } finally {
       setBusy(false);
     }
@@ -81,69 +45,32 @@ export function LoginForm() {
 
   return (
     <div className="panel">
-      <p className="eyebrow">Connexion · Inscription</p>
-      <h1 style={{ fontSize: "1.8rem" }}>{step === "phone" ? "Votre numéro de mobile" : "Saisissez le code reçu"}</h1>
+      <p className="eyebrow">Connexion</p>
+      <h1 style={{ fontSize: "1.8rem" }}>Bon retour sur Trocoin</h1>
       <p className="muted">
-        {step === "phone"
-          ? "Un seul compte par numéro de mobile français (06 ou 07). Nous vous envoyons un code par SMS : pas de mot de passe."
-          : `Code à 6 chiffres envoyé au ${normalized.replace(/^\+33/, "0").replace(/(\d{2})(?=\d)/g, "$1 ")}. Valable 5 minutes.`}
+        Pas encore de compte ? <Link href={`/inscription?next=${encodeURIComponent(next)}`}>Créer un compte</Link>
       </p>
-      {next !== "/compte" && step === "phone" && (
+      {next !== "/compte" && (
         <div className="alert alert-info">Connectez-vous pour continuer votre action. Vous y serez ramené automatiquement.</div>
       )}
       {error && <div className="alert alert-error" role="alert">{error}</div>}
 
-      {step === "phone" ? (
-        <form onSubmit={requestCode}>
-          <div className="field">
-            <label htmlFor="phone">Numéro de mobile</label>
-            <input id="phone" className="input" type="tel" inputMode="tel" autoComplete="tel" placeholder="06 12 34 56 78" value={phone} onChange={(e) => setPhone(e.target.value)} required autoFocus />
-            <span className="hint">Les numéros étrangers ne sont pas acceptés sur Trocoin.</span>
-          </div>
-          <button className="btn btn-primary btn-block btn-lg" disabled={busy || phone.replace(/\D/g, "").length < 10}>
-            {busy ? "Envoi…" : "Recevoir mon code"}
-          </button>
-        </form>
-      ) : (
-        <form onSubmit={verify}>
-          <div className="field">
-            <label htmlFor="code">Code de vérification</label>
-            <input
-              id="code"
-              ref={codeRef}
-              className="input"
-              inputMode="numeric"
-              pattern="\d{6}"
-              maxLength={6}
-              autoComplete="one-time-code"
-              placeholder="••••••"
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-              style={{ fontSize: "1.6rem", letterSpacing: "0.4em", textAlign: "center", fontFamily: "var(--font-display)" }}
-              required
-            />
-            {devHint && (
-              <span className="hint">
-                Mode développement : code <button type="button" className="btn btn-ghost btn-sm" onClick={() => setCode(devHint)}>{devHint}</button>
-              </span>
-            )}
-          </div>
-          <button className="btn btn-primary btn-block btn-lg" disabled={busy || code.length !== 6}>
-            {busy ? "Vérification…" : "Me connecter"}
-          </button>
-          <div className="row spread" style={{ marginTop: 14 }}>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setStep("phone"); setCode(""); setError(null); }}>
-              Changer de numéro
-            </button>
-            <button type="button" className="btn btn-ghost btn-sm" disabled={cooldown > 0 || busy} onClick={() => requestCode()}>
-              {cooldown > 0 ? `Renvoyer dans ${cooldown} s` : "Renvoyer le code"}
-            </button>
-          </div>
-        </form>
-      )}
+      <form onSubmit={submit}>
+        <div className="field">
+          <label htmlFor="identifier">E-mail ou nom d&apos;utilisateur</label>
+          <input id="identifier" className="input" value={identifier} onChange={(e) => setIdentifier(e.target.value)} autoComplete="username" required autoFocus />
+        </div>
+        <div className="field">
+          <label htmlFor="password">Mot de passe</label>
+          <input id="password" className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
+        </div>
+        <button className="btn btn-primary btn-block btn-lg" disabled={busy || identifier.trim().length < 3 || password.length === 0}>
+          {busy ? "Connexion…" : "Me connecter"}
+        </button>
+      </form>
       <hr className="divider" />
       <p className="small muted" style={{ margin: 0 }}>
-        En continuant, vous acceptez les <Link href="/cgu">conditions d&apos;utilisation</Link> et la <Link href="/confidentialite">politique de confidentialité</Link>.
+        Compte créé par SMS avant l&apos;inscription par formulaire ? <Link href={`/connexion/sms?next=${encodeURIComponent(next)}`}>Connexion par code SMS</Link>.
       </p>
     </div>
   );

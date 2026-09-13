@@ -36,7 +36,7 @@ cd frontend && npm install && cp .env.example .env.local && npm run dev -- -p 30
 ## Tests
 
 ```bash
-npm test                 # 67 tests e2e (Jest + supertest, SQLite en mémoire)
+npm test                 # 71 tests e2e (Jest + supertest, SQLite en mémoire)
 # Les mêmes tests sur PostgreSQL (schéma créé par les migrations) :
 E2E_DB=postgres DB_TYPE=postgres DATABASE_URL=postgresql://... DB_SYNCHRONIZE=false npm test
 node test/ws-smoke.js    # messagerie temps réel contre un serveur lancé
@@ -76,6 +76,13 @@ libération), journal d'audit.
 - **Dons / Échanges uniquement** : filtre `price_type` (`gratuit`, `echange`, `fixe`, `negociable`, `sur_demande`) mis en avant sur l'accueil et en tête des résultats.
 - **Prix moyen constaté** au dépôt : `GET /listings/price-estimate?category=&q=` (médiane et quartiles des annonces en ligne comparables, ≥ 3 annonces).
 - **Badge « Fiche complète »** calculé automatiquement (`isComplete` sur les cartes, `completeness` sur le détail) : 3 photos, description ≥ 120 caractères, prix, tous les critères de la catégorie cohérents ; checklist affichée pendant le dépôt (`src/listings/listing-completeness.ts`).
+
+## Phase 5 (inscription par formulaire, sans SMS — temporaire)
+
+- `POST /auth/register` : particulier (nom, prénom, username, e-mail, mobile français, mot de passe + confirmation) ou professionnel (mêmes champs + raison sociale + SIRET, clé de Luhn vérifiée par `isValidSiret`). Doublons e-mail / téléphone / username / SIRET refusés en 409 avec un message explicite.
+- `POST /auth/login` : e-mail ou username + mot de passe (hash scrypt, `src/auth/password.ts`). Session identique au parcours OTP (access 15 min + refresh révocable).
+- **Aucun SMS à l'inscription** : le compte est créé avec `phoneVerified=false` (relaxation temporaire documentée dans `AUDIT.md` §11). L'ancien parcours OTP (`/auth/register/phone`, `/auth/otp/verify`, page `/connexion/sms`) reste disponible pour les comptes créés par SMS.
+- Migration `UserCredentials` : colonnes nullable `firstName`, `lastName`, `username` (unique), `passwordHash` (jamais sélectionné par défaut), `companyName` ; les comptes existants ne sont pas modifiés.
 
 ## Configuration
 
@@ -125,7 +132,7 @@ npm run migration:run
 ## Principales routes API
 
 ```
-POST /auth/register/phone · POST /auth/otp/verify · POST /auth/refresh · POST /auth/logout · /auth/sessions
+POST /auth/register · POST /auth/login · POST /auth/register/phone · POST /auth/otp/verify · POST /auth/refresh · POST /auth/logout · /auth/sessions
 GET  /health
 GET  /users/me · PATCH /users/me · POST /users/me/become-pro · GET /users/:id/profile
 GET  /users/me/export · DELETE /users/me · /users/me/blocks · /users/me/saved-searches

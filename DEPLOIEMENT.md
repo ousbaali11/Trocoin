@@ -92,8 +92,9 @@ Depuis un téléphone **hors du réseau du développeur** :
 
 1. `https://trocoin-api.onrender.com/health` → `status: ok`.
 2. `https://trocoin-api.onrender.com/dev/last-otp/0612345678` → **404** (endpoint de dev neutralisé).
-3. Ouvrir le site Vercel → *Se connecter* → saisir un mobile français → **le SMS arrive** →
-   code accepté → *Déposer une annonce* → l'annonce apparaît dans la recherche.
+3. Ouvrir le site Vercel → *Créer un compte* (formulaire, aucun SMS pendant la phase de test,
+   voir AUDIT.md §11) → *Déposer une annonce* → l'annonce apparaît dans la recherche.
+   Le parcours SMS reste testable sur `/connexion/sms` (consomme du crédit Vonage).
 4. Se déconnecter puis revenir en arrière : l'espace compte doit refuser l'accès
    (le refresh token est révoqué en base, l'access token expire sous 15 min).
 5. Créer l'administrateur : dans Render → *Shell* :

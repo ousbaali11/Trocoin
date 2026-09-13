@@ -541,6 +541,43 @@ de développement, sauf mention contraire.
 - Le badge « Fiche complète » n'apparaît pas (champ absent des réponses).
 - Dès le Manual Deploy du commit `9de8239` (ou plus récent), ces trois points deviennent actifs sans autre action.
 
+## 11. Phase 5 (14 septembre 2026) — inscription par formulaire, mot de passe, SMS désactivé (temporaire)
+
+### 11.1 Ce qui a changé
+
+| Élément | Détail | Fichiers |
+|---|---|---|
+| Inscription particulier | `POST /auth/register` : prénom, nom, nom d'utilisateur (3–30, unique, insensible à la casse), e-mail (unique, insensible à la casse), mobile français (+33 6/7, normalisé et validé côté serveur comme avant), mot de passe (≥ 8) + confirmation. Nom affiché généré « Prénom N. ». Session ouverte immédiatement (access 15 min + refresh révocable, inchangé). | `src/auth/dto/register.dto.ts`, `auth.service.ts` (`register`), `users.service.ts` (`createWithCredentials`) |
+| Inscription professionnel | Mêmes champs (identité du responsable) + raison sociale + SIRET. Réutilise `isValidSiret` (Luhn) déjà présent dans `users.service.ts` ; SIRET déjà rattaché → 409. Compte créé directement en `professionnel`, `shopName` = raison sociale. Le front vérifie la clé de Luhn en direct (même algorithme) avant l'envoi. | `RegisterForm.tsx` |
+| Téléphone sans SMS | **Aucun appel à `OtpService`/Vonage dans ce parcours** : `phoneVerified=false` à la création. Test e2e : aucun code n'est généré pour le numéro. | `auth.service.ts` (`register`), commentaire de réactivation |
+| Connexion | `POST /auth/login` { identifier (e-mail ou username), password }. Message unique « Identifiant ou mot de passe incorrect. » (pas d'énumération), temps de réponse égalisé par un hash factice quand l'identifiant n'existe pas, 10 essais / 10 min / IP, compte suspendu → 403, supprimé → 401. Compte OTP sans mot de passe → message d'orientation vers la connexion SMS. | `auth.controller.ts`, `auth.service.ts` (`loginWithPassword`) |
+| Mot de passe | scrypt (N=2^15, r=8, p=1, sel 16 octets, 64 octets), intégré à Node (aucune dépendance native dans l'image Docker), format auto-décrit pour renforcer les paramètres plus tard. Colonne `passwordHash` en `select:false` : jamais chargée ni sérialisée (`/users/me`, admin, export RGPD). | `src/auth/password.ts`, `user.entity.ts` |
+| Doublons | E-mail, téléphone, username et SIRET vérifiés **avant** l'insertion → 409 avec « Cette adresse e-mail est déjà utilisée. », « Ce numéro de téléphone est déjà associé à un compte. », « Ce nom d'utilisateur est déjà pris. », « Ce SIRET est déjà rattaché à un compte. ». Les contraintes UNIQUE en base restent en filet de sécurité. | `users.service.ts` |
+| Migration | `1789341100225-UserCredentials` : 5 colonnes **nullable** (`firstName`, `lastName`, `username` + contrainte UNIQUE, `passwordHash`, `companyName`), `down()` réversible. Les comptes OTP existants restent valides (champs à NULL), aucun test existant modifié. Générée et exécutée sur PGlite, `migration:generate` relancé → « No changes ». | `src/migrations/` |
+| Front | Page `/inscription` (bascule Particulier / Professionnel, validations en direct), `/connexion` = e-mail ou username + mot de passe, ancien parcours OTP conservé sur `/connexion/sms` pour les comptes créés par SMS, lien « Créer un compte » dans le menu mobile et sur la page de connexion. | `components/auth/*`, `app/(site)/inscription`, `app/(site)/connexion/sms` |
+| Admin | La recherche d'utilisateurs accepte aussi le username. | `admin.service.ts` |
+
+**Approche retenue et pourquoi** : mot de passe + e-mail/username, comme demandé. L'alternative « lien magique par e-mail » aurait évité tout mot de passe, mais aucun fournisseur d'e-mail n'est configuré (`NOTIFICATION_PROVIDER=none`), donc elle n'aurait pas été testable ; elle reste possible plus tard sans casser ce qui est fait.
+
+### 11.2 Preuves d'exécution
+
+- `test/phase5.e2e-spec.ts` (4 tests) : particulier créé sans SMS (aucun code OTP généré), `phoneVerified=false`, hash absent des réponses, connexion par e-mail (casse indifférente) et par username, mauvais mot de passe et identifiant inconnu → 401 même message ; professionnel avec SIRET invalide → 400, champs pro manquants → 400, SIRET valide → compte pro « Garage Martin », SIRET réutilisé → 409 ; doublons e-mail / téléphone (format 06) / username → 409 messages exacts, confirmation différente, numéro suisse, mot de passe court, e-mail invalide, username avec espace → 400 ; compte OTP historique toujours fonctionnel et suspension → 403.
+- Suite complète : **71/71** sur SQLite et **71/71** sur PostgreSQL (PGlite, schéma issu des migrations, `synchronize` désactivé).
+- Navigateur (local) : inscription professionnelle avec SIRET à clé invalide → message rouge en direct ; SIRET déjà utilisé → « Ce SIRET est déjà rattaché à un compte. » ; SIRET valide → redirection « Mon compte · Garage Bernard · Compte professionnel » ; connexion avec mauvais mot de passe → « Identifiant ou mot de passe incorrect. » ; bon mot de passe → tableau de bord.
+- `tsc` API + front : 0 erreur ; `next build` avec l'URL de production : succès. CI et déploiement : voir la ligne ajoutée en fin de section après le push.
+
+### 11.3 Relaxation temporaire de sécurité — à lire avant l'ouverture publique
+
+Exigence initiale du projet : **un compte = un numéro de mobile français vérifié par OTP**. Pendant cette phase, le numéro est toujours exigé et validé (format +33 6/7, unicité), mais **il n'est plus prouvé** qu'il appartient à la personne qui s'inscrit. Conséquences exactes tant que la vérification n'est pas réactivée :
+
+1. Un inscrit peut saisir le numéro de quelqu'un d'autre ; ce numéro devient alors inutilisable pour son vrai propriétaire (« déjà associé à un compte ») jusqu'à intervention admin.
+2. La règle « un humain = un compte » ne tient plus : plusieurs comptes avec des numéros inventés mais valides sont possibles (un e-mail et un username distincts suffisent).
+3. Les alertes et notifications par SMS (`notifySms`) partiraient vers un numéro non vérifié ; elles sont de toute façon désactivées (`NOTIFICATION_PROVIDER=none`).
+4. Le badge « téléphone vérifié » du profil public est à `false` pour tous les nouveaux comptes ; il ne doit pas être présenté comme un gage de confiance.
+5. Le mot de passe devient un facteur d'accès à part entière : pas de réinitialisation par e-mail (aucun fournisseur) — un utilisateur qui l'oublie doit passer par l'admin, et un compte OTP historique n'a pas de mot de passe.
+
+**Réactivation (≈ 20 lignes)** : dans `AuthService.register`, après la validation du DTO, appeler `await this.otpService.requestOtp(normalized)` et renvoyer `{ phoneNumber }` au lieu d'ouvrir la session ; ajouter `POST /auth/register/confirm` qui appelle `this.otpService.verifyOtp(normalized, code)`, puis `createWithCredentials({ …, phoneVerified: true })` et `openSession`. Le front enchaîne l'étape « code reçu » de `OtpLoginForm` après le formulaire. Les données du formulaire peuvent être conservées côté client jusqu'à la confirmation (pas de compte fantôme en base).
+
 ## Annexe — journal des vérifications exécutées le 12 septembre 2026
 
 - `npm test` : 3 suites, **36/36**.

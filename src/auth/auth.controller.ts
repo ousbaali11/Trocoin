@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, HttpCode, Post, Req, UseGuards } from '@
 import { Throttle } from '@nestjs/throttler';
 import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { AuthService } from './auth.service';
+import { LoginDto, RegisterDto } from './dto/register.dto';
 import { RegisterPhoneDto } from './dto/register-phone.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
@@ -37,6 +38,22 @@ export class AuthController {
   @Throttle({ default: { limit: 10, ttl: 600_000 } })
   verifyOtp(@Req() req: any, @Body() dto: VerifyOtpDto) {
     return this.authService.verifyPhoneOtp(dto.phoneNumber, dto.code, this.meta(req));
+  }
+
+  /** Inscription par formulaire (particulier / professionnel) : compte créé sans SMS (phase 5), session ouverte. */
+  @Post('register')
+  @HttpCode(201)
+  @Throttle({ default: { limit: 10, ttl: 3_600_000 } })
+  register(@Req() req: any, @Body() dto: RegisterDto) {
+    return this.authService.register(dto, this.meta(req));
+  }
+
+  /** Connexion e-mail ou username + mot de passe : 10 essais / 10 min / IP. */
+  @Post('login')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 600_000 } })
+  login(@Req() req: any, @Body() dto: LoginDto) {
+    return this.authService.loginWithPassword(dto.identifier, dto.password, this.meta(req));
   }
 
   /** Rotation du refresh token. */
