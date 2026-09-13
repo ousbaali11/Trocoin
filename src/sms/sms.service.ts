@@ -54,6 +54,25 @@ export class SmsService {
     this.providerName = this.config.get<string>('SMS_PROVIDER') || 'mock';
     this.isMock = this.providerName === 'mock' && !isProduction();
     this.provider = this.isMock ? new MockSmsProvider() : buildProvider(this.providerName, this.config);
+    // DIAGNOSTIC TEMPORAIRE (aucun secret) : valeur exacte de SMS_PROVIDER telle que lue
+    // et présence (vrai/faux) des clés — à retirer une fois la configuration Render validée.
+    const d = this.diagnostic();
+    this.logger.log(
+      `Diagnostic SMS : SMS_PROVIDER=${JSON.stringify(d.smsProviderRaw)} (effectif « ${d.provider} », classe ${this.provider.constructor.name}) · VONAGE_API_KEY présente=${d.vonageApiKeyPresent} · VONAGE_API_SECRET présente=${d.vonageApiSecretPresent} · SMS_SENDER présente=${d.smsSenderPresent}`,
+    );
+  }
+
+  /** DIAGNOSTIC TEMPORAIRE : exposé par GET /health (aucun secret, uniquement des booléens). */
+  diagnostic() {
+    const present = (k: string) => !!(this.config.get<string>(k) || '').trim();
+    return {
+      smsProviderRaw: this.config.get<string>('SMS_PROVIDER') ?? null,
+      provider: this.providerName,
+      providerClass: this.provider.constructor.name,
+      vonageApiKeyPresent: present('VONAGE_API_KEY'),
+      vonageApiSecretPresent: present('VONAGE_API_SECRET'),
+      smsSenderPresent: present('SMS_SENDER'),
+    };
   }
 
   /**
