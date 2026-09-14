@@ -22,8 +22,9 @@ test('particulier : inscription complète puis doublon d\'e-mail et de télépho
   const id = uniq();
   const u = { first: 'Léa', last: 'Martin', username: `lea_${id}`, email: `lea.${id}@e2e.test`, phone: uniquePhone() };
   await page.goto('/inscription');
-  await expectNoHorizontalOverflow(page);
   await expect(page.getByRole('heading', { name: 'Créer un compte' })).toBeVisible();
+  // Mesuré une fois le formulaire (composant client) rendu, jamais sur le squelette vide
+  await expectNoHorizontalOverflow(page);
 
   // La confirmation doit correspondre : le bouton reste inactif tant que ce n'est pas le cas
   await fillCommon(page, u);

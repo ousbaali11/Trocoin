@@ -84,7 +84,9 @@ export async function logout(page: Page) {
  */
 export async function expectNoHorizontalOverflow(page: Page) {
   const r = await page.evaluate(() => {
-    const w = window.innerWidth;
+    // Largeur de la fenêtre de rendu : en émulation mobile, window.innerWidth s'élargit au contenu
+    // qui déborde (et masquerait le défaut) ; clientWidth reste la largeur réelle de l'écran.
+    const w = document.documentElement.clientWidth;
     const bad: string[] = [];
     document.querySelectorAll('body *').forEach((el) => {
       const rect = el.getBoundingClientRect();

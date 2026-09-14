@@ -311,3 +311,55 @@ leboncoin n'ont pas pu être observés (bandeau cookies) ; l'existence du bouton
 - Navigateur : 35 pages sans débordement horizontal à 375 px après corrections ; menu Partager,
   recherche d'aide, article d'aide, préférences de notification (aller-retour API), boîte de
   confirmation, bloc « autres annonces de ce vendeur » (4 cartes) vérifiés en direct.
+
+
+---
+
+## 10. Tests navigateur de bout en bout (Playwright) — 14 septembre 2026, soir
+
+**Objectif** : ne plus dépendre de vérifications manuelles à chaque évolution. 22 scénarios
+utilisateur (6 fichiers, deux tailles d'écran) tournent dans Chromium contre **l'API compilée**
+(`dist/main.js`, SQLite jetable, fournisseurs simulés — aucun des quatre points différés n'est
+touché) et **le front construit** (`next build` + `next start`), localement (`npm run e2e`, ≈ 45 s)
+et dans la CI GitHub (job `e2e-navigateur`, à chaque push et pull request ; `deploy-render` en
+dépend, donc un scénario rouge bloque la mise en production).
+
+| Parcours demandé | Scénario | État |
+|---|---|---|
+| 1. Inscription particulier complète, doublon refusé | `02-inscription` : formulaire complet, confirmation de mot de passe, doublon e-mail puis téléphone avec les messages exacts | [exécuté] desktop + mobile |
+| 2. Inscription pro, SIRET valide et invalide | `02-inscription` : clé de contrôle fausse (bouton inactif), SIRET absent du registre simulé (refus API), SIRET actif (compte pro, badge « vérifié au registre ») | [exécuté] desktop + mobile |
+| 3. Connexion, déconnexion, accès refusé après | `03-connexion` : mauvais mot de passe, e-mail puis username, déconnexion → accueil, jeton effacé, `/compte/annonces` et `/admin` renvoient vers la connexion, un membre non admin est renvoyé de la console | [exécuté] |
+| 4. Dépôt avec photos, 2 catégories | `04-depot` : Voitures (marque, modèle, année, kilométrage, carburant, boîte obligatoires ; 2 photos ; code postal) et Locations de vacances (type d'hébergement, voyageurs, piscine, prix par semaine ; 1 photo ; commune choisie) | [exécuté] |
+| 5. Recherche : mot-clé, catégorie, Toute la France, rayon, tri | `01-recherche` : 5 scénarios, rayon 5 km (3 annonces, ordre par distance) puis 1 km (1 annonce) autour de Lyon 3e, tri prix vérifié sur toute la liste | [exécuté] desktop + mobile |
+| 6. Parcours acheteur complet | `05-achat` : deux navigateurs simultanés, contact, message reçu par WebSocket sans rechargement dans les deux sens, achat simulé (395 €), code de remise, réception confirmée, avis 5/5 visible côté vendeur, annonce « vendue » | [exécuté] |
+| 7. Back-office | `06-admin` : connexion admin, refus impossible sans motif, refus avec motif → annonce hors résultats, journal alimenté ; signalement déposé par un membre → traité avec retrait de l'annonce → file vide | [exécuté] |
+| 8. Mobile 375 px et desktop | projet `mobile` (Pixel 5, 375 px) joué en premier sur inscription et recherche, projet `desktop` (1280 px) sur tout ; contrôle d'absence de défilement horizontal après rendu | [exécuté] |
+
+**Preuve que chaque test teste quelque chose (mutations volontaires, code restauré ensuite)** :
+
+| Mutation | Scénario attendu en échec | Résultat |
+|---|---|---|
+| M1 message de doublon d'e-mail modifié (API) | 02 particulier | échec détecté |
+| M2 SIRET « inconnu » du registre simulé devient vérifié (API) | 02 professionnel | échec détecté |
+| M3 plus de redirection des pages protégées vers la connexion (front) | 03 après déconnexion | échec détecté |
+| M4 photos en attente jamais envoyées (front) | 04 voiture et vacances | échec détecté |
+| M5 rayon des filtres ignoré (front) | 01 rayon, desktop et mobile | échec détecté |
+| M5b tri « prix croissant » ignoré (API) | 01 tri | **non détecté au premier essai** (l'annonce la moins chère était aussi la plus récente) → test renforcé : toute la liste doit être ordonnée → détecté |
+| M6 messages WebSocket ignorés (front) | 05 temps réel | **non détecté au premier essai** : la resynchronisation « inbox » (rechargement REST à chaque réveil) faisait apparaître le message quand même ; mutation étendue aux deux canaux → détecté. Le comportement testé reste « le message apparaît sans rechargement » |
+| M7 refus d'annonce sans effet (API) | 06 refus | échec détecté |
+| M8 élément de 600 px sur l'inscription (front) | 02 mobile, contrôle de débordement | **non détecté au premier essai** : (1) le contrôle tournait sur le squelette vide avant l'hydratation, (2) en émulation mobile `window.innerWidth` s'élargit au contenu débordant ; contrôle déplacé après rendu et mesuré sur `clientWidth` → détecté (« la page défile horizontalement (621 > 375) ») |
+
+**Trois défauts réels trouvés par les tests et corrigés** :
+1. Sélecteur de localisation : un **clic réel** sur un palier de rayon (« 1 km ») était perdu — le
+   champ perdait le focus au `mousedown`, la liste se réorganisait et le `mouseup` tombait
+   ailleurs. Invisible aux vérifications par script des tours précédents. Corrigé
+   (`onMouseDown` préventif sur le panneau, fermeture propre par « Valider » ou clic ailleurs).
+2. Déconnexion depuis une page du compte : course entre le retour à l'accueil et la garde
+   `RequireAuth`, qui renvoyait vers `/connexion?next=…`. Corrigé (état `loggingOut`).
+3. Cases « oui/non » des critères de dépôt (piscine, wifi…) sans lien avec leur libellé ; le
+   bouton du menu compte sans nom accessible. Corrigés (`id` et `aria-label`).
+
+**Limites connues** : un seul navigateur (Chromium) ; scénarios dépendants d'un ordre (un seul
+worker, base partagée, le projet mobile passe avant les mutations de données de l'achat et de
+l'admin) ; le paiement est simulé (`PAYMENT_PROVIDER=mock`), comme en bêta ; pas de Firefox/WebKit
+ni de test de la carte Leaflet.

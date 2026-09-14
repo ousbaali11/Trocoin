@@ -36,12 +36,51 @@ cd frontend && npm install && cp .env.example .env.local && npm run dev -- -p 30
 ## Tests
 
 ```bash
-npm test                 # 94 tests e2e (Jest + supertest, SQLite en mémoire)
+npm test                 # 94 tests e2e (API, supertest)
+npm run e2e:build        # construit l'API (dist/) et le front (next build) pour les tests navigateur
+npm run e2e              # 22 scénarios Playwright dans Chromium (desktop 1280 px + mobile 375 px) (Jest + supertest, SQLite en mémoire)
 # Les mêmes tests sur PostgreSQL (schéma créé par les migrations) :
 E2E_DB=postgres DB_TYPE=postgres DATABASE_URL=postgresql://... DB_SYNCHRONIZE=false npm test
 node test/ws-smoke.js    # messagerie temps réel contre un serveur lancé
 cd frontend && npx tsc --noEmit && npx next build
 ```
+
+
+## Tests navigateur (Playwright)
+
+Scénarios utilisateur de bout en bout, joués dans un vrai Chromium contre **l'API compilée**
+(`dist/main.js`, base SQLite jetable `data/e2e.sqlite`, fournisseurs simulés : SMS, paiement,
+e-mail, registre Sirene) et **le front construit** (`next build` puis `next start`). Rien de
+manuel : Playwright démarre et arrête les deux serveurs (`e2e/start-api.js`, `playwright.config.ts`).
+
+```bash
+npx playwright install chromium   # une fois
+npm run e2e:build                 # API + front (≈ 2 min)
+npm run e2e                       # 22 scénarios (≈ 45 s)
+npx playwright show-report        # rapport HTML, traces et captures des échecs
+npm run e2e:ui                    # mode interactif pas à pas
+```
+
+Ports par défaut : API 3000, front 3001. Si le port 3000 est occupé, changez les deux URL avant
+la construction ET l'exécution (l'URL de l'API est figée dans le build du front) :
+`E2E_API_URL=http://localhost:3010 E2E_FRONT_URL=http://localhost:3011 npm run e2e:build && … npm run e2e`.
+
+| Fichier | Parcours | Écrans |
+|---|---|---|
+| `e2e/01-recherche.spec.ts` | mot-clé, catégorie, « Toute la France », rayon 5 km → 1 km autour de Lyon, tri par distance et par prix | desktop + mobile |
+| `e2e/02-inscription.spec.ts` | particulier (mot de passe, doublons e-mail et téléphone), professionnel (SIRET valide, clé fausse, SIRET inconnu du registre) | desktop + mobile |
+| `e2e/03-connexion.spec.ts` | e-mail ou username, mauvais mot de passe, déconnexion, espace compte et console refusés ensuite | desktop |
+| `e2e/04-depot.spec.ts` | Voitures (critères obligatoires, 2 photos, code postal) et Locations de vacances (champs propres, 1 photo, commune) | desktop |
+| `e2e/05-achat.spec.ts` | deux navigateurs : contact, messagerie temps réel, achat simulé, réception confirmée, avis | desktop |
+| `e2e/06-admin.spec.ts` | connexion admin, refus d'annonce avec motif, signalement déposé par un membre puis traité | desktop |
+
+Les pages d'inscription et de recherche vérifient en plus l'absence de défilement horizontal
+(`expectNoHorizontalOverflow`) : c'est la régression trouvée lors du tour de polish. Les données
+de départ (admin, vendeur, acheteur, cinq annonces géolocalisées, photos JPEG générées) sont
+créées par `e2e/global-setup.ts` à travers l'API ; les suggestions de communes
+(adresse.data.gouv.fr) sont simulées dans le navigateur, aucun réseau externe n'est requis.
+En CI, le job `e2e-navigateur` tourne à chaque push et pull request et **bloque le déploiement
+Render** en cas d'échec ; rapport et traces sont joints en artefact.
 
 ## Fonctionnalités
 
