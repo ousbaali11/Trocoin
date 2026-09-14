@@ -14,9 +14,13 @@
  *  3. Dans UNE transaction sur la cible : TRUNCATE de toutes les tables de données puis copie
  *     par lots de 500 lignes (colonnes communes aux deux schémas), puis remise à niveau des
  *     séquences. Rejouable : chaque exécution repart d'une cible vide.
+ *     Chaque valeur est lue en TEXTE (rendu exact de PostgreSQL : microsecondes des dates,
+ *     flottants au chiffre près, JSON tel quel) et réinsérée avec un transtypage explicite :
+ *     le pilote ne convertit rien en types JavaScript (une Date JS n'a que la milliseconde).
  *  4. Preuve d'intégrité : pour chaque table, nombre de lignes ET empreinte md5 du contenu
- *     (md5 de chaque ligne, agrégé dans un ordre déterministe, fuseau UTC des deux côtés).
- *     Sortie non nulle à la moindre différence.
+ *     (md5 de chaque ligne en JSON, agrégé dans un ordre déterministe ; fuseau, style de date et
+ *     précision des flottants fixés dans la transaction de chaque requête, car un pooler en mode
+ *     transaction ne conserve pas les SET de session). Sortie non nulle à la moindre différence.
  * La source n'est jamais modifiée (lecture seule).
  */
 const { Client } = require('pg');
@@ -39,8 +43,6 @@ const q = (s) => '"' + s.replace(/"/g, '""') + '"';
 async function connect(url, label) {
   const c = new Client({ connectionString: url, ssl: /sslmode=require/.test(url) ? { rejectUnauthorized: false } : undefined, statement_timeout: 600_000 });
   await c.connect();
-  await c.query("SET TIME ZONE 'UTC'");
-  await c.query('SET extra_float_digits = 3');
   const v = await c.query('SELECT version() AS v, current_database() AS db');
   console.log(`${label} : ${v.rows[0].v.split(' on ')[0]} · base ${v.rows[0].db}`);
   return c;
@@ -52,7 +54,7 @@ async function tables(c) {
 }
 
 async function columns(c, table) {
-  const r = await c.query(`SELECT column_name, data_type, column_default FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1 ORDER BY ordinal_position`, [table]);
+  const r = await c.query(`SELECT column_name, data_type, udt_name, column_default FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1 ORDER BY ordinal_position`, [table]);
   return r.rows;
 }
 
@@ -89,35 +91,41 @@ async function migrationsOf(c) {
   return r.rows.map((x) => x.name);
 }
 
-async function fingerprint(c, table) {
-  const r = await c.query(`SELECT count(*)::int AS n, md5(coalesce(string_agg(md5(t::text), '|' ORDER BY md5(t::text)), '')) AS h FROM ${q(table)} t`);
-  return { n: r.rows[0].n, h: r.rows[0].h };
+/** Type SQL vers lequel retranstyper une valeur transmise en texte. */
+function castOf(col) {
+  if (col.data_type === 'ARRAY') return col.udt_name.replace(/^_/, '') + '[]';
+  if (col.data_type === 'USER-DEFINED') return q(col.udt_name);
+  return col.data_type;
 }
 
-async function copyTable(src, dst, table, cols, selfRefCols) {
+async function copyTable(src, dst, table, cols, colDefs, selfRefCols) {
   const colList = cols.map(q).join(', ');
-  const all = (await src.query(`SELECT ${colList} FROM ${q(table)}`)).rows;
+  const casts = cols.map((c) => castOf(colDefs.find((d) => d.column_name === c)));
+  const all = (await src.query(`SELECT ${cols.map((c) => `${q(c)}::text AS ${q(c)}`).join(', ')} FROM ${q(table)}`)).rows;
   let rows = all;
   // Table auto-référencée : insérer par vagues (les lignes dont le parent est déjà inséré)
-  if (selfRefCols.length && rows.length) {
-    const pk = cols.includes('id') ? 'id' : null;
-    if (pk) {
-      const inserted = new Set();
-      const ordered = [];
-      let pending = rows;
-      while (pending.length) {
-        const ready = pending.filter((r) => selfRefCols.every((c) => r[c] == null || inserted.has(String(r[c]))));
-        if (!ready.length) throw new Error(`Table ${table} : références circulaires, copie impossible.`);
-        for (const r of ready) { inserted.add(String(r[pk])); ordered.push(r); }
-        pending = pending.filter((r) => !ready.includes(r));
+  if (selfRefCols.length && rows.length && cols.includes('id')) {
+    const inserted = new Set();
+    const ordered = [];
+    let pending = rows;
+    while (pending.length) {
+      const ready = pending.filter((r) => selfRefCols.every((c) => r[c] == null || inserted.has(String(r[c]))));
+      if (!ready.length) throw new Error(`Table ${table} : références circulaires, copie impossible.`);
+      for (const r of ready) {
+        inserted.add(String(r.id));
+        ordered.push(r);
       }
-      rows = ordered;
+      pending = pending.filter((r) => !ready.includes(r));
     }
+    rows = ordered;
   }
   for (let i = 0; i < rows.length; i += BATCH) {
     const chunk = rows.slice(i, i + BATCH);
     const params = [];
-    const values = chunk.map((r) => '(' + cols.map((c) => { params.push(r[c]); return '$' + params.length; }).join(', ') + ')');
+    const values = chunk.map((r) => '(' + cols.map((c, j) => {
+      params.push(r[c]);
+      return `$${params.length}::${casts[j]}`;
+    }).join(', ') + ')');
     await dst.query(`INSERT INTO ${q(table)} (${colList}) VALUES ${values.join(', ')}`, params);
   }
   return rows.length;
@@ -127,6 +135,21 @@ async function resetSequences(dst, table, cols) {
   for (const col of cols) {
     if (!col.column_default || !/nextval\(/.test(col.column_default)) continue;
     await dst.query(`SELECT setval(pg_get_serial_sequence($1, $2), COALESCE((SELECT max(${q(col.column_name)}) FROM ${q(table)}), 1), (SELECT max(${q(col.column_name)}) IS NOT NULL FROM ${q(table)}))`, [q(table), col.column_name]);
+  }
+}
+
+/** Empreinte d'une table (colonnes données) avec un rendu texte déterministe, fixé dans la transaction. */
+async function fingerprint(c, table, cols) {
+  await c.query('BEGIN');
+  try {
+    await c.query("SET LOCAL TIME ZONE 'UTC'");
+    await c.query('SET LOCAL extra_float_digits = 3');
+    await c.query("SET LOCAL DateStyle = 'ISO, YMD'");
+    const list = cols.map(q).join(', ');
+    const r = await c.query(`SELECT count(*)::int AS n, md5(coalesce(string_agg(md5(row_to_json(r)::text), '|' ORDER BY md5(row_to_json(r)::text)), '')) AS h FROM (SELECT ${list} FROM ${q(table)}) r`);
+    return r.rows[0];
+  } finally {
+    await c.query('COMMIT');
   }
 }
 
@@ -155,7 +178,7 @@ async function resetSequences(dst, table, cols) {
     const onlySrc = sc.map((c) => c.column_name).filter((n) => !common.includes(n));
     if (onlySrc.length) console.warn(`  ! ${t} : colonnes ignorées (absentes de la cible) : ${onlySrc.join(', ')}`);
     const selfRef = fks.filter((f) => f.child === t && f.parent === t).map((f) => f.col);
-    plan.push({ t, common, dstCols: dc, selfRef });
+    plan.push({ t, common, srcCols: sc, dstCols: dc, selfRef });
   }
 
   if (!VERIFY_ONLY) {
@@ -164,7 +187,7 @@ async function resetSequences(dst, table, cols) {
     try {
       await dst.query(`TRUNCATE TABLE ${ordered.map(q).join(', ')} RESTART IDENTITY CASCADE`);
       for (const p of plan) {
-        const n = await copyTable(src, dst, p.t, p.common, p.selfRef);
+        const n = await copyTable(src, dst, p.t, p.common, p.srcCols, p.selfRef);
         await resetSequences(dst, p.t, p.dstCols);
         console.log(`  ${p.t.padEnd(24)} ${String(n).padStart(7)} lignes`);
       }
@@ -179,11 +202,8 @@ async function resetSequences(dst, table, cols) {
   let ok = true;
   console.log('  table                    source   cible   empreinte');
   for (const p of plan) {
-    // Empreinte sur les colonnes communes uniquement, dans le même ordre des deux côtés
-    const cols = p.common.map(q).join(', ');
-    const fp = async (c) => (await c.query(`SELECT count(*)::int AS n, md5(coalesce(string_agg(md5(row_to_json(r)::text), '|' ORDER BY md5(row_to_json(r)::text)), '')) AS h FROM (SELECT ${cols} FROM ${q(p.t)}) r`)).rows[0];
-    const a = await fp(src);
-    const b = await fp(dst);
+    const a = await fingerprint(src, p.t, p.common);
+    const b = await fingerprint(dst, p.t, p.common);
     const same = a.n === b.n && a.h === b.h;
     if (!same) ok = false;
     console.log(`  ${p.t.padEnd(24)} ${String(a.n).padStart(6)} ${String(b.n).padStart(7)}   ${same ? 'identique' : 'DIFFÉRENTE ✗'}`);
