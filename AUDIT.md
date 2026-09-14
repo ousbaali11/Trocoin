@@ -25,9 +25,10 @@ favoris, alertes, avis, signalements, back-office complet, CMS légal, photos re
 (EXIF/GPS supprimés, ≤ 1600 px, plafond par compte), CI GitHub (85 tests sur SQLite et sur
 PostgreSQL 16, image Docker).
 
-**Ce qui est en place dans le code mais pas encore actif en production, faute d'un compte ou
-d'une clé à créer par vous :** e-mail transactionnel (Resend/Brevo), stockage objet des photos
-(S3/R2), Redis pour le rate limiting multi-instances, déploiement automatique Render (deploy hook).
+**Ce qui est en place dans le code, testé, mais pas activé en production par choix (bêta entre
+proches, décision du 14 septembre, voir §6) :** e-mail transactionnel (Resend/Brevo), stockage
+objet des photos (S3/R2), base Neon en Europe. À activer avant une vraie ouverture publique.
+Redis pour le rate limiting multi-instances reste facultatif tant qu'il n'y a qu'une instance.
 
 **Ce qui est volontairement différé (choix produit, §6) :** paiement Stripe/PayPal réel,
 vérification SMS du téléphone à l'inscription (désactivée depuis le passage au mot de passe ;
@@ -130,20 +131,34 @@ Un relevé manuel des 6 panneaux manquants prend 15 minutes depuis un navigateur
 
 ---
 
-## 5. Ce qui vous revient — comptes et clés à créer (rien de bloquant pour continuer à tester)
+## 5. Comptes et clés — mode d'emploi quand vous déciderez de les activer
 
 | Besoin | Pourquoi | Variables exactes (Render) | Guide |
 |---|---|---|---|
-| **Auto-deploy Render** | Fin des Manual Deploy ; preuve automatique par `/health` | Secret GitHub `RENDER_DEPLOY_HOOK` (URL du Deploy Hook Render) | `DEPLOIEMENT.md` §2b |
-| **E-mail transactionnel** | Mot de passe oublié autonome | `EMAIL_PROVIDER=resend` + `RESEND_API_KEY` + `EMAIL_FROM` (ou `brevo` + `BREVO_API_KEY`), `SITE_URL` | `DEPLOIEMENT.md` §5 ; l'appel HTTP (≈40 lignes) sera écrit et testé dès réception d'une clé |
-| **Stockage des photos** | Disque Render éphémère | `STORAGE_PROVIDER=s3`, `S3_ENDPOINT`, `S3_REGION=auto`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_PUBLIC_URL` (Cloudflare R2, gratuit jusqu'à 10 Go) | `DEPLOIEMENT.md` « Fichiers envoyés » ; code testé contre un S3 simulé |
-| **Base en Europe** | RGPD | Nouvelle `DATABASE_URL` Neon Frankfurt | `DEPLOIEMENT.md` §6b — **je vous demande de choisir** : nouvelle base vide, migration des données, ou risque accepté pour la bêta |
+| ~~Auto-deploy Render~~ | **Fait le 14 septembre** : secret `RENDER_DEPLOY_HOOK` en place, preuve automatique par `/health` (§8) | — | `DEPLOIEMENT.md` §2b |
+| E-mail transactionnel [différé] | Mot de passe oublié autonome | `EMAIL_PROVIDER=resend` + `RESEND_API_KEY` + `EMAIL_FROM` (ou `brevo` + `BREVO_API_KEY`), `SITE_URL` | `DEPLOIEMENT.md` §5 ; l'appel HTTP (≈40 lignes) sera écrit et testé dès réception d'une clé |
+| Stockage des photos [différé] | Disque Render éphémère | `STORAGE_PROVIDER=s3`, `S3_ENDPOINT`, `S3_REGION=auto`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_PUBLIC_URL` (Cloudflare R2, gratuit jusqu'à 10 Go) | `DEPLOIEMENT.md` « Fichiers envoyés » ; code testé contre un S3 simulé |
+| Base en Europe [différé] | RGPD | Nouvelle `DATABASE_URL` Neon Frankfurt | `DEPLOIEMENT.md` §6b — option 3 retenue pour la bêta (risque accepté), migration (option 2) avant ouverture |
 | Redis (plus tard) | Dès la 2ᵉ instance | `REDIS_URL` (Upstash gratuit) | `DEPLOIEMENT.md` §8b ; code testé avec un Redis simulé |
 | Sentry (facultatif) | Erreurs 500 remontées | `SENTRY_DSN` | `DEPLOIEMENT.md` §7 |
 
 ---
 
 ## 6. Différés par choix produit (à ne pas confondre avec des manques)
+
+**Décision du 14 septembre 2026 (tests entre proches uniquement) — à traiter avant une vraie
+ouverture publique :**
+
+- **Fournisseur d'e-mail** : le parcours « mot de passe oublié » est complet et testé, mais
+  aucun e-mail ne part (`EMAIL_PROVIDER=none` → 503 explicite). En bêta, l'admin dépanne avec
+  un mot de passe temporaire depuis le back-office. Activation : clé Resend ou Brevo +
+  `EMAIL_FROM` + `SITE_URL`, puis ~40 lignes d'appel HTTP à écrire et tester (§5).
+- **Stockage objet des photos** : le code S3/R2 est en place et testé contre un S3 simulé ;
+  en bêta, les photos restent sur le disque éphémère de Render et disparaissent à chaque
+  déploiement (les testeurs le savent). Activation : bucket R2 + 6 variables (§5).
+- **Région de la base Neon** : `us-east-2` conservée pour la bêta (données de quelques
+  proches, risque accepté et connu) ; migration vers Francfort (`DEPLOIEMENT.md` §6b,
+  option 2) avant toute ouverture publique.
 
 - **Paiement sécurisé réel** (Stripe Connect, PayPal, webhooks signés, réconciliation) :
   implémenté en mode simulé, désactivé en production (`PAYMENT_PROVIDER=disabled`, 503
@@ -161,29 +176,27 @@ Un relevé manuel des 6 panneaux manquants prend 15 minutes depuis un navigateur
 ## 7. Ce qu'il reste avant une vraie ouverture publique — priorisé et honnête
 
 **Bloquant pour une bêta fermée (quelques testeurs invités)**
-1. Auto-deploy Render : secret `RENDER_DEPLOY_HOOK` (§5) — sinon chaque correctif attend un
-   Manual Deploy et la production dérive du code.
-2. E-mail transactionnel : sans lui, un testeur qui oublie son mot de passe dépend de vous
-   (bouton admin).
+- ~~Auto-deploy Render~~ réglé le 14 septembre (§8). Plus rien de bloquant pour la bêta :
+  l'admin dépanne les mots de passe oubliés, les photos sont volatiles en connaissance de cause.
 
-**Non bloquant pour la bêta fermée, bloquant pour l'ouverture publique**
-3. Stockage objet des photos (R2) : en bêta, accepter que les photos disparaissent à chaque
-   déploiement ; inacceptable avec du public.
-4. Base Neon en Europe (§5) — votre décision.
-5. Vérification du téléphone par SMS (différé §6) ou, à défaut, un e-mail de confirmation
+**Non bloquant pour la bêta fermée, à traiter avant l'ouverture publique (différés par choix, §6)**
+1. E-mail transactionnel (clé Resend/Brevo).
+2. Stockage objet des photos (R2).
+3. Base Neon en Europe (migration).
+4. Vérification du téléphone par SMS (différé §6) ou, à défaut, un e-mail de confirmation
    dès que l'e-mail est branché : aujourd'hui rien ne prouve qu'un contact appartient à l'inscrit.
-6. Textes légaux validés par un juriste ; information sur la collecte du téléphone non vérifié.
-7. Instance Render payante (fin de la mise en veille : premier appel jusqu'à 1 minute) et Redis
+5. Textes légaux validés par un juriste ; information sur la collecte du téléphone non vérifié.
+6. Instance Render payante (fin de la mise en veille : premier appel jusqu'à 1 minute) et Redis
    dès la deuxième instance.
-8. Sauvegarde automatisée hors Neon + test de restauration ; Sentry alimenté.
+7. Sauvegarde automatisée hors Neon + test de restauration ; Sentry alimenté.
 
 **Confort / après ouverture**
-9. Relevé manuel des 6 panneaux de filtres leboncoin non observés (Matériel pro, Famille,
+8. Relevé manuel des 6 panneaux de filtres leboncoin non observés (Matériel pro, Famille,
    Loisirs, Vacances, Services, Animaux) et alignement fin.
-10. Listes marque → modèle pour les véhicules ; historique des localisations ; arrondissements
+9. Listes marque → modèle pour les véhicules ; historique des localisations ; arrondissements
     groupés.
-11. Modification de l'e-mail avec confirmation ; suppression de compte revue ; double facteur.
-12. Paiement réel, notifications push/e-mail, KYC, DAC7 (différés).
+10. Modification de l'e-mail avec confirmation ; suppression de compte revue ; double facteur.
+11. Paiement réel, notifications push/e-mail, KYC, DAC7 (différés).
 
 ---
 
