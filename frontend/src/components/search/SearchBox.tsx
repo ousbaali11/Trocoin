@@ -67,7 +67,7 @@ export function SearchBox({ compact = false, initial = "", onNavigate }: { compa
           className="input"
           style={{ border: 0, minHeight: compact ? 36 : 48, borderRadius: 0, flex: 1, minWidth: 0, width: "100%", fontSize: compact ? "0.92rem" : undefined }}
           type="search"
-          placeholder={compact ? "Rechercher sur Trocoin" : "Que recherchez-vous ? (canapé, vélo, appartement…)"}
+          placeholder={compact ? "Rechercher" : "Que recherchez-vous ? (canapé, vélo, appartement…)"}
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onFocus={() => (items.length > 0 || correction) && setOpen(true)}

@@ -795,3 +795,31 @@ du compte Resend tant que le domaine n'est pas vérifié), un achat en carte 424
 `scripts/charge.js`.
 
 **Suites** : 97 → 105 tests API (phase 6 +2, phase 9 +2, phase 13 +6), 48 scénarios navigateur.
+
+---
+
+## 16. Interface : « Toute la France » affiché, cartes réduites d'un tiers, en-tête sur une ligne — 15 septembre 2026
+
+- **« Toute la France » dans le champ « OÙ ? »** : le sélecteur ne conservait ce choix qu'en
+  interne (valeur `{ mode: "all" }`, champ vide). Il affiche désormais le libellé comme pour une
+  commune, avec la croix d'effacement, sans changer la valeur transmise : la recherche nationale
+  était déjà correcte (le scénario existant le vérifiait), seul l'affichage manquait. Scénario
+  étendu : choix depuis l'accueil → champ « Toute la France » → recherche sans paramètre de lieu →
+  les cinq villes du seed listées ; sans choix explicite, le défaut reste national.
+- **Cartes** : photo carrée (1/1 au lieu de 4/5), corps plus compact, grille
+  `minmax(160px, 1fr)` (18 px → 14 px d'écart), 2 colonnes conservées sur mobile. Mesuré sur la
+  recherche à 1280–1920 px : 279 × 484 px en 3 colonnes → **163 × 331 px en 5 colonnes**
+  (−42 % / −32 %) ; accueil 6 colonnes. Coins arrondis 10 px inchangés, titre 16 px gras sur deux
+  lignes, aucun texte débordant (vérifié par script). Repli « Pas de photo » quand l'image ne se
+  charge pas (les photos d'avant R2 n'existent plus : c'était la grande zone grise des captures).
+- **Barre « QUOI ? / OÙ ? »** : 960 × 67 px → **720 × 52 px** (−25 % / −22 %), invites lisibles
+  (champs 326 et 203 px, 15 px), empilée sur mobile (335 × 154 px).
+- **En-tête bureau sur une ligne** : la navigation compactée (libellés 0,86 rem, boutons 36 px,
+  avatar 28 px) et la recherche compacte réduite (36 px, invite « Rechercher ») font tenir logo,
+  Catégories, recherche, Mes recherches, Favoris, Messages, compte et Déposer sur **65 px de haut
+  à 1280, 1440 et 1920 px**, centres alignés (écart < 4 px). Entre 1100 et 1200 px : icônes seules ;
+  sous 1100 px : recherche sur une seconde ligne ; sous 900 px : menu mobile inchangé.
+- **Preuves** : `01-recherche` +2 scénarios (en-tête sur une ligne aux trois largeurs + barre
+  réduite ; cartes ≤ 215 px de large, ≤ 340 px de haut, ≥ 4 colonnes, 2 sur mobile, sans
+  débordement), 51 scénarios navigateur verts. Captures avant/après à 1280, 1440, 1920 px et
+  375 px comparées.

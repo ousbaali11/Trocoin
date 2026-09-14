@@ -38,7 +38,7 @@ cd frontend && npm install && cp .env.example .env.local && npm run dev -- -p 30
 ```bash
 npm test                 # 105 tests e2e (API, supertest)
 npm run e2e:build        # construit l'API (dist/) et le front (next build) pour les tests navigateur
-npm run e2e              # 48 scénarios Playwright dans Chromium (desktop 1280 px + mobile 375 px) : parcours, accessibilité (axe) site + back-office, clavier, SEO
+npm run e2e              # 51 scénarios Playwright dans Chromium (desktop 1280 px + mobile 375 px) : parcours, accessibilité (axe) site + back-office, clavier, SEO
 node scripts/charge.js --api https://trocoin.onrender.com --front https://trocoin.vercel.app --vus 10 --minutes 3   # test de charge léger (lectures publiques)
 SOURCE_DATABASE_URL=… TARGET_DATABASE_URL=… node scripts/migrer-base.js   # copie intégrale d'une base Postgres vers une autre, preuve par comptages + empreintes (DEPLOIEMENT.md §6b) (Jest + supertest, SQLite en mémoire)
 # Les mêmes tests sur PostgreSQL (schéma créé par les migrations) :
@@ -57,7 +57,7 @@ manuel : Playwright démarre et arrête les deux serveurs (`e2e/start-api.js`, `
 ```bash
 npx playwright install chromium   # une fois
 npm run e2e:build                 # API + front (≈ 2 min)
-npm run e2e                       # 48 scénarios (≈ 3 min 30)
+npm run e2e                       # 51 scénarios (≈ 3 min 30)
 npx playwright show-report        # rapport HTML, traces et captures des échecs
 npm run e2e:ui                    # mode interactif pas à pas
 ```

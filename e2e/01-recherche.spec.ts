@@ -149,7 +149,7 @@ test("en-tête bureau sur une seule ligne à 1280, 1440 et 1920 px, libellés vi
     const box = (await header.boundingBox())!;
     expect(box.height, `hauteur de l'en-tête à ${width}px`).toBeLessThan(80);
     // Tous les éléments alignés sur la même ligne : même ordonnée de centre (± 4 px)
-    const items = [header.getByRole('link', { name: 'Accueil' }).first(), header.getByRole('button', { name: 'Catégories' }), header.getByRole('combobox', { name: 'Rechercher une annonce' }), header.getByRole('link', { name: 'Mes recherches' }), header.getByRole('link', { name: 'Favoris' }), header.getByRole('link', { name: 'Messages' }), header.getByRole('link', { name: 'Se connecter' }), header.getByRole('link', { name: 'Déposer une annonce' })];
+    const items = [header.locator('a[title="Accueil"]'), header.getByRole('button', { name: 'Catégories' }), header.getByRole('combobox', { name: 'Rechercher une annonce' }), header.getByRole('link', { name: 'Mes recherches' }), header.getByRole('link', { name: 'Favoris' }), header.getByRole('link', { name: 'Messages' }), header.getByRole('link', { name: 'Se connecter' }), header.getByRole('link', { name: 'Déposer une annonce' })];
     const centers: number[] = [];
     for (const it of items) {
       await expect(it).toBeVisible();
@@ -158,6 +158,14 @@ test("en-tête bureau sur une seule ligne à 1280, 1440 et 1920 px, libellés vi
     }
     expect(Math.max(...centers) - Math.min(...centers), `alignement à ${width}px`).toBeLessThan(4);
     for (const label of ['Mes recherches', 'Favoris', 'Messages', 'Catégories']) await expect(header.getByText(label, { exact: true })).toBeVisible();
+    // L'invite de la recherche compacte n'est pas tronquée : largeur du texte < largeur utile du champ
+    const fits = await header.getByRole('combobox', { name: 'Rechercher une annonce' }).evaluate((el: HTMLInputElement) => {
+      const cs = getComputedStyle(el);
+      const ctx = document.createElement('canvas').getContext('2d')!;
+      ctx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+      return ctx.measureText(el.placeholder).width < el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    });
+    expect(fits, `invite « Rechercher » entière à ${width}px`).toBe(true);
     await expectNoHorizontalOverflow(page);
   }
   // Barre « QUOI ? / OÙ ? » : ≤ 720 px de large et ≤ 52 px de haut, textes d'invite lisibles

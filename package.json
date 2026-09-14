@@ -1,6 +1,6 @@
 {
   "name": "trocoin-api",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "description": "MVP backend - plateforme de petites annonces (France uniquement)",
   "scripts": {
     "build": "tsc -p tsconfig.json",
