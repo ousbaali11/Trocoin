@@ -14,25 +14,23 @@
 .field {
   display: flex;
   flex-direction: column;
-  padding: 6px 12px;
+  justify-content: center;
+  padding: 4px 12px;
 }
 .where {
   border-left: 1px solid var(--line-soft);
 }
-.label {
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-muted);
-  margin-bottom: 2px;
-}
 .field :global(.input) {
   border: 0;
-  padding: 4px 0;
+  padding: 10px 0;
   font-size: 1.02rem;
   background: transparent;
   box-shadow: none;
+}
+.field :global(.input)::placeholder {
+  color: var(--ink-muted);
+  font-weight: 600;
+  letter-spacing: 0.04em;
 }
 .field :global(.input):focus {
   outline: none;

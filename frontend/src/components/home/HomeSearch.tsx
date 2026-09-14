@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { LocationPicker, RADIUS_STEPS, type LocationValue } from "@/components/ui/LocationPicker";
+import { LocationPicker, type LocationValue } from "@/components/ui/LocationPicker";
 import styles from "./HomeSearch.module.css";
 
 /**
@@ -54,12 +54,10 @@ export function HomeSearch({ total }: { total: number }) {
     <div className={styles.wrap}>
       <form onSubmit={submit} role="search" className={styles.form} aria-label="Rechercher une annonce">
         <div className={styles.field}>
-          <label htmlFor="home-q" className={styles.label}>Quoi ?</label>
-          <input id="home-q" className={`input ${styles.input}`} placeholder="Vélo, canapé, appartement, Clio…" value={q} onChange={(e) => setQ(e.target.value)} autoComplete="off" />
+          <input id="home-q" className={`input ${styles.input}`} placeholder="QUOI ?" aria-label="Quoi ?" value={q} onChange={(e) => setQ(e.target.value)} autoComplete="off" />
         </div>
         <div className={`${styles.field} ${styles.where}`}>
-          <label htmlFor="home-city" className={styles.label}>Où ?</label>
-          <LocationPicker id="home-city" value={loc} onChange={setLoc} compact />
+          <LocationPicker id="home-city" value={loc} onChange={setLoc} placeholder="OÙ ?" />
         </div>
         <button className={`btn btn-primary ${styles.submit}`} type="submit">
           <SearchIcon /> Rechercher
@@ -67,11 +65,6 @@ export function HomeSearch({ total }: { total: number }) {
       </form>
       <div className={styles.quick} aria-label="Raccourcis">
         <span className={styles.quickLabel}>{total > 0 ? `${total.toLocaleString("fr-FR")} annonces en ligne` : "Raccourcis"}</span>
-        {loc.mode !== "all" && (
-          <select className="select" aria-label="Rayon de recherche" value={loc.radius} onChange={(e) => setLoc({ ...loc, radius: Number(e.target.value) })} style={{ width: "auto", padding: "5px 30px 5px 10px", fontSize: "0.84rem" }}>
-            {RADIUS_STEPS.map((r) => <option key={r} value={r}>{r === 0 ? "Uniquement la commune" : `Dans un rayon de ${r} km`}</option>)}
-          </select>
-        )}
         <Link href={quick({ price_type: "gratuit" })} className={`${styles.chip} ${styles.chipGift}`}>🎁 Dons uniquement</Link>
         <Link href={quick({ price_type: "echange" })} className={styles.chip}>🔁 Échanges</Link>
         <Link href={quick({ since_days: "1" })} className={styles.chip}>Publiées aujourd&apos;hui</Link>

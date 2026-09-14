@@ -1,4 +1,4 @@
-# AUDIT.md — Trocoin (audit final, 12 septembre 2026 · phases 2 à 7 et mise en ligne, 13–14 septembre 2026)
+# AUDIT.md — Trocoin (audit final, 12 septembre 2026 · phases 2 à 8 et mise en ligne, 13–14 septembre 2026)
 
 Chaque affirmation de ce document est étiquetée :
 **[exécuté]** = vérifié par exécution réelle (tests e2e `npm test` 54/54 après la phase 3, sur SQLite et sur PostgreSQL, appels HTTP,
@@ -643,12 +643,12 @@ En attendant : `EMAIL_PROVIDER=none` sur Render, et le bouton du back-office pou
 6. **Textes légaux** validés par un juriste (CGU, confidentialité, mentions : éditeur, hébergeur, médiateur), et information claire sur la collecte du téléphone non vérifié.
 
 **P1 — avant montée en charge**
-7. ~~Redimensionnement et purge EXIF des images (`sharp`)~~ fait en phase 7 (§14) ; reste la limite d'envoi par compte.
+7. ~~Redimensionnement et purge EXIF des images (`sharp`)~~ fait en phase 7 (§14) ; ~~limite d'envoi par compte~~ faite en phase 8 (§15).
 8. Redis pour le rate limiting dès la deuxième instance ; instance Render payante pour éviter la mise en veille (cold start de 30 s à 1 min observé).
 9. Sauvegarde automatisée hebdomadaire hors Neon et test de restauration ; Sentry alimenté (DSN) avec alertes.
 10. Paiement sécurisé : clés Stripe de test, webhook signé, réconciliation, puis `PAYMENT_PROVIDER=stripe` ; jusque-là, laisser `disabled`.
 11. ~~Changement de mot de passe depuis « Paramètres »~~ fait en phase 7 (§14) ; reste la modification de l'e-mail avec confirmation et la suppression de compte revue pour les comptes à mot de passe.
-12. Index full-text pour la recherche, listes marque → modèle pour les véhicules.
+12. ~~Index full-text pour la recherche~~ fait en phase 8 (§15) ; reste les listes marque → modèle pour les véhicules.
 
 **P2 — confort**
 13. Historique des localisations recherchées, aperçu carte dans le menu de localisation, arrondissements de Paris/Lyon/Marseille regroupés « toute la ville ».
@@ -698,6 +698,30 @@ Points P0 restants (§13.2) qui dépendent de vous : vérification SMS (vous ave
 - CI : étape ajoutée qui charge `sharp`/libvips **dans l'image Docker** construite (`docker run … require('sharp')`) pour garantir que le binaire Linux est présent dans l'image déployée sur Render.
 - `tsc` API + front : 0 erreur ; `next build` : succès.
 - Push `bd166f1` → CI **rouge** sur l'étape `npm audit` : `sharp` 0.34 porte un avis de sécurité haute (CVE libvips) → passage à `sharp` 0.35.4 (`9b37532`), audit à 0 vulnérabilité, CI **verte** (run 34793619060, 77 tests SQLite + PostgreSQL, front, image Docker avec vérification du chargement de sharp/libvips dans l'image). Vercel : déployé, `Rechercher sur Trocoin` visible sur l'accueil, `/deposer` et `/compte/parametres` → 200. **Render : pas de déploiement automatique** (toujours aucun webhook) ; le service exécute encore `5b101fb` (phase 6) : `POST /auth/password/change` → 404 tant que `9b37532` n'est pas déployé à la main. Tant que ce déploiement n'est pas fait, les photos envoyées en production ne sont pas retraitées (EXIF conservé) et le changement de mot de passe échoue.
+
+## 15. Phase 8 (14 septembre 2026, soir) — barre d'accueil épurée, panneau de rayon, plein texte, plafond photos
+
+### 15.1 Barre de recherche de l'accueil
+
+Deux zones + le bouton, sans ligne de libellés : les `<label>` « QUOI ? » / « OÙ ? » ont été retirés (0 label dans le formulaire, vérifié par script), les textes-guides sont maintenant **dans** les champs (`placeholder="QUOI ?"` et `placeholder="OÙ ?"`, disparaissent à la saisie, libellés accessibles conservés via `aria-label`). Vérifié en 1280 px et en 375 px (aucun débordement horizontal).
+
+### 15.2 Panneau de localisation : paliers de rayon
+
+Revérifié sur leboncoin.fr (Ameublement, « Marseille (toute la ville) ») : le panneau reste ouvert après le choix, affiche « Dans un rayon de 5 km », un curseur à 9 positions dont les valeurs exactes sont **0, 1, 5, 10, 20, 30, 50, 100, 200 km** (lues via `aria-valuetext` pour chaque position), bornes « 0 km / 200 km », **valeur par défaut : 5 km (index 2)**, boutons « Effacer » et « Valider (N) ». Trocoin reproduit cette logique dans `LocationPicker` (accueil et page de recherche) : le panneau reste ouvert après une commune ou « Autour de moi », curseur identique + les 9 paliers cliquables dans le même ordre, 5 km présélectionné, « Effacer » / « Valider », le champ affiche « Marseille (13001) · 5 km ». Vérifié dans le navigateur : Marseille → 5 km par défaut → clic « 30 km » → champ « · 30 km » → Valider ferme le panneau → recherche `?lat=…&radius=30` ; sur mobile 375 px le panneau tient dans l'écran (294 px) sans débordement.
+
+### 15.3 Suite du développement : choix et justification
+
+Les points P0 restent à votre main (SMS, e-mail, Render, disque, région, juriste). Parmi les P1, j'ai pris les deux points réalisables et vérifiables seul qui touchent le cœur du produit (la recherche) et la maîtrise des coûts :
+
+1. **Recherche plein texte PostgreSQL** (P1-12) : index GIN sur `to_tsvector('french', translate(lower(titre || description), accents…))` (migration `ListingsFullText`, écrite à la main car un index sur expression n'est pas décrit par les entités), requête par préfixe sur chaque mot après retrait des accents et d'un pluriel simple (`velos electriques` → `'velo':* & 'electr':*`), `LIKE` conservé en OR pour les codes courts (« 208 », « A3 »). Sans cela, « vélos électriques » ne trouvait pas « Vélo électrique » et un `LIKE` sur description ne passe pas à l'échelle. L'extension `unaccent` n'étant pas garantie (absente de PGlite, présente sur Neon), `translate` est utilisé des deux côtés. SQLite (dev) garde le `LIKE`.
+2. **Plafond de photos par compte et par 24 h** (reste du P1-7) : `MAX_PHOTOS_PER_DAY` (150 par défaut), comptage glissant sur les annonces du compte, refus 400 explicite sans rien conserver. Motif : le disque Render est petit et éphémère, et un compte malveillant pouvait envoyer sans limite (10 photos × annonces illimitées).
+
+### 15.4 Preuves d'exécution
+
+- `test/phase8.e2e-spec.ts` : plein texte (exécuté sur PostgreSQL uniquement, ignoré sur SQLite) — « velos electriques », « freins hydraulique » (mot de la description), « ville vélo » (ordre inversé) trouvent l'annonce « Vélo électrique de ville », pas la Clio ; « clio » passe ; plafond — avec `MAX_PHOTOS_PER_DAY=3`, la 4ᵉ photo du compte est refusée « Limite de 3 photos par 24 h », rien n'est conservé, un autre compte n'est pas affecté.
+- Une première version du plein texte (`plainto_tsquery` sans retrait d'accents) échouait sur PGlite (« velos » non réduit par le stemmer, accents non ignorés) : corrigée par l'approche préfixe + `translate`, validée par sonde SQL sur 6 cas puis par le test.
+- Suite complète : **79/79** sur PostgreSQL (PGlite, migrations seules, dont `ListingsFullText`, aucune dérive) ; SQLite : **78 réussis + 1 ignoré** (le test plein texte).
+- `tsc` API + front : 0 erreur ; `next build` : succès. CI / Vercel / Render : voir la ligne ajoutée après le push.
 
 ## Annexe — journal des vérifications exécutées le 12 septembre 2026
 

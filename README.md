@@ -36,7 +36,7 @@ cd frontend && npm install && cp .env.example .env.local && npm run dev -- -p 30
 ## Tests
 
 ```bash
-npm test                 # 77 tests e2e (Jest + supertest, SQLite en mémoire)
+npm test                 # 79 tests e2e (Jest + supertest, SQLite en mémoire)
 # Les mêmes tests sur PostgreSQL (schéma créé par les migrations) :
 E2E_DB=postgres DB_TYPE=postgres DATABASE_URL=postgresql://... DB_SYNCHRONIZE=false npm test
 node test/ws-smoke.js    # messagerie temps réel contre un serveur lancé
@@ -97,6 +97,13 @@ libération), journal d'audit.
 - **Dépôt** : exemple de titre par catégorie (`title-examples.ts`), description auto-extensible (`AutoTextarea`), champs ajoutés d'après les annonces leboncoin (sellerie, salles d'eau, couleur puériculture).
 - **Images** : toute photo/avatar/logo est ré-encodée par `sharp` (orientation appliquée, EXIF/GPS/ICC supprimés, ≤ 1600 px, format d'origine) ; un fichier corrompu est rejeté. L'image envoyée n'est jamais servie telle quelle.
 - **Mot de passe** : `POST /auth/password/change` (ancien mot de passe requis, autres sessions révoquées), section « Mot de passe » dans Paramètres.
+
+## Phase 8 (barre d'accueil épurée, panneau de rayon, plein texte, plafond photos)
+
+- **Accueil** : deux champs sans libellé au-dessus, textes-guides « QUOI ? » et « OÙ ? », bouton Rechercher.
+- **Panneau de localisation** : après le choix d'une commune ou d'« Autour de moi », le panneau reste ouvert et propose le rayon (0 / 1 / 5 / 10 / 20 / 30 / 50 / 100 / 200 km, 5 km par défaut, curseur + paliers cliquables, Effacer / Valider), comme sur leboncoin.
+- **Recherche plein texte** sur PostgreSQL (migration `ListingsFullText`, index GIN, accents retirés, stemming français, préfixe par mot) ; repli `LIKE` sur SQLite.
+- **Plafond de photos** par compte et par 24 h (`MAX_PHOTOS_PER_DAY`, défaut 150).
 
 ## Configuration
 

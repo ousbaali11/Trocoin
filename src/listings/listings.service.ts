@@ -51,6 +51,27 @@ export interface ListingCard extends Listing {
   };
 }
 
+/**
+ * Recherche plein texte PostgreSQL : accents retirés des deux côtés (translate, l'extension
+ * unaccent n'est pas garantie chez tous les hébergeurs), stemming français, préfixe (:*)
+ * sur chaque mot après suppression d'un pluriel simple. L'expression est STRICTEMENT la
+ * même que celle de l'index GIN (migration ListingsFullText).
+ */
+const ACCENTS_FROM = 'àâäéèêëîïôöùûüçÀÂÄÉÈÊËÎÏÔÖÙÛÜÇ';
+const ACCENTS_TO = 'aaaeeeeiioouuucAAAEEEEIIOOUUUC';
+const FTS_VECTOR_SQL = `to_tsvector('french', translate(lower(coalesce(l.title, '') || ' ' || coalesce(l.description, '')), '${ACCENTS_FROM}', '${ACCENTS_TO}'))`;
+export function toPrefixTsQuery(raw: string): string {
+  return raw
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w.length >= 2)
+    .slice(0, 8)
+    .map((w) => (w.length >= 4 && /[sx]$/.test(w) ? w.slice(0, -1) : w) + ':*')
+    .join(' & ');
+}
+
 const PRICE_STOPWORDS = new Set(['les', 'des', 'une', 'pour', 'avec', 'sans', 'tres', 'bon', 'etat', 'neuf', 'neuve', 'occasion', 'vends', 'vend', 'vente', 'lot', 'the', 'and', 'par', 'sur', 'dans', 'comme', 'plus']);
 
 @Injectable()
@@ -392,6 +413,20 @@ export class ListingsService {
 
   async addPhotos(listingId: string, userId: string, urls: string[]): Promise<ListingPhoto[]> {
     const listing = await this.getManaged(listingId, userId);
+    // Plafond glissant par compte (MAX_PHOTOS_PER_DAY, défaut 150) : limite l'abus de stockage
+    // et de bande passante ; 10 annonces complètes par jour restent possibles.
+    const maxPerDay = Number(process.env.MAX_PHOTOS_PER_DAY || 150);
+    const since = new Date(Date.now() - 86_400_000);
+    const uploadedToday = await this.photosRepo
+      .createQueryBuilder('p')
+      .innerJoin(Listing, 'l', 'CAST(l.id AS varchar) = p."listingId"')
+      .where('l.userId = :ownerId', { ownerId: listing.userId })
+      .andWhere('p.createdAt > :since', { since })
+      .getCount();
+    if (uploadedToday + urls.length > maxPerDay) {
+      await Promise.all(urls.map((u) => deleteUploadedFile(u)));
+      throw new BadRequestException(`Limite de ${maxPerDay} photos par 24 h atteinte pour ce compte. Réessayez demain.`);
+    }
     const existingCount = await this.photosRepo.count({ where: { listingId } });
     if (existingCount + urls.length > MAX_PHOTOS_PER_LISTING) {
       await Promise.all(urls.map((u) => deleteUploadedFile(u)));
@@ -464,6 +499,10 @@ export class ListingsService {
       isUrgent: !!listing.urgentUntil && new Date(listing.urgentUntil).getTime() > now,
       completeness: computeCompleteness(listing, photos.length, schema || []),
     };
+  }
+
+  private isPostgres(): boolean {
+    return this.listingsRepo.manager.connection.options.type === 'postgres';
   }
 
   /** Schéma de champs d'une catégorie (avec celui de sa famille) à partir du cache des catégories. */
@@ -720,7 +759,18 @@ export class ListingsService {
     if (query.seller_type) qb.andWhere('l.userId IN (SELECT CAST(u.id AS varchar) FROM users u WHERE u."accountType" = :sellerType)', { sellerType: query.seller_type });
     if (query.q) {
       const q = `%${escapeLike(query.q.toLowerCase())}%`;
-      qb.andWhere('(LOWER(l.title) LIKE :q OR LOWER(l.description) LIKE :q)', { q });
+      if (this.isPostgres()) {
+        // Plein texte français (index GIN, migration ListingsFullText) : pluriels, accents, ordre des mots.
+        // Le LIKE reste en OR pour les codes/modèles courts (« 208 », « A3 ») que le stemming ignore.
+        const fts = toPrefixTsQuery(query.q);
+        if (fts) {
+          qb.andWhere(`(${FTS_VECTOR_SQL} @@ to_tsquery('french', :fts) OR LOWER(l.title) LIKE :q)`, { fts, q });
+        } else {
+          qb.andWhere('(LOWER(l.title) LIKE :q OR LOWER(l.description) LIKE :q)', { q });
+        }
+      } else {
+        qb.andWhere('(LOWER(l.title) LIKE :q OR LOWER(l.description) LIKE :q)', { q });
+      }
     }
     if (query.price_min !== undefined) qb.andWhere('l.price >= :priceMin', { priceMin: query.price_min });
     if (query.price_max !== undefined) qb.andWhere('l.price <= :priceMax', { priceMax: query.price_max });
