@@ -85,6 +85,8 @@ export async function refreshSession(): Promise<string | null> {
 /** Déconnexion : révocation serveur puis effacement local. */
 export async function logoutSession(): Promise<void> {
   const rt = getRefreshToken();
+  // La session locale est effacée immédiatement : la révocation serveur suit, même hors ligne
+  setSession(null, null);
   try {
     await fetch(`${API_URL}/auth/logout`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ refreshToken: rt ?? undefined }) });
   } catch {

@@ -24,7 +24,7 @@ test('après déconnexion, l\'espace compte redirige vers la connexion et le jet
   await loginAs(page, seed.seller);
   await logout(page);
   await expect(page.getByRole('link', { name: 'Se connecter' })).toBeVisible();
-  expect(await page.evaluate(() => localStorage.getItem('trocoin_token'))).toBeNull();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('trocoin_token')), { message: 'jeton local effacé' }).toBeNull();
 
   await page.goto('/compte/annonces');
   await expect(page).toHaveURL(/\/connexion\?next=%2Fcompte%2Fannonces/);
