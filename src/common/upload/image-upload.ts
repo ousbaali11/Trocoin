@@ -3,9 +3,12 @@ import { randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import { diskStorage } from 'multer';
 import { basename, join, resolve } from 'path';
+import sharp from 'sharp';
 
 export const UPLOAD_DIR = resolve(process.cwd(), 'uploads');
 export const MAX_IMAGE_BYTES = 8 * 1024 * 1024; // 8 Mo
+/** Plus grand côté conservé après redimensionnement (les originaux ne sont jamais servis). */
+export const MAX_IMAGE_SIDE = 1600;
 const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp'];
 
 /**
@@ -73,7 +76,12 @@ export async function finalizeUploadedImages(
       if (!ext) throw new BadRequestException('Le fichier envoyé n\'est pas une image JPEG, PNG ou WEBP valide.');
 
       const finalName = `${basename(file.filename, '.tmp')}.${ext}`;
-      await fs.rename(safePath, join(UPLOAD_DIR, finalName));
+      const finalPath = join(UPLOAD_DIR, finalName);
+      // Ré-encodage systématique : orientation appliquée puis TOUTES les métadonnées
+      // supprimées (EXIF, GPS, profils, commentaires), côté max 1600 px, poids maîtrisé.
+      // Le fichier envoyé par l'utilisateur n'est jamais servi tel quel.
+      await processImage(safePath, finalPath, ext);
+      await fs.unlink(safePath).catch(() => undefined);
       kept.push(finalName);
       urls.push(`/uploads/${finalName}`);
     }
@@ -84,6 +92,26 @@ export async function finalizeUploadedImages(
       ...kept.map((n) => fs.unlink(join(UPLOAD_DIR, n)).catch(() => undefined)),
     ]);
     throw err;
+  }
+}
+
+/**
+ * Redimensionne (≤ 1600 px, jamais agrandi), applique l'orientation EXIF puis
+ * écrit une image SANS métadonnées, dans le format d'origine (JPEG 82 %,
+ * PNG compressé, WEBP 82 %). Une image illisible (fichier corrompu, bombe de
+ * décompression) est rejetée.
+ */
+export async function processImage(src: string, dest: string, ext: 'jpg' | 'png' | 'webp'): Promise<void> {
+  let pipeline = sharp(src, { failOn: 'error', limitInputPixels: 50_000_000 })
+    .rotate() // applique l'orientation EXIF avant de la supprimer
+    .resize({ width: MAX_IMAGE_SIDE, height: MAX_IMAGE_SIDE, fit: 'inside', withoutEnlargement: true });
+  if (ext === 'jpg') pipeline = pipeline.jpeg({ quality: 82, mozjpeg: true });
+  else if (ext === 'png') pipeline = pipeline.png({ compressionLevel: 9, palette: false });
+  else pipeline = pipeline.webp({ quality: 82 });
+  try {
+    await pipeline.toFile(dest); // pas de .withMetadata() : EXIF/GPS/ICC/XMP purgés
+  } catch {
+    throw new BadRequestException("Image illisible ou corrompue : réessayez avec un autre fichier.");
   }
 }
 

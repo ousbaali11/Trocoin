@@ -1,4 +1,4 @@
-# AUDIT.md — Trocoin (audit final, 12 septembre 2026 · phases 2 à 6 et mise en ligne, 13–14 septembre 2026)
+# AUDIT.md — Trocoin (audit final, 12 septembre 2026 · phases 2 à 7 et mise en ligne, 13–14 septembre 2026)
 
 Chaque affirmation de ce document est étiquetée :
 **[exécuté]** = vérifié par exécution réelle (tests e2e `npm test` 54/54 après la phase 3, sur SQLite et sur PostgreSQL, appels HTTP,
@@ -643,11 +643,11 @@ En attendant : `EMAIL_PROVIDER=none` sur Render, et le bouton du back-office pou
 6. **Textes légaux** validés par un juriste (CGU, confidentialité, mentions : éditeur, hébergeur, médiateur), et information claire sur la collecte du téléphone non vérifié.
 
 **P1 — avant montée en charge**
-7. Redimensionnement et purge EXIF des images (`sharp`), limite d'envoi par compte.
+7. ~~Redimensionnement et purge EXIF des images (`sharp`)~~ fait en phase 7 (§14) ; reste la limite d'envoi par compte.
 8. Redis pour le rate limiting dès la deuxième instance ; instance Render payante pour éviter la mise en veille (cold start de 30 s à 1 min observé).
 9. Sauvegarde automatisée hebdomadaire hors Neon et test de restauration ; Sentry alimenté (DSN) avec alertes.
 10. Paiement sécurisé : clés Stripe de test, webhook signé, réconciliation, puis `PAYMENT_PROVIDER=stripe` ; jusque-là, laisser `disabled`.
-11. Changement de mot de passe depuis « Paramètres », modification de l'e-mail avec confirmation, suppression de compte revue pour les comptes à mot de passe.
+11. ~~Changement de mot de passe depuis « Paramètres »~~ fait en phase 7 (§14) ; reste la modification de l'e-mail avec confirmation et la suppression de compte revue pour les comptes à mot de passe.
 12. Index full-text pour la recherche, listes marque → modèle pour les véhicules.
 
 **P2 — confort**
@@ -656,6 +656,47 @@ En attendant : `EMAIL_PROVIDER=none` sur Render, et le bouton du back-office pou
 15. Notifications push / e-mail (fournisseur à brancher), vérification d'identité, DAC7.
 
 **Temporairement moins sécurisé, en clair** : téléphone non vérifié (§11.3) ; pas de réinitialisation de mot de passe autonome tant que l'e-mail n'est pas branché ; pas de double facteur ; sessions de 15 min non révocables avant expiration en cas de vol du jeton d'accès (compromis documenté §8.4).
+
+## 14. Phase 7 (14 septembre 2026) — bandeau, formulaire de dépôt, images, changement de mot de passe
+
+### 14.1 Vérification préalable : Render
+
+`/health` en production → `{"status":"ok","database":"postgres","version":"1.1.0"}` et `POST /auth/password/forgot` → 503 (route de la phase 6 présente) : le build `5b101fb` déployé manuellement démarre bien, l'erreur « Cannot find module /app/dist/main.js » est **résolue** (cause : import JSON qui déplaçait la sortie de `tsc` ; correctif `rootDir` + garde CI, §13). Le nouveau code s'est donc appuyé sur un backend qui démarre.
+
+### 14.2 Bandeau de recherche
+
+Avant : champ de 244 px à 1024 px de large, placeholder tronqué « Que… ». Après (mesures réelles dans le navigateur, largeur du champ de recherche / hauteur du bandeau) :
+
+| Largeur | Disposition | Champ de recherche |
+|---|---|---|
+| 1280 px | une ligne, libellés de navigation masqués (icônes), nom d'utilisateur masqué | **553 px** (élément le plus large, navigation 391 px) |
+| 1150 px | une ligne | 423 px |
+| 1024 px | recherche sur une deuxième ligne pleine largeur | 969 px |
+| 768 px (tablette) | deuxième ligne | 713 px |
+| 375 px (mobile) | deuxième ligne, pas de débordement horizontal | 335 px |
+
+Placeholder court « Rechercher sur Trocoin » (jamais tronqué). Libellés « Mes recherches · Favoris · Messages » affichés au-delà de 1400 px, icônes en dessous. Le bandeau ne contient volontairement pas de champ de localisation (comme leboncoin) : la localisation se choisit sur l'accueil et la page de recherche.
+
+### 14.3 Formulaire de dépôt
+
+- **Exemple de titre par catégorie** : 60 exemples (`frontend/src/lib/title-examples.ts`), sous-catégorie prioritaire puis famille, rédigés d'après des titres réels observés sur leboncoin (`analyse-concurrentielle.md` §10.4). Vérifié : Véhicules › Voitures → « Ex. : Peugeot 208 1.2 PureTech 100 Allure, 2019, 45 000 km ».
+- **Champs par catégorie** : le formulaire de dépôt de leboncoin exige un compte (je n'en crée pas), les champs ont été relevés sur les pages d'annonces publiques de 13 catégories (§10.4). Écarts corrigés : sellerie (voitures), nombre de salles d'eau (immobilier), couleur (puériculture) ; écarts laissés avec raison (finition/version constructeur, caractéristiques à cocher, étoiles/équipements de vacances…).
+- **Description auto-extensible** (`AutoTextarea`) : `field-sizing: content` + repli JS sur `scrollHeight`. Mesuré : 140 px vide → 369 px avec 14 lignes, `scrollHeight = clientHeight`, aucune barre de défilement, aucun débordement horizontal du formulaire.
+
+### 14.4 Suite du développement : choix et justification
+
+Points P0 restants (§13.2) qui dépendent de vous : vérification SMS (vous avez demandé de la couper), clé e-mail, liaison Render, disque persistant, région Neon, juriste. J'ai donc pris les deux points P1 réalisables et vérifiables sans accès externe, dans l'ordre du risque :
+
+1. **Traitement des images avec `sharp`** (P1-7, ex-P0-4 du premier audit) : chaque photo, avatar ou logo est ré-encodé (orientation EXIF appliquée puis **toutes les métadonnées supprimées** : EXIF, GPS, ICC, XMP), réduit à 1600 px maximum sans agrandissement, format d'origine conservé (JPEG 82 % mozjpeg, PNG, WEBP). Un fichier corrompu qui commence comme un JPEG est rejeté (400) sans rien conserver. Motif : les photos de particuliers embarquent souvent des coordonnées GPS du domicile ; c'était le dernier point de sécurité des données livrable seul.
+2. **Changement de mot de passe depuis Paramètres** (P1-11) : `POST /auth/password/change` (ancien requis, nouveau ≠ ancien, confirmation), révocation de toutes les sessions, message d'orientation pour les comptes OTP sans mot de passe. Motif : sans lui, un utilisateur ne pouvait changer son mot de passe qu'en passant par « oublié », inutilisable tant que l'e-mail n'est pas branché.
+
+### 14.5 Preuves d'exécution
+
+- `test/phase7.e2e-spec.ts` (3 tests) : JPEG 3000×2000 avec orientation 6 et GPS → fichier stocké 1067×1600, sans `orientation`, `exif` ni `icc`, plus léger que l'original ; faux JPEG → 400 « illisible ou corrompue », 0 photo conservée ; changement de mot de passe (mauvais actuel, confirmation, identique, non connecté, succès, ancien refusé, autre session révoquée, compte OTP orienté). Test « fiche complète » mis à jour (sellerie).
+- Suite complète : **77/77** sur SQLite et **77/77** sur PostgreSQL (PGlite, migrations seules, aucune dérive de schéma).
+- Navigateur : mesures du bandeau ci-dessus ; dépôt : placeholder par catégorie, zone de description ; Paramètres : changement de mot de passe → déconnexion → `/connexion`, puis connexion API avec le nouveau mot de passe OK.
+- CI : étape ajoutée qui charge `sharp`/libvips **dans l'image Docker** construite (`docker run … require('sharp')`) pour garantir que le binaire Linux est présent dans l'image déployée sur Render.
+- `tsc` API + front : 0 erreur ; `next build` : succès. CI / Vercel / Render : voir la ligne ajoutée après le push.
 
 ## Annexe — journal des vérifications exécutées le 12 septembre 2026
 

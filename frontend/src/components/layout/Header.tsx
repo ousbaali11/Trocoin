@@ -85,7 +85,7 @@ export function Header() {
 
         <div className={styles.cats} ref={catsRef}>
           <button className={styles.catsBtn} onClick={() => setCatsOpen((o) => !o)} aria-expanded={catsOpen} aria-haspopup="true">
-            <MenuIcon /> Catégories
+            <MenuIcon /> <span>Catégories</span>
           </button>
           {catsOpen && (
             <div className={styles.mega} role="menu">

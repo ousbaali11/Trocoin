@@ -36,7 +36,7 @@ cd frontend && npm install && cp .env.example .env.local && npm run dev -- -p 30
 ## Tests
 
 ```bash
-npm test                 # 74 tests e2e (Jest + supertest, SQLite en mémoire)
+npm test                 # 77 tests e2e (Jest + supertest, SQLite en mémoire)
 # Les mêmes tests sur PostgreSQL (schéma créé par les migrations) :
 E2E_DB=postgres DB_TYPE=postgres DATABASE_URL=postgresql://... DB_SYNCHRONIZE=false npm test
 node test/ws-smoke.js    # messagerie temps réel contre un serveur lancé
@@ -90,6 +90,13 @@ libération), journal d'audit.
 - **Afficher / masquer** le mot de passe (`PasswordInput`) sur inscription, connexion et réinitialisation.
 - **Localisation** calquée sur leboncoin (`LocationPicker`) : un champ « Ajouter une localisation », suggestions « Autour de moi » puis « Toute la France », communes via adresse.data.gouv.fr, rayon 0 / 1 / 5 / 10 / 20 / 30 / 50 / 100 / 200 km (5 km par défaut, 0 km = la commune seule).
 - **Filtres par catégorie** alignés sur le relevé leboncoin (`analyse-concurrentielle.md` §10) : type de véhicule, puissance DIN, couleurs en liste, type de vente, exposition, état du bien, fonction, niveau d'études, produit (téléphonie), taille d'écran, pièce (ameublement).
+
+## Phase 7 (bandeau, dépôt, images, mot de passe)
+
+- **Bandeau** : la recherche domine (une ligne ≥ 1100 px avec libellés de navigation masqués sous 1400 px ; deuxième ligne pleine largeur en dessous), placeholder court « Rechercher sur Trocoin ».
+- **Dépôt** : exemple de titre par catégorie (`title-examples.ts`), description auto-extensible (`AutoTextarea`), champs ajoutés d'après les annonces leboncoin (sellerie, salles d'eau, couleur puériculture).
+- **Images** : toute photo/avatar/logo est ré-encodée par `sharp` (orientation appliquée, EXIF/GPS/ICC supprimés, ≤ 1600 px, format d'origine) ; un fichier corrompu est rejeté. L'image envoyée n'est jamais servie telle quelle.
+- **Mot de passe** : `POST /auth/password/change` (ancien mot de passe requis, autres sessions révoquées), section « Mot de passe » dans Paramètres.
 
 ## Configuration
 

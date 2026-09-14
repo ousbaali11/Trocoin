@@ -11,6 +11,8 @@ import { CityInput, type CityValue } from "@/components/ui/CityInput";
 import { PhotoCropper } from "./PhotoCropper";
 import { PriceEstimate } from "./PriceEstimate";
 import { CompletenessHint } from "./CompletenessHint";
+import { AutoTextarea } from "@/components/ui/AutoTextarea";
+import { titleExample } from "@/lib/title-examples";
 
 const NO_DELIVERY_ROOTS = ["immobilier", "vehicules", "emploi", "services", "vacances", "animaux"];
 const NO_CONDITION_ROOTS = ["emploi", "services", "immobilier", "vacances"];
@@ -268,7 +270,7 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
           <p className="small muted">{categoryName}</p>
           <div className="field">
             <label htmlFor="title">Titre</label>
-            <input id="title" className="input" value={form.title} onChange={(e) => set("title", e.target.value)} maxLength={150} placeholder="Ex. : Canapé 3 places en velours vert, très bon état" />
+            <input id="title" className="input" value={form.title} onChange={(e) => set("title", e.target.value)} maxLength={150} placeholder={titleExample(form.categorySlug, root?.slug)} />
             <span className="hint">{form.title.length}/150 — précis et sans coordonnées.</span>
           </div>
           <div className="form-row">
@@ -321,7 +323,7 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
           )}
           <div className="field">
             <label htmlFor="description">Description</label>
-            <textarea id="description" className="textarea" value={form.description} onChange={(e) => set("description", e.target.value)} maxLength={5000} placeholder="Marque, dimensions, défauts éventuels, raison de la vente… Pas de numéro de téléphone ni de lien : la messagerie Trocoin s'en charge." />
+            <AutoTextarea id="description" value={form.description} onChange={(v) => set("description", v)} maxLength={5000} minRows={5} placeholder="Marque, dimensions, défauts éventuels, raison de la vente… Pas de numéro de téléphone ni de lien : la messagerie Trocoin s'en charge." />
             <span className="hint">{form.description.length}/5000</span>
           </div>
         </div>

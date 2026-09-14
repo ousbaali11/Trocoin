@@ -74,3 +74,16 @@ export class ResetPasswordDto {
   @IsString() @MaxLength(128)
   passwordConfirmation: string;
 }
+
+export class ChangePasswordDto {
+  @IsString() @MaxLength(128)
+  currentPassword: string;
+
+  @IsString()
+  @MinLength(8, { message: 'Le mot de passe doit faire au moins 8 caractères.' })
+  @MaxLength(128)
+  newPassword: string;
+
+  @IsString() @MaxLength(128)
+  newPasswordConfirmation: string;
+}

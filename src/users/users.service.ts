@@ -131,6 +131,10 @@ export class UsersService {
     return saved;
   }
 
+  findWithPasswordHash(id: string): Promise<User | null> {
+    return this.usersRepo.createQueryBuilder('u').addSelect('u.passwordHash').where('u.id = :id', { id }).getOne();
+  }
+
   async setPasswordHash(id: string, passwordHash: string): Promise<void> {
     await this.usersRepo.update(id, { passwordHash });
   }

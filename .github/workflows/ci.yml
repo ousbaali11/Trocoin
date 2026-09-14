@@ -108,6 +108,9 @@ jobs:
         with:
           context: .
           push: false
+          load: true
           tags: trocoin-api:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Vérifier l'image (sharp/libvips chargeable, dist/main.js présent)
+        run: docker run --rm trocoin-api:ci node -e "const s=require('sharp'); require('fs').accessSync('dist/main.js'); console.log('sharp', s.versions.sharp, 'vips', s.versions.vips)"

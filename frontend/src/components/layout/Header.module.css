@@ -7,10 +7,11 @@
   border-bottom: 1px solid var(--line);
 }
 .inner {
-  height: var(--header-h);
+  min-height: var(--header-h);
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 .logo {
   display: flex;
@@ -29,7 +30,8 @@
   align-items: center;
   gap: 8px;
   min-height: 40px;
-  padding: 8px 12px;
+  padding: 8px 10px;
+  white-space: nowrap;
   border-radius: var(--radius-sm);
   border: 1px solid var(--line);
   background: var(--white);
@@ -86,15 +88,15 @@
   color: var(--accent);
 }
 .search {
-  flex: 1;
+  flex: 1 1 260px;
   min-width: 0;
-  max-width: 520px;
+  order: 0;
 }
 .nav {
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   flex-shrink: 0;
 }
 .navLink {
@@ -236,13 +238,32 @@
 .mobileMenu {
   display: none;
 }
-@media (max-width: 1080px) {
+@media (max-width: 1400px) {
   .navLink span:not([class]) {
     display: none;
   }
+  .navLink {
+    padding: 8px 8px;
+  }
+  .userName {
+    display: none;
+  }
+  .catsBtn span {
+    display: none;
+  }
+}
+@media (max-width: 1100px) {
+  /* Sous 1100 px : la recherche passe sur une deuxième ligne, pleine largeur, pour rester dominante */
+  .search {
+    order: 10;
+    flex: 1 1 100%;
+    padding-bottom: 10px;
+  }
+  .inner {
+    padding-top: 8px;
+  }
 }
 @media (max-width: 900px) {
-  .search,
   .cats,
   .navLink,
   .userName,

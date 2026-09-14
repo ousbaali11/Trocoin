@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, HttpCode, Post, Req, UseGuards } from '@
 import { Throttle } from '@nestjs/throttler';
 import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { AuthService } from './auth.service';
-import { ForgotPasswordDto, LoginDto, RegisterDto, ResetPasswordDto } from './dto/register.dto';
+import { ChangePasswordDto, ForgotPasswordDto, LoginDto, RegisterDto, ResetPasswordDto } from './dto/register.dto';
 import { RegisterPhoneDto } from './dto/register-phone.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
@@ -85,6 +85,15 @@ export class AuthController {
   @HttpCode(200)
   logout(@Body() dto: LogoutDto) {
     return this.authService.logout(dto.refreshToken);
+  }
+
+  /** Changement de mot de passe (connecté) : 10 essais / 15 min / IP. */
+  @UseGuards(JwtAuthGuard)
+  @Post('password/change')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 900_000 } })
+  changePassword(@Req() req: any, @Body() dto: ChangePasswordDto) {
+    return this.authService.changePassword(req.user.userId, dto.currentPassword, dto.newPassword, dto.newPasswordConfirmation);
   }
 
   @UseGuards(JwtAuthGuard)

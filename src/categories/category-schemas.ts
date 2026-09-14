@@ -40,7 +40,8 @@ const IMMO_BASE: FieldSchema[] = [
   { key: 'type_bien', label: 'Type de bien', type: 'select', required: true, options: ['Appartement', 'Maison', 'Terrain', 'Parking / Box', 'Local commercial', 'Bureau', 'Immeuble', 'Autre'], filterable: true },
   { key: 'surface', label: 'Surface habitable', type: 'number', required: true, unit: 'm²', min: 1, max: 100_000, filterable: true },
   { key: 'pieces', label: 'Nombre de pièces', type: 'number', min: 1, max: 50, filterable: true },
-  { key: 'chambres', label: 'Nombre de chambres', type: 'number', min: 0, max: 30 },
+  { key: 'chambres', label: 'Nombre de chambres', type: 'number', min: 0, max: 30, filterable: true },
+  { key: 'salles_eau', label: "Nombre de salles d'eau", type: 'number', min: 0, max: 20 },
   { key: 'etage', label: 'Étage', type: 'number', min: -2, max: 80 },
   { key: 'ascenseur', label: 'Ascenseur', type: 'boolean' },
   { key: 'exterieur', label: 'Extérieur', type: 'select', options: ['Aucun', 'Balcon', 'Terrasse', 'Jardin', 'Balcon et jardin'] },
@@ -62,6 +63,7 @@ export const CATEGORY_SCHEMAS: Record<string, FieldSchema[]> = {
     { key: 'portes', label: 'Nombre de portes', type: 'select', options: ['2', '3', '4', '5'], filterable: true },
     { key: 'places', label: 'Nombre de places', type: 'number', min: 1, max: 9, filterable: true },
     { key: 'couleur', label: 'Couleur', type: 'select', options: COULEURS, filterable: true },
+    { key: 'sellerie', label: 'Sellerie', type: 'select', options: ['Tissu', 'Cuir', 'Cuir partiel', 'Velours', 'Alcantara', 'Autre'] },
     { key: 'critair', label: "Vignette Crit'Air", type: 'select', options: ['0 (électrique)', '1', '2', '3', '4', '5', 'Non classé'] },
     { key: 'controle_technique', label: 'Contrôle technique à jour', type: 'boolean' },
     { key: 'premiere_main', label: 'Première main', type: 'boolean' },
@@ -349,6 +351,7 @@ export const CATEGORY_SCHEMAS: Record<string, FieldSchema[]> = {
   'puericulture': [
     { key: 'type_produit', label: 'Type', type: 'select', options: ['Poussette', 'Siège auto', 'Porte-bébé', 'Chaise haute', 'Jouet d\'éveil', 'Autre'], filterable: true },
     { key: 'marque', label: 'Marque', type: 'text', maxLength: 40 },
+    { key: 'couleur', label: 'Couleur', type: 'select', options: COULEURS, filterable: true },
   ],
   'mobilier-bebe': [
     { key: 'type_meuble', label: 'Type', type: 'select', options: ['Lit', 'Commode', 'Table à langer', 'Parc', 'Autre'] },

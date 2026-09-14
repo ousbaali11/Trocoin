@@ -190,6 +190,26 @@ export class AuthService {
     return { temporaryPassword };
   }
 
+  /**
+   * Changement de mot de passe par l'utilisateur connecté : ancien mot de passe
+   * exigé, nouveau ≠ ancien, toutes les autres sessions révoquées (la session
+   * courante est fermée aussi : le front reconnecte avec le nouveau mot de passe).
+   */
+  async changePassword(userId: string, currentPassword: string, newPassword: string, confirmation: string): Promise<{ ok: true }> {
+    if (newPassword !== confirmation) throw new BadRequestException('Les deux nouveaux mots de passe ne correspondent pas.');
+    const user = await this.usersService.findWithPasswordHash(userId);
+    if (!user) throw new UnauthorizedException();
+    if (!user.passwordHash) {
+      throw new BadRequestException("Ce compte a été créé par code SMS et n'a pas encore de mot de passe : utilisez « Mot de passe oublié » pour en définir un.");
+    }
+    if (!(await verifyPassword(currentPassword, user.passwordHash))) throw new BadRequestException('Mot de passe actuel incorrect.');
+    if (currentPassword === newPassword) throw new BadRequestException("Le nouveau mot de passe doit être différent de l'actuel.");
+    await this.usersService.setPasswordHash(userId, await hashPassword(newPassword));
+    await this.revokeAllSessions(userId);
+    this.logger.log(`Mot de passe changé par l'utilisateur ${userId} (sessions révoquées)`);
+    return { ok: true };
+  }
+
   private sessionUser(user: User) {
     return { id: user.id, phoneNumber: user.phoneNumber, phoneVerified: user.phoneVerified, displayName: user.displayName, username: user.username, accountType: user.accountType };
   }

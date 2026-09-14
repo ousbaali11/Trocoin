@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast-context";
 import type { SellerSummary } from "@/lib/types";
 import { Modal } from "@/components/ui/Modal";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 
 export default function ParametresPage() {
   const { user, refresh, logout } = useAuth();
@@ -18,6 +19,9 @@ export default function ParametresPage() {
   const [blocks, setBlocks] = useState<SellerSummary[]>([]);
   const [busy, setBusy] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [pw, setPw] = useState({ current: "", next: "", confirm: "" });
+  const [pwBusy, setPwBusy] = useState(false);
+  const [pwError, setPwError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -119,6 +123,38 @@ export default function ParametresPage() {
           <div className="field"><label htmlFor="cp">Code postal</label><input id="cp" className="input" value={form.postalCode} onChange={(e) => setForm({ ...form, postalCode: e.target.value })} maxLength={5} /></div>
         </div>
         <button className="btn btn-primary" disabled={busy} onClick={() => save({ displayName: form.displayName, city: form.city, postalCode: form.postalCode }, "Profil enregistré.")}>Enregistrer</button>
+      </section>
+
+      <section className="panel">
+        <h3>Mot de passe</h3>
+        <p className="small muted">Après le changement, toutes vos sessions sont déconnectées : vous vous reconnecterez avec le nouveau mot de passe.</p>
+        {pwError && <div className="alert alert-error" role="alert">{pwError}</div>}
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setPwError(null);
+            if (pw.next !== pw.confirm) return setPwError("Les deux nouveaux mots de passe ne correspondent pas.");
+            setPwBusy(true);
+            try {
+              await api("/auth/password/change", { method: "POST", body: { currentPassword: pw.current, newPassword: pw.next, newPasswordConfirmation: pw.confirm } });
+              toast("Mot de passe modifié. Reconnectez-vous.", "success");
+              logout();
+              router.push("/connexion");
+            } catch (err) {
+              setPwError((err as Error).message);
+            } finally {
+              setPwBusy(false);
+            }
+          }}
+        >
+          <div className="form-row">
+            <div className="field"><label htmlFor="pw-current">Mot de passe actuel</label><PasswordInput id="pw-current" value={pw.current} onChange={(v) => setPw({ ...pw, current: v })} autoComplete="current-password" /></div>
+            <div className="field"><label htmlFor="pw-next">Nouveau mot de passe</label><PasswordInput id="pw-next" value={pw.next} onChange={(v) => setPw({ ...pw, next: v })} autoComplete="new-password" minLength={8} /><span className="hint">8 caractères minimum.</span></div>
+            <div className="field"><label htmlFor="pw-confirm">Confirmer le nouveau</label><PasswordInput id="pw-confirm" value={pw.confirm} onChange={(v) => setPw({ ...pw, confirm: v })} autoComplete="new-password" invalid={pw.confirm.length > 0 && pw.next !== pw.confirm} /></div>
+          </div>
+          <button className="btn btn-primary" disabled={pwBusy || pw.current.length === 0 || pw.next.length < 8 || pw.next !== pw.confirm}>{pwBusy ? "Enregistrement…" : "Changer le mot de passe"}</button>
+          <p className="small muted" style={{ marginTop: 8 }}>Compte créé par SMS sans mot de passe ? Utilisez <a href="/mot-de-passe-oublie">Mot de passe oublié</a> pour en définir un.</p>
+        </form>
       </section>
 
       <section className="panel">

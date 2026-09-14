@@ -700,3 +700,31 @@ familles (voir §2.2) restent ceux de l'analyse initiale.
   liés à des services partenaires absents.
 - « Statut de l'annonce » (vendue / disponible) : les annonces vendues ne sont pas listées.
 - Historique des localisations recherchées : non stocké (pas de traçage côté client).
+
+### 10.4 Champs demandés au dépôt, famille par famille (observés le 14 septembre 2026)
+
+Le formulaire de dépôt de leboncoin exige un compte (`/deposer-une-annonce` redirige vers la
+connexion). Les champs ont donc été relevés sur des **pages d'annonces publiques** (bloc
+« Les informations clés » / critères), qui reflètent exactement ce que le déposant a rempli.
+Une annonce par famille ; catégorie Services non atteinte (identifiant inconnu).
+
+| Famille (annonce observée) | Critères affichés par leboncoin | Trocoin (schéma de dépôt) |
+|---|---|---|
+| Véhicules › Voitures (« Peugeot 207 1.4 VTi 95 ch Premium Pack ») | Marque, Modèle, Année modèle, Kilométrage, Énergie, Boîte, Portes, Places, Finition, Version, Contrôle technique valide, Date de 1re mise en circulation, État du véhicule, Type de véhicule, Sellerie, Couleur, Crit'Air, Puissance fiscale, Puissance DIN, Permis, LOA/LLD | Tous sauf Finition/Version (référentiel constructeur), date de 1re mise en circulation (année suffit), LOA/LLD. **Sellerie ajoutée.** État du véhicule = état général de l'annonce |
+| Immobilier › Ventes (« Maison 4 pièces 99 m² ») | Type de bien, Surface habitable, Surface du terrain, Pièces, Chambres, Salles d'eau, Caractéristiques (cuisine équipée, cave…), Étages de l'immeuble, Extérieur, État du bien, Référence, DPE, GES | Tous sauf caractéristiques à cocher et étages de l'immeuble. **Salles d'eau ajoutée** ; référence = champ `reference` de l'import pro |
+| Emploi › Offres (« Électrotechnicien … (H/F/X) ») | Type de contrat, Secteur d'activité, Métier, Expérience, Niveau d'études, Temps plein / partiel | Identique (métier = `fonction`) + salaire minimum, télétravail |
+| Mode › Vêtements (« Veste femme noire en cuir T : M ou 38 ») | Univers, Taille, État, Type de vêtement, Couleur | Identique + marque, matière |
+| Maison & Jardin › Ameublement (« Fauteuil convertible IKEA LYCKSELE ») | État, Produit, Matière, Couleur, Type de canapé, Marque, Démontable, Quantité, Pièce | Identique sauf type de canapé, démontable, quantité (sous-types trop fins) |
+| Électronique › Téléphonie (« iPhone 13 Pro avec facture ») | État, Produit, Marque, Modèle, Capacité de stockage | Identique + couleur, débloqué |
+| Électronique › Ordinateurs (« PC Gamer compact 7800X3D ») | État, Type, Usage | Type présent + marque, processeur, RAM, stockage, taille d'écran ; pas d'« usage » |
+| Loisirs › Sport (« Tapis de course ») | État, Univers, Activité, Produit, Marque | Discipline + marque ; pas de niveau univers/produit |
+| Loisirs › Instruments (« Piano Mussard ») | État, Univers, Produit, Marque, Niveau | Type + marque ; pas de niveau |
+| Locations de vacances (« La Case d'Audrey et Eric ») | Étoiles, Capacité, Type de logement, Chambres, Nature du logement, équipements (climatisation, wifi, draps, TV, jardin, piscine, parking) | Type d'hébergement, voyageurs, chambres, piscine, jardin, animaux acceptés ; pas d'étoiles ni wifi/clim/TV/parking |
+| Animaux (« Chiot chow chow mâle LOF ») | Nature de l'offre, Animal de race, Âge, N° d'identification, Vacciné, Race | Type d'animal, race, âge, sexe, identification, vacciné, LOF : équivalent |
+| Famille › Puériculture (« Poussette Bébé Confort Haze trio ») | État, Univers, Produit, Type, Marque, Couleur | Type de produit, marque ; **couleur ajoutée** |
+| Matériel pro › Agricole (« Appareil de traitement ») | Année modèle, Type de matériel | Type de matériel, heures ; année héritée de la famille |
+
+**Exemples de titre** : leboncoin n'affiche pas d'exemple dans le champ titre (formulaire non
+accessible sans compte) ; les titres réels observés sont descriptifs et concrets (marque +
+modèle + caractéristique clé). Trocoin fournit désormais un exemple par catégorie rédigé sur ce
+modèle (`frontend/src/lib/title-examples.ts`, 60 catégories).
