@@ -265,7 +265,9 @@ avant de basculer reprend les écritures survenues entre-temps. Répété à bla
 (source PGlite → Frankfurt, 23 tables identiques, `AUDIT.md` §15).
 
 Bascule : relancer la copie → Render → `DATABASE_URL` = URL EU → redéployer → vérifier
-`/health` (`database: postgres`), se connecter avec un compte existant, relancer
+`/health` (`databaseRegion: eu-central-1` ; `us-east-2` = la bascule n'a pas pris, vérifier qu'aucune
+autre `DATABASE_URL` ne subsiste dans un *Environment Group* et que le déploiement a bien suivi
+l'enregistrement), se connecter avec un compte existant, relancer
 `node scripts/charge.js` pour constater la latence. Ne supprimer le projet US qu'après ces
 vérifications (et mettre à jour `DATABASE_URL_BACKUP` du workflow de sauvegarde).
 

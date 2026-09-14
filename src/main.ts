@@ -8,6 +8,7 @@ import { join } from 'path';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { isProduction, resolveCorsOrigins } from './config/env.validation';
+import { databaseRegion } from './health/health.controller';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -63,6 +64,7 @@ async function bootstrap() {
   const port = process.env.PORT || 3000;
   await app.listen(port);
   logger.log(`API Trocoin démarrée sur http://localhost:${port} (env=${process.env.NODE_ENV || 'development'})`);
+  logger.log(`Base de données : ${process.env.DB_TYPE || 'sqlite'}${process.env.DB_TYPE === 'postgres' ? ` · région ${databaseRegion() ?? 'inconnue'}` : ''}`);
   logger.log(`Monitoring Sentry : ${SENTRY_ENABLED ? "actif" : "désactivé (SENTRY_DSN absent)"}`);
   logger.log(`CORS autorisé pour : ${corsOrigins.join(', ') || '(aucune origine navigateur)'}`);
 }
