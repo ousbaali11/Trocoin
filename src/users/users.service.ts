@@ -391,6 +391,14 @@ export class UsersService {
       shopHours: null as any,
       shopWebsite: null as any,
       siret: null as any,
+      siretVerified: false,
+      siretVerifiedAt: null as any,
+      // Comptes à mot de passe (phase 5) : identifiants libérés et hash effacé
+      username: null as any,
+      firstName: null as any,
+      lastName: null as any,
+      companyName: null as any,
+      passwordHash: null as any,
       stripeAccountId: null as any,
       deletedAt: new Date(),
     });

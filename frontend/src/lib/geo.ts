@@ -18,9 +18,12 @@ export async function suggestCities(query: string, signal?: AbortSignal): Promis
     const url = `https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(query)}&type=municipality&limit=6`;
     const res = await fetch(url, { signal });
     if (!res.ok) return [];
-    const data = (await res.json()) as { features: Array<{ properties: { label: string; city: string; postcode: string }; geometry: { coordinates: [number, number] } }> };
+    const data = (await res.json()) as { features: Array<{ properties: { label: string; name?: string; city: string; postcode: string }; geometry: { coordinates: [number, number] } }> };
+    // Paris, Lyon, Marseille : la commune elle-même est libellée « (toute la ville) », comme sur
+    // leboncoin, pour la distinguer des arrondissements renvoyés séparément.
+    const bigCities = ['Paris', 'Lyon', 'Marseille'];
     return data.features.map((f) => ({
-      label: `${f.properties.city} (${f.properties.postcode})`,
+      label: bigCities.includes(f.properties.city) && !/arrondissement/i.test(f.properties.name || f.properties.label) ? `${f.properties.city} (toute la ville)` : `${f.properties.city} (${f.properties.postcode})`,
       city: f.properties.city,
       postcode: f.properties.postcode,
       latitude: f.geometry.coordinates[1],

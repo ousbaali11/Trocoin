@@ -14,3 +14,4 @@ frontend/.env.local
 frontend/AGENTS.md
 frontend/CLAUDE.md
 *.log
+*.tsbuildinfo

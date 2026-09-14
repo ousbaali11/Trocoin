@@ -186,6 +186,15 @@ Puis redémarrer l'API (les migrations déjà présentes dans la table `migratio
 rejouées). La migration initiale recrée les 23 tables à partir de zéro ; un dump/restore ne
 dépend d'aucune extension autre que `pgcrypto` (fournie par Neon).
 
+**Sauvegarde automatisée (GitHub Actions)** : `.github/workflows/backup.yml` fait chaque lundi
+(et à la demande, *Actions → Sauvegarde base de données → Run workflow*) un `pg_dump` chiffré
+(AES-256, phrase secrète) conservé 90 jours comme artefact, après vérification que l'archive se
+déchiffre et se lit. Ne fait rien tant que les deux secrets n'existent pas :
+`DATABASE_URL_BACKUP` (l'URL Neon) et `BACKUP_PASSPHRASE` (phrase longue, à conserver hors
+GitHub ; sans elle l'archive est illisible). Restauration : télécharger l'artefact, puis
+`openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in trocoin-….dump.enc -out trocoin.dump`
+et `pg_restore` comme ci-dessus.
+
 **Photos** (`/app/uploads`) : non couvertes par la sauvegarde base — voir §2.
 
 ### 6b. Base Neon : passer de la région US à l'Europe (RGPD)

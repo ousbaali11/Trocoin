@@ -37,17 +37,15 @@ le badge « téléphone vérifié » n'est affiché nulle part), validation juri
 **État de la base :** 1 compte réel en production (le vôtre), 0 annonce. Base Neon en
 région **États-Unis** (`us-east-2`) : à migrer en Europe avant ouverture publique (§7).
 
-**Préalable auto-deploy (point 0 du brief) : non résolu, et je ne peux pas le résoudre seul.**
-Le dépôt GitHub n'a toujours aucun webhook vers Render et aucun secret `RENDER_DEPLOY_HOOK`
-([exécuté] : `gh api …/hooks` → 0, `gh secret list` → vide). Render exécute aujourd'hui le
-build de la phase 8 déployé à la main. J'ai ajouté à la CI un job « Déploiement Render (deploy
-hook) + preuve /health » qui, dès que le secret `RENDER_DEPLOY_HOOK` existe, déclenche Render
-après une CI verte puis attend que `/health` renvoie la version poussée (preuve automatique).
-Le job reste inactif (avertissement) tant que le secret manque. Les deux actions qui vous
-reviennent sont décrites dans `DEPLOIEMENT.md` §2b (deploy hook + secret GitHub : 2 minutes,
-ou liaison du compte GitHub dans Render). Le commit de preuve (version 1.2.0 dans `/health`) est
-poussé avec ce tour : il se déploiera tout seul dès que le secret sera en place, et le job CI
-échouera visiblement si ce n'est pas le cas.
+**Préalable auto-deploy (point 0 du brief) : résolu et prouvé le 14 septembre [exécuté].**
+Le service Render n'a jamais été relié au dépôt (0 webhook GitHub) ; la solution retenue est
+un *Deploy Hook* Render enregistré comme secret GitHub `RENDER_DEPLOY_HOOK` (créé par vous à
+10:10 UTC) et un job de CI « Déploiement Render (deploy hook) + preuve /health » qui ne se
+déclenche qu'après une CI entièrement verte sur `main`. Preuve : commit de test `5c64b5c`
+(version 1.2.1) poussé à 12:15 → run 34832288508 vert → hook appelé → `/health` est passé de
+`1.1.0` à `1.2.1` à 12:20, **sans aucun Manual Deploy**, le job ayant lui-même constaté la
+nouvelle version (« Déployé et vérifié »). Chaque push sur `main` suit désormais ce chemin ; un
+déploiement qui ne remonte pas en 15 minutes fait échouer la CI.
 
 ---
 
@@ -188,19 +186,33 @@ ouverture publique :**
 5. Textes légaux validés par un juriste ; information sur la collecte du téléphone non vérifié.
 6. Instance Render payante (fin de la mise en veille : premier appel jusqu'à 1 minute) et Redis
    dès la deuxième instance.
-7. Sauvegarde automatisée hors Neon + test de restauration ; Sentry alimenté.
+7. Sauvegarde automatisée : workflow prêt, à activer avec deux secrets (`DEPLOIEMENT.md` §6) ; test de restauration à faire une fois ; Sentry alimenté (DSN).
 
 **Confort / après ouverture**
 8. Relevé manuel des 6 panneaux de filtres leboncoin non observés (Matériel pro, Famille,
    Loisirs, Vacances, Services, Animaux) et alignement fin.
 9. Listes marque → modèle pour les véhicules ; historique des localisations ; arrondissements
     groupés.
-10. Modification de l'e-mail avec confirmation ; suppression de compte revue ; double facteur.
+10. Modification de l'e-mail avec confirmation ; double facteur.
 11. Paiement réel, notifications push/e-mail, KYC, DAC7 (différés).
 
 ---
 
 ## 8. CI et déploiement de ce tour
+
+**Suite du 14 septembre (après mise en place du secret)** : auto-deploy prouvé (voir §1). Puis
+trois compléments réalisables sans clé : (1) suppression d'un compte à mot de passe revue —
+e-mail, username, prénom/nom, raison sociale, hash et statut SIRET effacés, sessions
+révoquées, identifiants réutilisables ; test `phase10` (login/refresh refusés, profil
+anonymisé, réinscription avec les mêmes identifiants OK) ; (2) « Paris / Lyon / Marseille (toute
+la ville) » dans le sélecteur de localisation, arrondissements listés séparément (vérifié sur
+l'API adresse.data.gouv.fr : la commune « Lyon » et « Lyon 3e Arrondissement » arrivent en
+entrées distinctes) ; (3) sauvegarde hebdomadaire chiffrée par GitHub Actions
+(`backup.yml`, secrets `DATABASE_URL_BACKUP` + `BACKUP_PASSPHRASE`, vérification que
+l'archive se déchiffre et se lit, artefact 90 jours) — inactif tant que les secrets manquent.
+Le SIRET au registre est confirmé actif en production : un SIRET inconnu est refusé par
+`trocoin.onrender.com` avec le message attendu.
+
 
 - Push `99549d4` puis correctifs YAML `3b8c5ef` → `ce7723d` (le nouveau job de déploiement avait deux erreurs de syntaxe YAML, détectées par GitHub puis validées localement avec js-yaml). Run **34830238107 vert** : 5 jobs — API SQLite (85 tests, audit 0 vulnérabilité), API PostgreSQL 16 (85 tests, 6 migrations), front (`next build`), image Docker (sharp/libvips chargés dans l'image), **« Déploiement Render (deploy hook) + preuve /health » exécuté** : il a constaté l'absence du secret `RENDER_DEPLOY_HOOK` et affiché l'avertissement prévu, sans déployer.
 - Vercel : déploiement réussi ; `/connexion` (lien « Mot de passe oublié ? », bouton œil), `/inscription` (deux boutons œil de 44 px), `/mot-de-passe-oublie`, `/reinitialiser` vérifiés en ligne dans le navigateur.
