@@ -56,11 +56,18 @@ export function LocationPicker({
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (root.current && !root.current.contains(e.target as Node)) setOpen(false);
+      if (root.current && !root.current.contains(e.target as Node)) close();
     };
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
   }, [open]);
+
+  /** Ferme le panneau en remettant le libellé du lieu choisi dans le champ (le panneau garde le focus dans le champ pendant les clics). */
+  const close = () => {
+    setOpen(false);
+    if (value.mode !== "all") setText(locationLabel(value, true));
+    (root.current?.querySelector("input") as HTMLInputElement | null)?.blur();
+  };
 
   const onInput = (t: string) => {
     setText(t);
@@ -146,7 +153,7 @@ export function LocationPicker({
         )}
       </div>
       {open && (
-        <div role="dialog" aria-label="Menu des localisations" style={{ position: "absolute", zIndex: 30, left: 0, right: 0, top: "100%", marginTop: 4, padding: 6, background: "var(--white)", border: "1px solid var(--line-soft)", borderRadius: "var(--radius-sm)", boxShadow: "var(--shadow-lg)", minWidth: 280 }}>
+        <div role="dialog" aria-label="Menu des localisations" onMouseDown={(e) => e.preventDefault()} style={{ position: "absolute", zIndex: 30, left: 0, right: 0, top: "100%", marginTop: 4, padding: 6, background: "var(--white)", border: "1px solid var(--line-soft)", borderRadius: "var(--radius-sm)", boxShadow: "var(--shadow-lg)", minWidth: 280 }}>
           <ul role="listbox" style={{ margin: 0, padding: 0, listStyle: "none", maxHeight: 260, overflowY: "auto" }}>
             {!text.trim() && <li className="small muted" style={{ padding: "6px 10px 2px" }}>Suggestions</li>}
             <li role="option" aria-selected={value.mode === "around"}>
@@ -202,7 +209,7 @@ export function LocationPicker({
               </div>
               <div className="row spread" style={{ marginTop: 10 }}>
                 <span className="small muted">{value.radius === 0 ? "Uniquement la commune" : "Communes alentour incluses"}</span>
-                <button type="button" className="btn btn-primary btn-sm" onClick={() => setOpen(false)}>Valider</button>
+                <button type="button" className="btn btn-primary btn-sm" onClick={close}>Valider</button>
               </div>
             </div>
           )}

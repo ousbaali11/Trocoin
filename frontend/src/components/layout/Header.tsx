@@ -119,7 +119,7 @@ export function Header() {
           )}
           {user && (
             <div className={styles.userMenu} ref={menuRef}>
-              <button className={styles.userBtn} onClick={() => setMenuOpen((o) => !o)} aria-expanded={menuOpen} aria-haspopup="menu">
+              <button className={styles.userBtn} onClick={() => setMenuOpen((o) => !o)} aria-expanded={menuOpen} aria-haspopup="menu" aria-label={`Mon compte : ${user.displayName}`}>
                 <span className={styles.avatar}>{user.displayName.slice(0, 1).toUpperCase()}</span>
                 <span className={styles.userName}>{user.displayName}</span>
                 {unreadNotifications > 0 && <span className={styles.badge}>{unreadNotifications}</span>}

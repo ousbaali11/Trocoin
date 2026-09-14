@@ -10,18 +10,18 @@ import { useAuth } from "@/lib/auth-context";
  * `admin` restreint en plus au rôle administrateur (l'API vérifie de son côté).
  */
 export function RequireAuth({ children, admin = false }: { children: React.ReactNode; admin?: boolean }) {
-  const { user, loading } = useAuth();
+  const { user, loading, loggingOut } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (loading) return;
+    if (loading || loggingOut) return; // en cours de déconnexion : on laisse la navigation vers l'accueil se faire
     if (!user) {
       const next = window.location.pathname + window.location.search;
       router.replace(`/connexion?next=${encodeURIComponent(next)}`);
     } else if (admin && user.accountType !== "admin") {
       router.replace("/");
     }
-  }, [loading, user, admin, router]);
+  }, [loading, loggingOut, user, admin, router]);
 
   if (loading || !user || (admin && user.accountType !== "admin")) {
     return (

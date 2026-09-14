@@ -9,6 +9,8 @@ interface AuthState {
   user: Me | null;
   token: string | null;
   loading: boolean;
+  /** Vrai pendant la déconnexion : les pages protégées ne renvoient pas vers la connexion mais laissent revenir à l'accueil. */
+  loggingOut: boolean;
   unreadMessages: number;
   unreadNotifications: number;
   login: (token: string, refreshToken?: string) => Promise<void>;
@@ -25,6 +27,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<Me | null>(null);
   const [token, setTok] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loggingOut, setLoggingOut] = useState(false);
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const router = useRouter();
@@ -85,6 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const logout = useCallback(() => {
+    setLoggingOut(true);
     void logoutSession();
     setTok(null);
     setUser(null);
@@ -92,6 +96,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUnreadNotifications(0);
     router.push("/");
   }, [router]);
+
+  // Fin de la déconnexion une fois l'accueil atteint
+  useEffect(() => {
+    if (loggingOut && pathname === "/") setLoggingOut(false);
+  }, [loggingOut, pathname]);
 
   const refresh = useCallback(() => loadUser(getToken()), [loadUser]);
 
@@ -106,8 +115,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const value = useMemo(
-    () => ({ user, token, loading, unreadMessages, unreadNotifications, login, logout, refresh, refreshCounters, requireAuth }),
-    [user, token, loading, unreadMessages, unreadNotifications, login, logout, refresh, refreshCounters, requireAuth],
+    () => ({ user, token, loading, loggingOut, unreadMessages, unreadNotifications, login, logout, refresh, refreshCounters, requireAuth }),
+    [user, token, loading, loggingOut, unreadMessages, unreadNotifications, login, logout, refresh, refreshCounters, requireAuth],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

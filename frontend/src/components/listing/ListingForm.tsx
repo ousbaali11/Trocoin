@@ -312,7 +312,7 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
                     ) : f.type === "number" ? (
                       <input id={`a-${f.key}`} className="input" type="number" min={f.min} max={f.max} value={form.attributes[f.key] === undefined ? "" : String(form.attributes[f.key])} onChange={(e) => setAttr(f.key, e.target.value === "" ? undefined : Number(e.target.value))} />
                     ) : f.type === "boolean" ? (
-                      <label className="checkbox"><input type="checkbox" checked={form.attributes[f.key] === true} onChange={(e) => setAttr(f.key, e.target.checked ? true : undefined)} /> Oui</label>
+                      <label className="checkbox"><input id={`a-${f.key}`} type="checkbox" checked={form.attributes[f.key] === true} onChange={(e) => setAttr(f.key, e.target.checked ? true : undefined)} /> Oui</label>
                     ) : (
                       <input id={`a-${f.key}`} className="input" maxLength={f.maxLength} value={String(form.attributes[f.key] ?? "")} onChange={(e) => setAttr(f.key, e.target.value)} />
                     )}

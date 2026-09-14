@@ -115,13 +115,54 @@ jobs:
       - name: Vérifier l'image (sharp/libvips chargeable, dist/main.js présent)
         run: docker run --rm trocoin-api:ci node -e "const s=require('sharp'); require('fs').accessSync('dist/main.js'); console.log('sharp', s.versions.sharp, 'vips', s.versions.vips)"
 
+  # Scénarios utilisateur de bout en bout dans Chromium (Playwright), contre l'API COMPILÉE
+  # (dist/main.js, SQLite jetable, fournisseurs simulés) et le front CONSTRUIT (next build + next start).
+  # Un scénario en échec bloque le déploiement (deploy-render en dépend).
+  e2e-navigateur:
+    name: Parcours critiques (desktop + mobile 375 px)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI: "true"
+      E2E_API_URL: http://localhost:3000
+      E2E_FRONT_URL: http://localhost:3001
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+      - name: Dépendances API
+        run: npm ci --legacy-peer-deps --no-audit --no-fund
+      - name: Dépendances front
+        run: npm ci --no-audit --no-fund
+        working-directory: frontend
+      - name: Navigateur Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Build API (dist/main.js) et front (next build, URL d'API de test injectée)
+        run: npm run e2e:build
+      - name: Scénarios navigateur
+        run: npx playwright test
+      - name: Rapport et traces (en cas d'échec)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            test-results
+          retention-days: 14
+
   # Déploiement Render déclenché par la CI (remplace l'auto-deploy GitHub→Render jamais relié) :
   # ne s'exécute que si le secret RENDER_DEPLOY_HOOK existe (Render → Settings → Deploy Hook),
   # uniquement sur main, et seulement quand tout est vert. Puis attend que /health renvoie la
   # version du package.json poussé : preuve que le commit est bien en ligne.
   deploy-render:
     name: Déploiement Render (deploy hook) + preuve /health
-    needs: [api, api-postgres, frontend, docker]
+    needs: [api, api-postgres, frontend, docker, e2e-navigateur]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 20

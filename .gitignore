@@ -16,3 +16,6 @@ frontend/CLAUDE.md
 *.log
 *.tsbuildinfo
 .claude/
+e2e/.tmp/
+playwright-report/
+test-results/
