@@ -344,7 +344,7 @@ export class ListingsService {
       return { deleted: false };
     }
     const photos = await this.photosRepo.find({ where: { listingId: listing.id } });
-    await Promise.all(photos.map((p) => deleteUploadedFile(p.url)));
+    await Promise.all(photos.flatMap((p) => [deleteUploadedFile(p.url), deleteUploadedFile(p.thumbUrl)]));
     await this.photosRepo.delete({ listingId: listing.id });
     await this.favoritesRepo.delete({ listingId: listing.id });
     await this.viewsRepo.delete({ listingId: listing.id });
@@ -411,7 +411,7 @@ export class ListingsService {
 
   // ------------------------------------------------------------------ photos
 
-  async addPhotos(listingId: string, userId: string, urls: string[]): Promise<ListingPhoto[]> {
+  async addPhotos(listingId: string, userId: string, urls: Array<{ url: string; thumbUrl: string | null }>): Promise<ListingPhoto[]> {
     const listing = await this.getManaged(listingId, userId);
     // Plafond glissant par compte (MAX_PHOTOS_PER_DAY, défaut 150) : limite l'abus de stockage
     // et de bande passante ; 10 annonces complètes par jour restent possibles.
@@ -424,15 +424,15 @@ export class ListingsService {
       .andWhere('p.createdAt > :since', { since })
       .getCount();
     if (uploadedToday + urls.length > maxPerDay) {
-      await Promise.all(urls.map((u) => deleteUploadedFile(u)));
+      await Promise.all(urls.flatMap((u) => [deleteUploadedFile(u.url), deleteUploadedFile(u.thumbUrl)]));
       throw new BadRequestException(`Limite de ${maxPerDay} photos par 24 h atteinte pour ce compte. Réessayez demain.`);
     }
     const existingCount = await this.photosRepo.count({ where: { listingId } });
     if (existingCount + urls.length > MAX_PHOTOS_PER_LISTING) {
-      await Promise.all(urls.map((u) => deleteUploadedFile(u)));
+      await Promise.all(urls.flatMap((u) => [deleteUploadedFile(u.url), deleteUploadedFile(u.thumbUrl)]));
       throw new BadRequestException(`Maximum ${MAX_PHOTOS_PER_LISTING} photos par annonce.`);
     }
-    const photos = urls.map((url, i) => this.photosRepo.create({ listingId: listing.id, url, sortOrder: existingCount + i }));
+    const photos = urls.map((u, i) => this.photosRepo.create({ listingId: listing.id, url: u.url, thumbUrl: u.thumbUrl, sortOrder: existingCount + i }));
     return this.photosRepo.save(photos);
   }
 
@@ -442,6 +442,7 @@ export class ListingsService {
     if (!photo) throw new NotFoundException('Photo introuvable.');
     await this.photosRepo.delete({ id: photoId, listingId });
     await deleteUploadedFile(photo.url);
+    await deleteUploadedFile(photo.thumbUrl);
   }
 
   async reorderPhotos(listingId: string, userId: string, photoIds: string[]): Promise<ListingPhoto[]> {
@@ -861,7 +862,7 @@ export class ListingsService {
         ...l,
         latitude: l.latitude != null ? Math.round(l.latitude * 100) / 100 : l.latitude,
         longitude: l.longitude != null ? Math.round(l.longitude * 100) / 100 : l.longitude,
-        coverUrl: ph[0]?.url || null,
+        coverUrl: ph[0]?.thumbUrl || ph[0]?.url || null,
         photosCount: ph.length,
         categorySlug: c?.slug,
         categoryName: c?.name,

@@ -5,7 +5,7 @@ export default function SiteLayout({ children }: { children: React.ReactNode }) 
   return (
     <>
       <Header />
-      <main style={{ minHeight: "calc(100vh - var(--header-h) - 320px)" }}>{children}</main>
+      <main id="contenu" tabIndex={-1} style={{ minHeight: "calc(100vh - var(--header-h) - 320px)", outline: "none" }}>{children}</main>
       <Footer />
     </>
   );

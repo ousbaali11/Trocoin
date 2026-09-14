@@ -75,7 +75,7 @@ export default function TransactionPage() {
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }} className="tx-cols">
         <section className="panel">
-          <h3>Récapitulatif</h3>
+          <h2 className="h3">Récapitulatif</h2>
           <table className="table">
             <tbody>
               <tr><td>Prix de l&apos;article</td><td style={{ textAlign: "right" }}>{formatEuros(tx.amount)}</td></tr>
@@ -99,7 +99,7 @@ export default function TransactionPage() {
         </section>
 
         <section className="panel">
-          <h3>Chronologie</h3>
+          <h2 className="h3">Chronologie</h2>
           <ul className="small" style={{ paddingLeft: 18, margin: 0 }}>
             <li>Paiement sécurisé : {formatDateTime(tx.createdAt)}</li>
             {tx.shippedAt && <li>{tx.deliveryMethod === "main_propre" ? "Vendeur prêt pour la remise" : `Expédié${tx.deliveryTrackingNumber ? ` (suivi ${tx.deliveryTrackingNumber})` : ""}`} : {formatDateTime(tx.shippedAt)}</li>}
@@ -111,7 +111,7 @@ export default function TransactionPage() {
       </div>
 
       <section className="panel">
-        <h3>Que faire maintenant ?</h3>
+        <h2 className="h3">Que faire maintenant ?</h2>
         {tx.status === "sequestre" && !buyer && (
           <div className="stack">
             <p className="small muted" style={{ margin: 0 }}>Les fonds de l&apos;acheteur sont bloqués. {tx.deliveryMethod === "main_propre" ? "Convenez d'un rendez-vous par messagerie, puis confirmez que vous êtes prêt." : "Expédiez l'article et renseignez le numéro de suivi."}</p>

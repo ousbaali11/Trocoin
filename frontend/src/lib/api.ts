@@ -136,7 +136,9 @@ export async function api<T = unknown>(path: string, opts: RequestOptions = {}):
   let res: Response;
   try {
     res = await fetch(`${API_URL}${path}`, init);
-  } catch {
+  } catch (err) {
+    // Côté serveur (rendu), la cause technique est journalisée pour le diagnostic ; l'utilisateur voit un message neutre.
+    if (typeof window === "undefined") console.error(`[api] ${init.method} ${API_URL}${path} injoignable :`, (err as Error & { cause?: { code?: string } }).cause?.code ?? (err as Error).message);
     throw new ApiError(0, "Impossible de joindre le serveur. Vérifiez votre connexion.");
   }
 

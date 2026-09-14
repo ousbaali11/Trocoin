@@ -48,8 +48,21 @@ export function Header() {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
       if (catsRef.current && !catsRef.current.contains(e.target as Node)) setCatsOpen(false);
     };
+    // Clavier : Échap referme les menus et rend le focus au bouton qui les a ouverts
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (menuRef.current?.contains(document.activeElement)) menuRef.current.querySelector("button")?.focus();
+      if (catsRef.current?.contains(document.activeElement)) catsRef.current.querySelector("button")?.focus();
+      setMenuOpen(false);
+      setCatsOpen(false);
+      setMobileOpen(false);
+    };
     document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      document.removeEventListener("keydown", onKey);
+    };
   }, []);
 
   /** Lien personnel : connecté → page ; sinon → connexion avec retour. */
@@ -62,14 +75,14 @@ export function Header() {
 
   const personalLinks = (
     <>
-      <Link href="/compte/recherches" onClick={personal("/compte/recherches")} className={styles.navLink}>
+      <Link href="/compte/recherches" onClick={personal("/compte/recherches")} className={styles.navLink} aria-label={savedCount > 0 ? `Mes recherches, ${savedCount} sauvegardée${savedCount > 1 ? "s" : ""}` : "Mes recherches"}>
         <BellIcon /> <span>Mes recherches</span>
         {savedCount > 0 && <span className={styles.badgeSoft}>{savedCount}</span>}
       </Link>
-      <Link href="/compte/favoris" onClick={personal("/compte/favoris")} className={styles.navLink}>
+      <Link href="/compte/favoris" onClick={personal("/compte/favoris")} className={styles.navLink} aria-label="Favoris">
         <HeartIcon /> <span>Favoris</span>
       </Link>
-      <Link href="/compte/messages" onClick={personal("/compte/messages")} className={styles.navLink}>
+      <Link href="/compte/messages" onClick={personal("/compte/messages")} className={styles.navLink} aria-label={unreadMessages > 0 ? `Messages, ${unreadMessages} non lu${unreadMessages > 1 ? "s" : ""}` : "Messages"}>
         <MailIcon /> <span>Messages</span>
         {unreadMessages > 0 && <span className={styles.badge}>{unreadMessages > 99 ? "99+" : unreadMessages}</span>}
       </Link>
@@ -78,17 +91,18 @@ export function Header() {
 
   return (
     <header className={styles.header}>
+      <a href="#contenu" className={styles.skip}>Aller au contenu</a>
       <div className={`container ${styles.inner}`}>
-        <Link href="/" className={styles.logo} aria-label="Trocoin, accueil">
+        <Link href="/" className={styles.logo} title="Accueil">
           <Logo dark />
         </Link>
 
         <div className={styles.cats} ref={catsRef}>
-          <button className={styles.catsBtn} onClick={() => setCatsOpen((o) => !o)} aria-expanded={catsOpen} aria-haspopup="true">
+          <button className={styles.catsBtn} onClick={() => setCatsOpen((o) => !o)} aria-expanded={catsOpen} aria-haspopup="true" aria-label="Catégories" aria-controls="mega-categories">
             <MenuIcon /> <span>Catégories</span>
           </button>
           {catsOpen && (
-            <div className={styles.mega} role="menu">
+            <div className={styles.mega} role="menu" id="mega-categories">
               {tree.map((root) => (
                 <div key={root.slug} className={styles.megaCol}>
                   <Link href={`/recherche?category=${root.slug}`} className={styles.megaRoot} role="menuitem">
@@ -145,7 +159,7 @@ export function Header() {
           <Link href="/deposer" className={`btn btn-primary ${styles.deposit}`}>
             <PlusIcon /> Déposer une annonce
           </Link>
-          <button className={styles.burger} onClick={() => setMobileOpen((o) => !o)} aria-label="Menu" aria-expanded={mobileOpen}>
+          <button className={styles.burger} onClick={() => setMobileOpen((o) => !o)} aria-label="Menu" aria-expanded={mobileOpen} aria-controls="mobile-menu">
             <span />
             <span />
             <span />
@@ -154,7 +168,7 @@ export function Header() {
       </div>
 
       {mobileOpen && (
-        <div className={styles.mobileMenu}>
+        <div className={styles.mobileMenu} id="mobile-menu">
           <SearchBox onNavigate={() => setMobileOpen(false)} />
           <Link href="/deposer" className="btn btn-primary btn-block">Déposer une annonce</Link>
           <div className={styles.mobileLinks}>{personalLinks}</div>

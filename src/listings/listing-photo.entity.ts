@@ -13,6 +13,10 @@ export class ListingPhoto {
   @Column()
   url: string;
 
+  /** Vignette (480 px de large) pour les listes et miniatures ; null pour les photos importées avant sa mise en place. */
+  @Column({ type: 'varchar', nullable: true })
+  thumbUrl?: string | null;
+
   @Column({ default: 0 })
   sortOrder: number;
 

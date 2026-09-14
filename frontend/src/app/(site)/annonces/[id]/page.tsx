@@ -100,7 +100,7 @@ export default async function ListingPage({ params }: { params: Promise<{ id: st
 
           {(listing.condition || listing.attributesLabeled.length > 0) && (
             <section className="panel" style={{ marginTop: 20 }}>
-              <h3>Caractéristiques</h3>
+              <h2 className="h3">Caractéristiques</h2>
               <dl className={styles.specs}>
                 {listing.condition && (
                   <div><dt>État</dt><dd>{CONDITION_LABELS[listing.condition]}</dd></div>
@@ -116,13 +116,13 @@ export default async function ListingPage({ params }: { params: Promise<{ id: st
           )}
 
           <section className="panel" style={{ marginTop: 20 }}>
-            <h3>Description</h3>
+            <h2 className="h3">Description</h2>
             <p style={{ whiteSpace: "pre-wrap", margin: 0 }}>{listing.description}</p>
           </section>
 
           {typeof listing.latitude === "number" && typeof listing.longitude === "number" && (
             <section className="panel" style={{ marginTop: 20 }}>
-              <h3>Localisation</h3>
+              <h2 className="h3">Localisation</h2>
               <p className="muted small">Position approximative — l&apos;adresse exacte est convenue par messagerie.</p>
               <ApproxMapDynamic latitude={listing.latitude} longitude={listing.longitude} />
             </section>

@@ -33,23 +33,23 @@ export function PhotoGallery({ photos, title }: { photos: ListingPhoto[]; title:
     <div>
       <div style={{ position: "relative", aspectRatio: "4/3", background: "var(--ink)", borderRadius: "var(--radius-lg)", overflow: "hidden" }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={current} alt={`${title} — photo ${index + 1} sur ${total}`} style={{ width: "100%", height: "100%", objectFit: "contain", cursor: "zoom-in" }} onClick={() => setZoom(true)} />
+        <img src={current} alt={`${title} — photo ${index + 1} sur ${total}`} fetchPriority="high" decoding="async" style={{ width: "100%", height: "100%", objectFit: "contain", cursor: "zoom-in" }} onClick={() => setZoom(true)} />
         {total > 1 && (
           <>
-            <button aria-label="Photo précédente" onClick={() => setIndex((i) => (i - 1 + total) % total)} style={navBtn("left")}>‹</button>
-            <button aria-label="Photo suivante" onClick={() => setIndex((i) => (i + 1) % total)} style={navBtn("right")}>›</button>
+            <button type="button" aria-label="Photo précédente" onClick={() => setIndex((i) => (i - 1 + total) % total)} style={navBtn("left")}>‹</button>
+            <button type="button" aria-label="Photo suivante" onClick={() => setIndex((i) => (i + 1) % total)} style={navBtn("right")}>›</button>
           </>
         )}
-        <span style={{ position: "absolute", right: 12, bottom: 12, background: "rgba(0,0,0,.6)", color: "#fff", fontSize: ".78rem", padding: "3px 9px", borderRadius: 999 }}>
+        <span aria-live="polite" style={{ position: "absolute", right: 12, bottom: 12, background: "rgba(0,0,0,.6)", color: "#fff", fontSize: ".78rem", padding: "3px 9px", borderRadius: 999 }}>
           {index + 1} / {total}
         </span>
       </div>
       {total > 1 && (
         <div style={{ display: "flex", gap: 8, marginTop: 10, overflowX: "auto", paddingBottom: 4 }}>
           {photos.map((p, i) => (
-            <button key={p.id} onClick={() => setIndex(i)} aria-label={`Voir la photo ${i + 1}`} aria-current={i === index} style={{ flex: "0 0 76px", height: 60, padding: 0, border: i === index ? "2px solid var(--ochre)" : "2px solid transparent", borderRadius: 8, overflow: "hidden", cursor: "pointer", background: "var(--ivory-warm)" }}>
+            <button key={p.id} type="button" onClick={() => setIndex(i)} aria-label={`Voir la photo ${i + 1}`} aria-pressed={i === index} style={{ flex: "0 0 76px", height: 60, padding: 0, border: i === index ? "2px solid var(--ochre)" : "2px solid transparent", borderRadius: 8, overflow: "hidden", cursor: "pointer", background: "var(--ivory-warm)" }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={mediaUrl(p.url)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              <img src={mediaUrl(p.thumbUrl || p.url)} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
             </button>
           ))}
         </div>

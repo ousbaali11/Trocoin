@@ -67,7 +67,7 @@ export default function BoutiquePage() {
 
       {managed.length > 0 && (
         <section className="panel">
-          <h3>Boutiques que je gère</h3>
+          <h2 className="h3">Boutiques que je gère</h2>
           <ul style={{ paddingLeft: 18, margin: 0 }}>
             {managed.map((s) => <li key={s.ownerId}>{s.shopName} — <Link href={`/vendeurs/${s.ownerId}`}>voir la vitrine</Link></li>)}
           </ul>
@@ -78,7 +78,7 @@ export default function BoutiquePage() {
       {isPro ? (
         <>
           <section className="panel">
-            <h3>Membres de l&apos;équipe</h3>
+            <h2 className="h3">Membres de l&apos;équipe</h2>
             <p className="small muted">Invitez des collaborateurs par leur numéro de mobile (ils doivent déjà avoir un compte Trocoin). Ils pourront créer, modifier et mettre en pause les annonces de la boutique ; vous restez le vendeur affiché et le seul à gérer la vitrine et les paiements.</p>
             <div className="row" style={{ marginBottom: 12 }}>
               <input className="input" style={{ maxWidth: 260 }} placeholder="06 12 34 56 78" value={phone} onChange={(e) => setPhone(e.target.value)} aria-label="Numéro du collaborateur" />
@@ -102,7 +102,7 @@ export default function BoutiquePage() {
           </section>
 
           <section className="panel">
-            <h3>Import de catalogue (CSV ou XML)</h3>
+            <h2 className="h3">Import de catalogue (CSV ou XML)</h2>
             <p className="small muted">
               Colonnes reconnues : <code>reference</code>, <code>titre</code>, <code>description</code>, <code>categorie</code> (slug, ex. <code>voitures</code>), <code>prix</code>, <code>type_prix</code>, <code>etat</code>, <code>ville</code>, <code>code_postal</code>, <code>livraison</code> (oui/non), <code>latitude</code>, <code>longitude</code>, et <code>attr_…</code> pour les critères (ex. <code>attr_marque</code>). Une ligne avec une référence déjà importée met l&apos;annonce à jour. 500 lignes maximum ; les photos s&apos;ajoutent ensuite depuis Mes annonces.
             </p>

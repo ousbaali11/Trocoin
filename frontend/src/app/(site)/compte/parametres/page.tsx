@@ -137,7 +137,7 @@ export default function ParametresPage() {
       </div>
 
       <section className="panel" id="profil">
-        <h3>Profil public</h3>
+        <h2 className="h3">Profil public</h2>
         <div className="row" style={{ marginBottom: 16 }}>
           <div style={{ width: 64, height: 64, borderRadius: "50%", background: "var(--bottle)", color: "var(--white)", display: "grid", placeItems: "center", overflow: "hidden", fontSize: "1.4rem", fontWeight: 700 }}>
             {user.avatarUrl ? (
@@ -160,7 +160,7 @@ export default function ParametresPage() {
       </section>
 
       <section className="panel" id="identifiants">
-        <h3>Identifiants</h3>
+        <h2 className="h3">Identifiants</h2>
         <p className="small muted">Ces informations ne sont jamais affichées publiquement. Le numéro de mobile identifie le compte et ne se modifie pas.</p>
         <dl className="small" style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "6px 16px", margin: 0 }}>
           <dt className="muted">Numéro de mobile</dt><dd style={{ margin: 0 }}>{phone}</dd>
@@ -172,7 +172,7 @@ export default function ParametresPage() {
       </section>
 
       <section className="panel" id="mot-de-passe">
-        <h3>Mot de passe</h3>
+        <h2 className="h3">Mot de passe</h2>
         <p className="small muted">Après le changement, toutes vos sessions sont déconnectées : vous vous reconnecterez avec le nouveau mot de passe.</p>
         {pwError && <div className="alert alert-error" role="alert">{pwError}</div>}
         <form
@@ -204,7 +204,7 @@ export default function ParametresPage() {
       </section>
 
       <section className="panel" id="notifications">
-        <h3>Notifications</h3>
+        <h2 className="h3">Notifications</h2>
         <p className="small muted">Choisissez, pour chaque type d&apos;évènement, les canaux par lesquels vous souhaitez être prévenu. Les notifications restent toujours consultables dans <Link href="/compte/notifications">Notifications</Link>.</p>
         {prefs ? (
           <div className="table-wrap">
@@ -248,7 +248,7 @@ export default function ParametresPage() {
       </section>
 
       <section className="panel" id="pro">
-        <h3>{isPro ? "Ma boutique" : "Passer en compte professionnel"}</h3>
+        <h2 className="h3">{isPro ? "Ma boutique" : "Passer en compte professionnel"}</h2>
         {isPro ? (
           <>
             <p className="small muted">SIRET : {user.siret}{user.siretVerified ? " · vérifié au registre des entreprises" : ""} · Badge Pro actif. Votre boutique est visible à l&apos;adresse <Link href={`/vendeurs/${user.id}`}>/vendeurs/{user.id.slice(0, 8)}…</Link></p>
@@ -289,7 +289,7 @@ export default function ParametresPage() {
       </section>
 
       <section className="panel" id="bloques">
-        <h3>Utilisateurs bloqués</h3>
+        <h2 className="h3">Utilisateurs bloqués</h2>
         {blocks.length === 0 ? <p className="muted small" style={{ margin: 0 }}>Aucun utilisateur bloqué. Vous pouvez bloquer un membre depuis une conversation ou son profil.</p> : (
           <div className="stack">
             {blocks.map((b) => (
@@ -303,7 +303,7 @@ export default function ParametresPage() {
       </section>
 
       <section className="panel" id="donnees" style={{ borderColor: "#ecc7bb" }}>
-        <h3>Mes données (RGPD)</h3>
+        <h2 className="h3">Mes données (RGPD)</h2>
         <p className="small muted">Téléchargez une copie de vos données (profil, annonces, messages, avis, transactions, favoris, préférences) ou supprimez définitivement votre compte. La suppression retire vos annonces, anonymise votre profil et libère votre numéro, votre e-mail et votre nom d&apos;utilisateur. <Link href="/aide/mes-donnees-rgpd">Détails</Link>.</p>
         <div className="row">
           <button className="btn btn-outline" onClick={exportData}>Télécharger mes données</button>

@@ -86,6 +86,8 @@ export interface ListingPhoto {
   id: string;
   listingId: string;
   url: string;
+  /** Vignette 480 px (listes, miniatures) ; absente pour les photos antérieures */
+  thumbUrl?: string | null;
   sortOrder: number;
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { suggestCities, type GeoSuggestion } from "@/lib/geo";
 
 export interface CityValue {
@@ -19,6 +19,7 @@ export const ALL_FRANCE_LABEL = "Toute la France";
  * restriction géographique. Sans `allowAll` (dépôt d'annonce), une ville reste requise.
  */
 export function CityInput({ value, onChange, placeholder = "Ville ou code postal", id, allowAll = false }: { value: CityValue; onChange: (v: CityValue) => void; placeholder?: string; id?: string; allowAll?: boolean }) {
+  const listId = useId();
   const hasLocation = !!(value.city || value.postalCode);
   const [text, setText] = useState(hasLocation ? `${value.city ?? ""}${value.postalCode ? ` (${value.postalCode})` : ""}`.trim() : allowAll ? ALL_FRANCE_LABEL : "");
   const [items, setItems] = useState<GeoSuggestion[]>([]);
@@ -62,7 +63,15 @@ export function CityInput({ value, onChange, placeholder = "Ville ou code postal
   const isAll = allowAll && text === ALL_FRANCE_LABEL;
 
   return (
-    <div style={{ position: "relative" }}>
+    <div
+      style={{ position: "relative" }}
+      onBlur={(e) => {
+        // Fermeture quand le focus quitte le composant (champ ET options), pas entre les deux
+        if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+        setOpen(false);
+        if (allowAll && !value.city && !value.postalCode) setText(ALL_FRANCE_LABEL);
+      }}
+    >
       <input
         id={id}
         className="input"
@@ -74,35 +83,32 @@ export function CityInput({ value, onChange, placeholder = "Ville ou code postal
           if (isAll) setText("");
           if (items.length > 0 || allowAll) setOpen(true);
         }}
-        onBlur={() =>
-          setTimeout(() => {
-            setOpen(false);
-            if (allowAll && !value.city && !value.postalCode) setText(ALL_FRANCE_LABEL);
-          }, 150)
-        }
+        onKeyDown={(e) => {
+          if (e.key === "Escape") setOpen(false);
+        }}
         autoComplete="off"
         role="combobox"
-        aria-expanded={open}
         aria-autocomplete="list"
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-controls={listId}
         style={isAll ? { fontWeight: 600 } : undefined}
       />
       {open && (
         <ul
+          id={listId}
           role="listbox"
+          aria-label="Communes proposées"
           style={{ position: "absolute", zIndex: 30, left: 0, right: 0, top: "100%", margin: 0, padding: 6, listStyle: "none", background: "var(--white)", border: "1px solid var(--line-soft)", borderRadius: "var(--radius-sm)", boxShadow: "var(--shadow-lg)" }}
         >
           {allowAll && (
-            <li role="option" aria-selected={!hasLocation}>
-              <button type="button" onMouseDown={pickAll} className="btn btn-ghost btn-sm" style={{ width: "100%", justifyContent: "flex-start", fontWeight: 600 }}>
-                {ALL_FRANCE_LABEL}
-              </button>
+            <li role="option" tabIndex={0} aria-selected={!hasLocation} onClick={pickAll} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pickAll(); } }} className="btn btn-ghost btn-sm" style={{ width: "100%", justifyContent: "flex-start", fontWeight: 600 }}>
+              {ALL_FRANCE_LABEL}
             </li>
           )}
           {items.map((s) => (
-            <li key={s.label + s.postcode} role="option" aria-selected={false}>
-              <button type="button" onMouseDown={() => pick(s)} className="btn btn-ghost btn-sm" style={{ width: "100%", justifyContent: "flex-start" }}>
-                {s.label}
-              </button>
+            <li key={s.label + s.postcode} role="option" tabIndex={0} aria-selected={false} onClick={() => pick(s)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(s); } }} className="btn btn-ghost btn-sm" style={{ width: "100%", justifyContent: "flex-start" }}>
+              {s.label}
             </li>
           ))}
         </ul>

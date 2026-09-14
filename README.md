@@ -38,7 +38,7 @@ cd frontend && npm install && cp .env.example .env.local && npm run dev -- -p 30
 ```bash
 npm test                 # 94 tests e2e (API, supertest)
 npm run e2e:build        # construit l'API (dist/) et le front (next build) pour les tests navigateur
-npm run e2e              # 22 scénarios Playwright dans Chromium (desktop 1280 px + mobile 375 px) (Jest + supertest, SQLite en mémoire)
+npm run e2e              # 40 scénarios Playwright dans Chromium (desktop 1280 px + mobile 375 px), dont accessibilité (axe) et clavier (Jest + supertest, SQLite en mémoire)
 # Les mêmes tests sur PostgreSQL (schéma créé par les migrations) :
 E2E_DB=postgres DB_TYPE=postgres DATABASE_URL=postgresql://... DB_SYNCHRONIZE=false npm test
 node test/ws-smoke.js    # messagerie temps réel contre un serveur lancé
@@ -56,7 +56,7 @@ manuel : Playwright démarre et arrête les deux serveurs (`e2e/start-api.js`, `
 ```bash
 npx playwright install chromium   # une fois
 npm run e2e:build                 # API + front (≈ 2 min)
-npm run e2e                       # 22 scénarios (≈ 45 s)
+npm run e2e                       # 40 scénarios (≈ 80 s)
 npx playwright show-report        # rapport HTML, traces et captures des échecs
 npm run e2e:ui                    # mode interactif pas à pas
 ```
@@ -73,6 +73,8 @@ la construction ET l'exécution (l'URL de l'API est figée dans le build du fron
 | `e2e/04-depot.spec.ts` | Voitures (critères obligatoires, 2 photos, code postal) et Locations de vacances (champs propres, 1 photo, commune) | desktop |
 | `e2e/05-achat.spec.ts` | deux navigateurs : contact, messagerie temps réel, achat simulé, réception confirmée, avis | desktop |
 | `e2e/06-admin.spec.ts` | connexion admin, refus d'annonce avec motif, signalement déposé par un membre puis traité | desktop |
+| `e2e/07-accessibilite.spec.ts` | axe-core (WCAG 2.0/2.1 A + AA, bonnes pratiques) sur 26 pages publiques et du compte, panneau de localisation et boîte de dialogue ouverts, étapes du dépôt : zéro violation tolérée (contraste, libellés, noms accessibles, titres, points de repère, alt) | desktop |
+| `e2e/08-clavier.spec.ts` | clavier seul : lien d'évitement, recherche avec commune et rayon aux flèches, menu du compte et déconnexion, boîte de dialogue (focus confiné, Échap, retour du focus), dépôt (radios aux flèches, champ fichier atteignable) | desktop |
 
 Les pages d'inscription et de recherche vérifient en plus l'absence de défilement horizontal
 (`expectNoHorizontalOverflow`) : c'est la régression trouvée lors du tour de polish. Les données
@@ -151,6 +153,7 @@ libération), journal d'audit.
 - **Rate limiting partagé** via `REDIS_URL` (`RedisThrottlerStorage`, script Lua atomique), sinon mémoire.
 - **CI → Render** : job `deploy-render` déclenché par le secret `RENDER_DEPLOY_HOOK` après une CI verte, avec preuve par `/health` (`DEPLOIEMENT.md` §2b).
 - Documents : `AUDIT.md` (état consolidé), `AUDIT-HISTORIQUE.md` (journal des phases).
+- **Accessibilité et performance** (14 septembre, soir) : lien d'évitement, menus et modales au clavier, noms accessibles, hiérarchie de titres, zones live (résultats, messagerie, notifications), vignettes 480 px pour les listes (`thumbUrl`), carte de l'annonce chargée à l'approche, décalages de mise en page supprimés sur la recherche ; scores Lighthouse dans `AUDIT.md` §11.
 - **Polish page par page** (14 septembre, après-midi) : centre d'aide structuré (`/aide`, 6 rubriques, 22 articles, recherche), partage d'annonce et de boutique (lien, WhatsApp, e-mail, Facebook, X, partage natif), « autres annonces de ce vendeur » et reprise des dernières consultations sur l'accueil, préférences de notification par famille et canal (`notificationPrefs`), boîte de confirmation unique à la place des `confirm()` natifs, navigation compte et console admin adaptées au mobile, textes légaux par défaut resynchronisés.
 - **Auto-deploy prouvé** (14 septembre) : secret `RENDER_DEPLOY_HOOK` en place, la CI déclenche Render et vérifie `/health`.
 - Sauvegarde hebdomadaire chiffrée (`.github/workflows/backup.yml`, secrets `DATABASE_URL_BACKUP` + `BACKUP_PASSPHRASE`) ; suppression de compte revue pour les comptes à mot de passe ; « Paris / Lyon / Marseille (toute la ville) » dans la localisation.

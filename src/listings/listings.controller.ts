@@ -22,7 +22,7 @@ import { IsIn, IsOptional, IsUUID } from 'class-validator';
 import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
-import { finalizeUploadedImages, imageDiskStorage, imageFileFilter, MAX_IMAGE_BYTES } from '../common/upload/image-upload';
+import { finalizeUploadedImagesWithThumbs, imageDiskStorage, imageFileFilter, MAX_IMAGE_BYTES } from '../common/upload/image-upload';
 import { CreateListingDto } from './dto/create-listing.dto';
 import { SearchListingsDto } from './dto/search-listings.dto';
 import { ReorderPhotosDto, UpdateListingDto } from './dto/update-listing.dto';
@@ -162,8 +162,8 @@ export class ListingsController {
   )
   async uploadPhotos(@Req() req: any, @Param('id', ParseUUIDPipe) listingId: string, @UploadedFiles() files: Array<{ path: string; filename: string }>) {
     if (!files || files.length === 0) throw new BadRequestException('Aucun fichier reçu (champ "files").');
-    const urls = await finalizeUploadedImages(files);
-    return this.listingsService.addPhotos(listingId, req.user.userId, urls);
+    const stored = await finalizeUploadedImagesWithThumbs(files);
+    return this.listingsService.addPhotos(listingId, req.user.userId, stored);
   }
 
   @UseGuards(JwtAuthGuard)

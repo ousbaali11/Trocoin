@@ -158,7 +158,7 @@ export function SearchPage() {
     : currentCategory?.child?.name || currentCategory?.root.name || "Toutes les annonces";
 
   return (
-    <div className="container page">
+    <div className="container page" style={{ minHeight: "calc(100vh - var(--header-h))" }}>
       <nav className="small muted" aria-label="Fil d'Ariane" style={{ marginBottom: 8 }}>
         <Link href="/">Accueil</Link> › <Link href="/recherche">Annonces</Link>
         {currentCategory && (
@@ -172,7 +172,7 @@ export function SearchPage() {
       <div className="page-head">
         <div>
           <h1>{title}</h1>
-          <p className="muted" style={{ margin: 0 }}>
+          <p className="muted" style={{ margin: 0, minHeight: "1.55em" }} aria-live="polite" aria-atomic="true">
             {loading ? "Recherche…" : `${result?.total ?? 0} annonce${(result?.total ?? 0) > 1 ? "s" : ""}`}
             {get("city_label") && ` · ${get("city_label")} (${radius} km)`}
             {!get("city_label") && (get("city") || get("postal_code")) && ` · ${get("city") || get("postal_code")}`}
@@ -313,7 +313,7 @@ export function SearchPage() {
           )}
         </aside>
 
-        <section className={styles.results}>
+        <section className={styles.results} aria-label="Résultats">
           <div className="row spread" style={{ marginBottom: 14 }}>
             <label className="row small">
               Trier par
@@ -337,10 +337,10 @@ export function SearchPage() {
           {view === "map" ? (
             <ListingsMapDynamic listings={result?.items ?? []} center={lat && lng ? [Number(lat), Number(lng)] : undefined} radiusKm={lat && lng ? Number(radius) : undefined} />
           ) : loading && !result ? (
-            <div className="grid-cards">{Array.from({ length: 8 }).map((_, i) => <div key={i} className="skeleton" style={{ height: 290 }} />)}</div>
+            <div className="grid-cards" aria-hidden="true">{Array.from({ length: 8 }).map((_, i) => <div key={i} className="skeleton" style={{ aspectRatio: "4 / 5.2" }} />)}</div>
           ) : result && result.items.length === 0 ? (
             <div className="panel" style={{ textAlign: "center" }}>
-              <h3>Aucune annonce ne correspond</h3>
+              <h2 className="h3">Aucune annonce ne correspond</h2>
               <p className="muted">Élargissez le rayon, retirez un filtre, ou sauvegardez cette recherche pour être prévenu.</p>
               <button className="btn btn-primary" onClick={() => { setSaveName(defaultSaveName()); setSaveOpen(true); }}>Créer une alerte</button>
             </div>

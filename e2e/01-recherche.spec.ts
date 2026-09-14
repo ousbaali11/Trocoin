@@ -48,7 +48,7 @@ test('rayon en kilomètres autour de Lyon : 5 km inclut Villeurbanne, 1 km ne ga
   await page.goto('/');
   const where = page.getByPlaceholder('OÙ ?');
   await where.fill('Lyon');
-  await page.getByRole('option', { name: 'Lyon (69003)' }).click();
+  await page.getByRole('button', { name: 'Lyon (69003)' }).click();
   // Panneau de rayon à la leboncoin : 5 km par défaut, paliers exacts
   const panel = page.getByTestId('radius-panel');
   await expect(panel).toContainText('Dans un rayon de 5 km');

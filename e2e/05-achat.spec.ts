@@ -35,11 +35,11 @@ test('contact, messagerie temps réel, achat, réception confirmée, avis', asyn
 
   // --- Temps réel : le message de l'acheteur apparaît chez le vendeur sans rechargement, et inversement
   const ping = `Je peux passer ce soir vers 19 h ${Date.now().toString().slice(-4)}`;
-  await buyer.getByLabel('Message').fill(ping);
+  await buyer.getByRole('textbox', { name: 'Message' }).fill(ping);
   await buyer.getByRole('button', { name: 'Envoyer' }).click();
   await expect(seller.getByText(ping)).toBeVisible({ timeout: 15_000 });
   const pong = `Parfait, à ce soir ! ${Date.now().toString().slice(-4)}`;
-  await seller.getByLabel('Message').fill(pong);
+  await seller.getByRole('textbox', { name: 'Message' }).fill(pong);
   await seller.getByRole('button', { name: 'Envoyer' }).click();
   await expect(buyer.getByText(pong)).toBeVisible({ timeout: 15_000 });
 

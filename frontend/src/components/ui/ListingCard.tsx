@@ -15,7 +15,7 @@ export function ListingCard({ listing, showStatus = false }: { listing: ListingC
       <Link href={`/annonces/${listing.id}`} className={styles.media} aria-label={listing.title}>
         {cover ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={cover} alt="" loading="lazy" />
+          <img src={cover} alt={listing.title} loading="lazy" decoding="async" />
         ) : (
           <div className={styles.placeholder} aria-hidden="true">
             <CameraIcon />
@@ -47,7 +47,7 @@ export function ListingCard({ listing, showStatus = false }: { listing: ListingC
             {listing.city || "France"}
             {listing.distanceKm !== undefined && ` · ${listing.distanceKm} km`}
           </span>
-          <span>{timeAgo(listing.publishedAt || listing.createdAt)}</span>
+          <span suppressHydrationWarning>{timeAgo(listing.publishedAt || listing.createdAt)}</span>
         </div>
         {showStatus && <span className={`${LISTING_STATUS_LABELS[listing.status].pill} ${styles.status}`}>{LISTING_STATUS_LABELS[listing.status].label}</span>}
       </div>

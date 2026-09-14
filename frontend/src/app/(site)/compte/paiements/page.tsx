@@ -47,7 +47,7 @@ function PaiementsInner() {
     <div>
       <h1>Paiements</h1>
       <section className="panel">
-        <h3>Recevoir mes paiements</h3>
+        <h2 className="h3">Recevoir mes paiements</h2>
         <p className="muted">Pour encaisser les ventes réalisées avec le paiement sécurisé, configurez votre compte de versement auprès de notre prestataire de paiement (Stripe). Vos coordonnées bancaires ne transitent jamais par Trocoin.</p>
         {status === null ? <div className="skeleton" style={{ height: 40, width: 260 }} /> : status.onboardingComplete ? (
           <div className="alert alert-success" style={{ margin: 0 }}>Compte de versement actif : vos ventes vous sont versées automatiquement après confirmation de réception.</div>
@@ -65,7 +65,7 @@ function PaiementsInner() {
         {status?.mode === "mock" && <p className="small muted" style={{ marginTop: 12 }}>Environnement de démonstration : le parcours Stripe est simulé (aucune clé configurée).</p>}
       </section>
       <section className="panel" style={{ marginTop: 16 }}>
-        <h3>Comment sont calculés les frais ?</h3>
+        <h2 className="h3">Comment sont calculés les frais ?</h2>
         <ul className="small">
           <li>Acheteur : frais de protection de 5 % + 0,50 € (plafonnés à 15 €), affichés avant paiement.</li>
           <li>Vendeur : commission de 8 % retenue sur le versement.</li>

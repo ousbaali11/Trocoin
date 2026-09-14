@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { getBrowserPosition, suggestCities, type GeoSuggestion } from "@/lib/geo";
 
 /**
@@ -40,6 +40,7 @@ export function LocationPicker({
   id?: string;
   placeholder?: string;
 }) {
+  const panelId = useId();
   const [text, setText] = useState(value.mode === "all" ? "" : locationLabel(value, true));
   const [items, setItems] = useState<GeoSuggestion[]>([]);
   const [open, setOpen] = useState(false);
@@ -52,6 +53,13 @@ export function LocationPicker({
     setText(value.mode === "all" ? "" : locationLabel(value, true));
   }, [value]);
 
+  /** Ferme le panneau en remettant le libellé du lieu choisi dans le champ (le panneau garde le focus dans le champ pendant les clics). */
+  const close = () => {
+    setOpen(false);
+    if (value.mode !== "all") setText(locationLabel(value, true));
+    (root.current?.querySelector("input") as HTMLInputElement | null)?.blur();
+  };
+
   // Fermeture au clic en dehors (le panneau reste ouvert pendant le réglage du rayon)
   useEffect(() => {
     if (!open) return;
@@ -60,14 +68,8 @@ export function LocationPicker({
     };
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
-
-  /** Ferme le panneau en remettant le libellé du lieu choisi dans le champ (le panneau garde le focus dans le champ pendant les clics). */
-  const close = () => {
-    setOpen(false);
-    if (value.mode !== "all") setText(locationLabel(value, true));
-    (root.current?.querySelector("input") as HTMLInputElement | null)?.blur();
-  };
 
   const onInput = (t: string) => {
     setText(t);
@@ -124,7 +126,7 @@ export function LocationPicker({
   const stepIndex = hasPlace ? Math.max(0, RADIUS_STEPS.indexOf(value.radius as (typeof RADIUS_STEPS)[number])) : 2;
 
   return (
-    <div style={{ position: "relative" }} ref={root}>
+    <div style={{ position: "relative" }} ref={root} onKeyDown={(e) => { if (e.key === "Escape" && open) { e.preventDefault(); e.stopPropagation(); close(); } }}>
       <div style={{ position: "relative" }}>
         <input
           id={id}
@@ -141,8 +143,10 @@ export function LocationPicker({
           }}
           autoComplete="off"
           role="combobox"
-          aria-expanded={open}
           aria-autocomplete="list"
+          aria-expanded={open}
+          aria-haspopup="dialog"
+          aria-controls={panelId}
           aria-label="Localisation"
           style={{ paddingRight: hasPlace ? 40 : undefined }}
         />
@@ -153,21 +157,21 @@ export function LocationPicker({
         )}
       </div>
       {open && (
-        <div role="dialog" aria-label="Menu des localisations" onMouseDown={(e) => e.preventDefault()} style={{ position: "absolute", zIndex: 30, left: 0, right: 0, top: "100%", marginTop: 4, padding: 6, background: "var(--white)", border: "1px solid var(--line-soft)", borderRadius: "var(--radius-sm)", boxShadow: "var(--shadow-lg)", minWidth: 280 }}>
-          <ul role="listbox" style={{ margin: 0, padding: 0, listStyle: "none", maxHeight: 260, overflowY: "auto" }}>
+        <div role="dialog" id={panelId} aria-label="Menu des localisations" onMouseDown={(e) => e.preventDefault()} style={{ position: "absolute", zIndex: 30, left: 0, right: 0, top: "100%", marginTop: 4, padding: 6, background: "var(--white)", border: "1px solid var(--line-soft)", borderRadius: "var(--radius-sm)", boxShadow: "var(--shadow-lg)", minWidth: 280 }}>
+          <ul aria-label="Suggestions de localisation" style={{ margin: 0, padding: 0, listStyle: "none", maxHeight: 260, overflowY: "auto" }}>
             {!text.trim() && <li className="small muted" style={{ padding: "6px 10px 2px" }}>Suggestions</li>}
-            <li role="option" aria-selected={value.mode === "around"}>
-              <button type="button" onClick={pickAround} className="btn btn-ghost btn-sm" style={{ width: "100%", justifyContent: "flex-start", gap: 8 }}>
+            <li>
+              <button type="button" onClick={pickAround} aria-pressed={value.mode === "around"} className="btn btn-ghost btn-sm" style={{ width: "100%", justifyContent: "flex-start", gap: 8 }}>
                 <TargetIcon /> {AROUND_ME}
               </button>
             </li>
-            <li role="option" aria-selected={value.mode === "all"}>
-              <button type="button" onClick={pickAll} className="btn btn-ghost btn-sm" style={{ width: "100%", justifyContent: "flex-start", gap: 8 }}>
+            <li>
+              <button type="button" onClick={pickAll} aria-pressed={value.mode === "all"} className="btn btn-ghost btn-sm" style={{ width: "100%", justifyContent: "flex-start", gap: 8 }}>
                 <PinIcon /> {ALL_FRANCE}
               </button>
             </li>
             {items.map((s) => (
-              <li key={s.label + s.postcode} role="option" aria-selected={false}>
+              <li key={s.label + s.postcode}>
                 <button type="button" onClick={() => pickCity(s)} className="btn btn-ghost btn-sm" style={{ width: "100%", justifyContent: "flex-start", gap: 8 }}>
                   <PinIcon /> {s.label}
                 </button>

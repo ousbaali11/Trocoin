@@ -177,10 +177,11 @@ export default function ConversationPage() {
 
   return (
     <div className="panel" style={{ display: "flex", flexDirection: "column", height: "calc(100vh - var(--header-h) - 100px)", minHeight: 520, padding: 0, overflow: "hidden" }}>
+      <h1 className="sr-only">Conversation avec {conv.other?.displayName ?? "un membre"}{conv.listing ? ` à propos de ${conv.listing.title}` : ""}</h1>
       <header style={{ display: "flex", gap: 12, alignItems: "center", padding: "12px 16px", borderBottom: "1px solid var(--line-soft)" }}>
         <Link href="/compte/messages" className="btn btn-ghost btn-sm" aria-label="Retour">←</Link>
         {conv.listing && (
-          <Link href={`/annonces/${conv.listing.id}`} style={{ width: 44, height: 44, borderRadius: 6, overflow: "hidden", background: "var(--ivory-warm)", flexShrink: 0 }}>
+          <Link href={`/annonces/${conv.listing.id}`} aria-label={`Voir l'annonce ${conv.listing.title}`} style={{ width: 44, height: 44, borderRadius: 6, overflow: "hidden", background: "var(--ivory-warm)", flexShrink: 0 }}>
             {conv.listing.coverUrl && (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={mediaUrl(conv.listing.coverUrl)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
@@ -191,7 +192,7 @@ export default function ConversationPage() {
           <div className="row" style={{ gap: 8 }}>
             <strong>{conv.other?.displayName}</strong>
             {conv.other && !conv.other.deleted && <Link href={`/vendeurs/${conv.other.id}`} className="small">Profil</Link>}
-            <span className="small muted" title={live ? "Connexion temps réel active" : "Mode différé"}>{live ? "● en direct" : "○ différé"}</span>
+            <span className="small muted" title={live ? "Connexion temps réel active" : "Mode différé"}><span aria-hidden="true">{live ? "● " : "○ "}</span>{live ? "en direct" : "différé"}</span>
           </div>
           {conv.listing && (
             <Link href={`/annonces/${conv.listing.id}`} className="small muted" style={{ display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -206,7 +207,7 @@ export default function ConversationPage() {
         </div>
       </header>
 
-      <div ref={listRef} style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 8, background: "var(--bg)" }}>
+      <div ref={listRef} role="log" aria-live="polite" aria-label="Messages de la conversation" style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 8, background: "var(--bg)" }}>
         {messages.length === 0 && <p className="muted small" style={{ textAlign: "center" }}>Début de la conversation. Restez courtois et ne partagez pas vos coordonnées bancaires.</p>}
         {messages.map((m) => {
           const mine = m.senderId === user.id;
@@ -262,7 +263,7 @@ export default function ConversationPage() {
             </div>
             <form onSubmit={(e) => { e.preventDefault(); send(); }} className="row" style={{ flexWrap: "nowrap" }}>
               <label className="btn btn-outline btn-sm" title="Envoyer une photo" style={{ flexShrink: 0 }}>
-                📷
+                <span aria-hidden="true">📷</span><span className="sr-only">Envoyer une photo</span>
                 <input type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(e) => { if (e.target.files?.[0]) sendImage(e.target.files[0]); e.target.value = ""; }} />
               </label>
               {isBuyer && conv.listing?.status === "en_ligne" && (

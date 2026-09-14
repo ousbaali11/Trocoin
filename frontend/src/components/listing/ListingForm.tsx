@@ -212,6 +212,12 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
     }
   };
 
+  const moveTile = (list: "photos" | "pending", index: number, delta: -1 | 1) => {
+    const to = index + delta;
+    if (list === "photos") { if (to < 0 || to >= photos.length) return; reorderPhotos(moveInList(photos, index, to)); }
+    else { if (to < 0 || to >= pending.length) return; setPending((p) => moveInList(p, index, to)); }
+  };
+
   const tileProps = (list: "photos" | "pending", index: number) => ({
     draggable: true,
     onDragStart: () => setDragIndex({ list, index }),
@@ -336,15 +342,16 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
           <p className="muted">Jusqu&apos;à {MAX_PHOTOS} photos (JPEG, PNG, WEBP, 8 Mo max). Un recadrage vous est proposé à l&apos;ajout. La première est la photo de couverture : <strong>glissez-déposez</strong> pour réorganiser.</p>
           <label className="card" style={{ display: "grid", placeItems: "center", padding: 32, borderStyle: "dashed", cursor: "pointer", marginBottom: 16 }}
             onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); addFiles(e.dataTransfer.files); }}>
-            <input type="file" accept="image/jpeg,image/png,image/webp" multiple hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
+            {/* Le champ fichier reste accessible au clavier (rendu hors écran, pas masqué) */}
+            <input type="file" accept="image/jpeg,image/png,image/webp" multiple className="sr-only" aria-label="Choisir des photos" onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
             <span><strong>Cliquez pour choisir des photos</strong> ou glissez-les ici</span>
           </label>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10 }} role="list" aria-label="Photos de l'annonce">
             {photos.map((p, i) => (
-              <PhotoTile key={p.id} src={mediaUrl(p.url)!} cover={i === 0} onRemove={() => removePhoto(p)} {...tileProps("photos", i)} />
+              <PhotoTile key={p.id} src={mediaUrl(p.url)!} cover={i === 0} position={i + 1} onRemove={() => removePhoto(p)} onMove={(d) => moveTile("photos", i, d)} {...tileProps("photos", i)} />
             ))}
             {pending.map((f, i) => (
-              <PhotoTile key={f.name + i + f.size} src={URL.createObjectURL(f)} cover={photos.length === 0 && i === 0} pendingLabel="À envoyer" onCrop={() => setCropping({ file: f, index: i })} onRemove={() => setPending((p) => p.filter((_, j) => j !== i))} {...tileProps("pending", i)} />
+              <PhotoTile key={f.name + i + f.size} src={URL.createObjectURL(f)} cover={photos.length === 0 && i === 0} position={photos.length + i + 1} pendingLabel="À envoyer" onCrop={() => setCropping({ file: f, index: i })} onRemove={() => setPending((p) => p.filter((_, j) => j !== i))} onMove={(d) => moveTile("pending", i, d)} {...tileProps("pending", i)} />
             ))}
           </div>
           {photos.length + pending.length === 0 && <p className="hint" style={{ marginTop: 10 }}>Les annonces avec photo reçoivent beaucoup plus de contacts. Vous pourrez en ajouter plus tard.</p>}
@@ -428,21 +435,24 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
   );
 }
 
-function PhotoTile({ src, cover, pendingLabel, dragging, onCrop, onRemove, ...drag }: {
-  src: string; cover: boolean; pendingLabel?: string; dragging?: boolean; onCrop?: () => void; onRemove: () => void;
+function PhotoTile({ src, cover, pendingLabel, dragging, position, onCrop, onRemove, onMove, ...drag }: {
+  src: string; cover: boolean; pendingLabel?: string; dragging?: boolean; position: number; onCrop?: () => void; onRemove: () => void; onMove: (delta: -1 | 1) => void;
   draggable: boolean; onDragStart: () => void; onDragOver: (e: React.DragEvent) => void; onDrop: () => void; onDragEnd: () => void;
 }) {
   return (
-    <div {...drag} style={{ position: "relative", borderRadius: 8, overflow: "hidden", border: cover ? "2px solid var(--accent)" : "1px solid var(--line-soft)", background: "var(--ivory-warm)", opacity: dragging ? 0.5 : 1, cursor: "grab" }}>
+    <div {...drag} role="listitem" style={{ position: "relative", borderRadius: 8, overflow: "hidden", border: cover ? "2px solid var(--accent)" : "1px solid var(--line-soft)", background: "var(--ivory-warm)", opacity: dragging ? 0.5 : 1, cursor: "grab" }}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt="" style={{ width: "100%", aspectRatio: "4/3", objectFit: "cover", pointerEvents: "none" }} />
+      <img src={src} alt={`Photo ${position}${cover ? " (couverture)" : ""}`} style={{ width: "100%", aspectRatio: "4/3", objectFit: "cover", pointerEvents: "none" }} />
       {cover && <span className="pill pill-accent" style={{ position: "absolute", top: 6, left: 6 }}>Couverture</span>}
       {pendingLabel && <span className="pill" style={{ position: "absolute", top: 6, right: 6 }}>{pendingLabel}</span>}
       <div className="row" style={{ justifyContent: "space-between", padding: 4, background: "var(--white)" }}>
-        <span className="small muted" style={{ paddingLeft: 6 }} title="Glisser pour réordonner">⠿</span>
         <span>
-          {onCrop && <button type="button" className="btn btn-ghost btn-sm" onClick={onCrop} aria-label="Recadrer">✂ Recadrer</button>}
-          <button type="button" className="btn btn-ghost btn-sm" onClick={onRemove} aria-label="Supprimer" style={{ color: "var(--brick)" }}>✕</button>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => onMove(-1)} aria-label={`Avancer la photo ${position}`} title="Avancer" style={{ padding: "4px 6px" }}>◀</button>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => onMove(1)} aria-label={`Reculer la photo ${position}`} title="Reculer" style={{ padding: "4px 6px" }}>▶</button>
+        </span>
+        <span>
+          {onCrop && <button type="button" className="btn btn-ghost btn-sm" onClick={onCrop} aria-label={`Recadrer la photo ${position}`}>✂ Recadrer</button>}
+          <button type="button" className="btn btn-ghost btn-sm" onClick={onRemove} aria-label={`Supprimer la photo ${position}`} style={{ color: "var(--brick)" }}>✕</button>
         </span>
       </div>
     </div>

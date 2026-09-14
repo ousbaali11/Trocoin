@@ -29,7 +29,7 @@ export async function LegalPageView({ slug, eyebrow }: { slug: string; eyebrow: 
       <h1>{page.title}</h1>
       <p className="muted small">Dernière mise à jour : {formatDate(page.updatedAt)}</p>
       <div className="panel legal" dangerouslySetInnerHTML={{ __html: renderMarkdown(page.content) }} />
-      <style>{`.legal h2{font-size:1.25rem;margin-top:1.4em}.legal h3{font-size:1.05rem;margin-top:1.2em}.legal ul{padding-left:20px}.legal p{margin:0 0 .9em}`}</style>
+      <style>{`.legal h2{font-size:1.25rem;margin-top:1.4em}.legal h2:first-child{margin-top:0}.legal h3{font-size:1.05rem;margin-top:1.2em}.legal ul{padding-left:20px}.legal p{margin:0 0 .9em}`}</style>
     </div>
   );
 }

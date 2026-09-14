@@ -66,7 +66,7 @@ export default function DashboardPage() {
 
       <section className="panel">
         <div className="row spread" style={{ marginBottom: 12 }}>
-          <h3 style={{ margin: 0 }}>Mes dernières annonces</h3>
+          <h2 className="h3" style={{ margin: 0 }}>Mes dernières annonces</h2>
           <Link href="/compte/annonces" className="small">Tout voir</Link>
         </div>
         {listings.length === 0 ? (
@@ -90,7 +90,7 @@ export default function DashboardPage() {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }} className="dash-cols">
         <section className="panel">
           <div className="row spread" style={{ marginBottom: 12 }}>
-            <h3 style={{ margin: 0 }}>Messages récents</h3>
+            <h2 className="h3" style={{ margin: 0 }}>Messages récents</h2>
             <Link href="/compte/messages" className="small">Boîte de réception</Link>
           </div>
           {convs.length === 0 ? <p className="muted" style={{ margin: 0 }}>Aucune conversation.</p> : (
@@ -109,7 +109,7 @@ export default function DashboardPage() {
         </section>
         <section className="panel">
           <div className="row spread" style={{ marginBottom: 12 }}>
-            <h3 style={{ margin: 0 }}>Notifications</h3>
+            <h2 className="h3" style={{ margin: 0 }}>Notifications</h2>
             <Link href="/compte/notifications" className="small">Tout voir</Link>
           </div>
           {notifs.length === 0 ? <p className="muted" style={{ margin: 0 }}>Rien de nouveau.</p> : (

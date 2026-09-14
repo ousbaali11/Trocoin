@@ -10,7 +10,7 @@
   grid-template-columns: 1.6fr 1fr 1fr 1fr;
   gap: 32px;
 }
-.grid h4 {
+.grid h2 {
   color: var(--ink);
   font-family: var(--font-body);
   font-size: 0.9rem;

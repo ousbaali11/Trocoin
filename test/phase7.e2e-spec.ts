@@ -45,6 +45,20 @@ describe('Phase 7 : images retraitées, changement de mot de passe', () => {
     expect(out.exif).toBeUndefined();
     expect(out.icc).toBeUndefined();
     expect(stored.length).toBeLessThan(big.length);
+    // Vignette 480 px pour les listes : même format, nettement plus légère, sans métadonnées
+    const thumbUrl: string = res.body[0].thumbUrl;
+    expect(thumbUrl).toMatch(/-min\.jpg$/);
+    const thumb = await fs.readFile(join(UPLOAD_DIR, thumbUrl.replace('/uploads/', '')));
+    const tm = await sharp(thumb).metadata();
+    expect(Math.max(tm.width!, tm.height!)).toBe(480);
+    expect(tm.exif).toBeUndefined();
+    expect(thumb.length).toBeLessThan(stored.length / 3);
+    // La carte d'annonce pointe vers la vignette, la fiche vers l'original
+    const card = await request(server).get(`/listings?seller=${user.id}&page_size=5`).expect(200);
+    expect(card.body.items.find((l: { id: string }) => l.id === listing.id).coverUrl).toBe(thumbUrl);
+    const detail = await request(server).get(`/listings/${listing.id}`).expect(200);
+    expect(detail.body.photos[0].url).toBe(url);
+    expect(detail.body.photos[0].thumbUrl).toBe(thumbUrl);
     // (le service statique /uploads est monté dans main.ts, hors du module de test : lecture directe sur disque ci-dessus)
   });
 

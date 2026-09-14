@@ -370,3 +370,113 @@ déploiement Render **ignoré** les deux fois comme prévu ; run 34844951580 ent
 worker, base partagée, le projet mobile passe avant les mutations de données de l'achat et de
 l'admin) ; le paiement est simulé (`PAYMENT_PROVIDER=mock`), comme en bêta ; pas de Firefox/WebKit
 ni de test de la carte Leaflet.
+
+
+---
+
+## 11. Accessibilité et performance — 14 septembre 2026, soir
+
+Périmètre : site public et espace compte (le back-office garde son identité, non audité ici). Aucun
+des quatre points de configuration différés n'a été touché.
+
+### 11.1 Méthode
+
+- **Automatique** : axe-core (règles WCAG 2.0/2.1 A et AA + bonnes pratiques) sur 28 pages (12
+  publiques, 16 du compte), en 1280 px, sur le front construit ; Lighthouse 12 (mobile simulé et
+  desktop) sur accueil, résultats et détail d'annonce ; arbre d'accessibilité (ordre de lecture d'un
+  lecteur d'écran) des parcours recherche, dépôt et messagerie.
+- **Manuel, reproduit dans les tests** : navigation au clavier seul sur les parcours critiques
+  (`e2e/08-clavier.spec.ts`), lecture de l'arbre d'accessibilité.
+- **Surveillance continue** : `e2e/07-accessibilite.spec.ts` rejoue axe sur 26 pages et états
+  (panneau de localisation ouvert, boîte de dialogue, étapes du dépôt) à chaque push, zéro violation
+  tolérée ; `08-clavier` vérifie les parcours clavier. Les deux ont **échoué sur du vrai** à leur
+  première exécution (rôles ARIA invalides du sélecteur de communes, liens sans nom, `aria-label` sur
+  des `span`) avant les corrections : ils détectent bien ce qu'ils surveillent.
+
+### 11.2 Constat initial (axe, avant corrections)
+
+| Règle | Impact | Occurrences | Cause |
+|---|---|---|---|
+| link-name | sérieux | 72 (3 par page) | liens « Mes recherches / Favoris / Messages » de l'en-tête sans texte visible sous 1400 px |
+| button-name | critique | 24 | bouton « Catégories » de l'en-tête (texte masqué) |
+| heading-order | modéré | 24 + 12 | h4 du pied de page après un h1 ; sections h3 sous h1 dans le compte et l'annonce |
+| document-title, html-has-lang, landmark, region | sérieux / modéré | 3 pages | pages à rendu serveur (annonce, vendeur, CGU) en erreur 500 pendant l'audit (API injoignable depuis le processus Next lancé à la main : diagnostic ajouté, voir 11.4) ; page 404 hors des points de repère |
+| color-contrast | — | **0** | la palette (texte #1f2933 / #616e7c sur blanc et #f5f7f9, accent #0f7b5f, pastilles) est conforme AA sans changement |
+| image-alt | — | **0** | images décoratives en `alt=""` dans des liens nommés, photo principale décrite |
+
+Après une première passe, axe a encore révélé : boutons imbriqués dans des `role="option"`
+(sélecteur de communes et de localisation), champ texte portant des attributs ARIA non permis,
+liens-images des cartes « Mes annonces » sans nom, `aria-label` sur un `span` sans rôle (note en
+étoiles), vignettes du dépôt dans une liste sans `listitem`, page conversation sans h1, en-tête de
+colonne vide dans le tableau des transactions.
+
+### 11.3 Corrections
+
+**Clavier et lecteur d'écran**
+- Lien d'évitement « Aller au contenu » (premier élément tabulable, visible au focus) vers
+  `<main id="contenu">`.
+- En-tête : noms accessibles des liens et du bouton Catégories (avec le nombre de non-lus), Échap
+  referme les menus et rend le focus au bouton, `aria-controls` sur les menus.
+- Boîte de dialogue commune (`Modal`) : titre relié (`aria-labelledby`), focus placé sur le
+  premier champ à l'ouverture, tabulation confinée, Échap, retour du focus à l'élément d'origine.
+  Utilisée par toutes les modales du site (contact, achat, signalement, confirmations…).
+- Sélecteur de localisation : `combobox` ouvrant une fenêtre (`aria-haspopup="dialog"`,
+  `aria-controls`), suggestions en boutons, Échap depuis le champ **ou** le panneau, curseur de rayon
+  avec `aria-valuetext` (« 1 km ») réglable aux flèches. Saisie de commune du dépôt : `combobox` +
+  `listbox` dont les options sont focusables et se valident à Entrée ou Espace, fermeture au départ
+  du focus (plus de `setTimeout` sur le blur).
+- Zones vivantes : nombre de résultats (`aria-live="polite"`), journal de conversation
+  (`role="log"`), notifications éphémères (`role="status"`), compteur de photos de la galerie.
+- Messagerie : h1 (masqué visuellement) « Conversation avec … à propos de … », lien de l'annonce
+  nommé, bouton photo nommé (pictogramme masqué), indicateur « en direct » lisible.
+- Dépôt : cases « oui/non » reliées à leur libellé, champ fichier atteignable au clavier (rendu
+  hors écran au lieu de `hidden`), vignettes en liste avec boutons « Avancer / Reculer la photo n »
+  (réordonnancement sans souris, en plus du glisser-déposer), `alt` « Photo n (couverture) ».
+- Hiérarchie : sections du compte et de l'annonce en h2 (même taille qu'avant via `.h3`), pied de
+  page en h2, Markdown des pages CMS et de l'aide rendu en h2/h3 sous le h1 ; page 404 dans la mise
+  en page du site (en-tête, `main`, pied de page) ; note en étoiles en `role="img"`.
+- Cartes d'annonce : `alt` = titre, `decoding="async"`, image principale de la galerie en
+  `fetchpriority="high"`.
+
+**Performance**
+- Vignettes : chaque photo d'annonce est stockée en deux tailles (original ≤ 1600 px, vignette
+  480 px, `thumbUrl`, migration `PhotoThumbnails`) ; les listes, l'accueil et les miniatures de la
+  galerie chargent la vignette (≈ 10 fois plus légère, test `phase7`). Les photos antérieures
+  gardent l'original (champ nul).
+- Carte de l'annonce chargée seulement à l'approche de la section (`IntersectionObserver`,
+  120 px) : ≈ 270 Ko de tuiles et de code Leaflet en moins au chargement initial.
+- Résultats de recherche : squelette de secours à la hauteur de la page, compteur à hauteur
+  réservée → décalage cumulé (CLS) de 0,22 à 0.
+- Cause technique d'un échec de fetch côté serveur journalisée (`[api] … injoignable : ECONNREFUSED`)
+  au lieu d'un message muet.
+
+### 11.4 Scores Lighthouse (front construit, API locale, réseau simulé « 4G lent » en mobile)
+
+| Page | Écran | Avant : perf / a11y / BP / SEO | Après : perf / a11y / BP / SEO | LCP après | CLS avant → après | Poids avant → après |
+|---|---|---|---|---|---|---|
+| Accueil | mobile | 97 / 100 / 96 / 100 | **99 / 100 / 100 / 100** | 2,2 s | 0 → 0 | 296 → 304 Ko |
+| Accueil | desktop | 77 / 100 / 100 / 100 | **83 / 100 / 100 / 100** | 2,9 s | 0,002 → 0,002 | 350 → 362 Ko |
+| Résultats | mobile | 86 / 100 / 100 / 100 | **93 / 100 / 100 / 100** | 3,2 s | **0,22 → 0** | 298 → 291 Ko |
+| Résultats | desktop | 76 / 100 / 100 / 100 | **77 / 100 / 100 / 100** | 3,2 s | **0,135 → 0,002** | 348 → 343 Ko |
+| Annonce | mobile | 96 / 99 / 100 / 100 | **97 / 100 / 100 / 100** | 2,5 s | 0 → 0 | **577 → 305 Ko** |
+| Annonce | desktop | 81 / 99 / 100 / 100 | **85 / 100 / 100 / 100** | 2,5 s | 0,019 → 0,019 | **703 → 363 Ko** |
+
+Le score « bonnes pratiques » de l'accueil (96 → 100) tenait à une erreur d'hydratation React
+(date relative « à l'instant » calculée à des instants différents côté serveur et client) : corrigée
+(`suppressHydrationWarning` sur la date).
+
+**Ce qui reste et pourquoi** : le LCP desktop (2,5–3,2 s en simulation) vient du CSS bloquant
+(≈ 300 ms, trois feuilles Next) et du JavaScript de la page ; le gain suivant demande l'inline du CSS
+critique ou une réduction du bundle client des pages (composants de recherche et de formulaire en
+client), chantier disproportionné pour une bêta entre proches. Les images de production n'étaient
+pas mesurables ici (base de test sans photos) ; la vignette 480 px s'applique aux nouveaux envois.
+
+### 11.5 Non couvert et limites
+
+- Lecteur d'écran réel (NVDA, VoiceOver) non lancé : l'arbre d'accessibilité et la navigation
+  clavier ont été vérifiés par Playwright, ce qui couvre la structure et les noms, pas la prosodie
+  ni les raccourcis propres à chaque lecteur.
+- Glisser-déposer des photos non accessible en soi (les boutons Avancer / Reculer le remplacent).
+- Carte Leaflet : non utilisable au clavier ni au lecteur d'écran (contenu redondant avec la ville
+  affichée en texte).
+- Back-office : non audité (identité distincte, usage interne).

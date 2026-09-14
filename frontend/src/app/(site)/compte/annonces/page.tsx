@@ -96,7 +96,7 @@ export default function MesAnnoncesPage() {
             const st = LISTING_STATUS_LABELS[l.status];
             return (
               <div key={l.id} className="card" style={{ display: "grid", gridTemplateColumns: "96px 1fr", gap: 14, alignItems: "start" }}>
-                <Link href={`/annonces/${l.id}`} style={{ aspectRatio: "4/3", background: "var(--ivory-warm)", borderRadius: 6, overflow: "hidden" }}>
+                <Link href={`/annonces/${l.id}`} aria-label={`Voir l'annonce ${l.title}`} style={{ aspectRatio: "4/3", background: "var(--ivory-warm)", borderRadius: 6, overflow: "hidden" }}>
                   {l.coverUrl && (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={mediaUrl(l.coverUrl)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />

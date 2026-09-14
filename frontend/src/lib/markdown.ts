@@ -32,7 +32,7 @@ export function renderMarkdown(src: string): string {
     const h = line.match(/^(#{1,4})\s+(.*)$/);
     if (h) {
       flushPara(); flushList();
-      const level = Math.min(h[1].length + 1, 4);
+      const level = Math.min(Math.max(h[1].length, 2), 4); // # et ## → h2 (sous le h1 de la page), ### → h3
       out.push(`<h${level}>${inline(h[2])}</h${level}>`);
       continue;
     }

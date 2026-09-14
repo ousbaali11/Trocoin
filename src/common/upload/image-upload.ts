@@ -56,13 +56,16 @@ export function sniffImageExtension(head: Buffer): 'jpg' | 'png' | 'webp' | null
  * PNG compressé, WEBP 82 %). Une image illisible (fichier corrompu, bombe de
  * décompression) est rejetée.
  */
-export async function processImage(src: string | Buffer, ext: 'jpg' | 'png' | 'webp'): Promise<Buffer> {
+export const THUMB_SIDE = 480;
+
+export async function processImage(src: string | Buffer, ext: 'jpg' | 'png' | 'webp', maxSide = MAX_IMAGE_SIDE): Promise<Buffer> {
   let pipeline = sharp(src, { failOn: 'error', limitInputPixels: 50_000_000 })
     .rotate() // applique l'orientation EXIF avant de la supprimer
-    .resize({ width: MAX_IMAGE_SIDE, height: MAX_IMAGE_SIDE, fit: 'inside', withoutEnlargement: true });
-  if (ext === 'jpg') pipeline = pipeline.jpeg({ quality: 82, mozjpeg: true });
+    .resize({ width: maxSide, height: maxSide, fit: 'inside', withoutEnlargement: true });
+  const thumb = maxSide < MAX_IMAGE_SIDE;
+  if (ext === 'jpg') pipeline = pipeline.jpeg({ quality: thumb ? 74 : 82, mozjpeg: true });
   else if (ext === 'png') pipeline = pipeline.png({ compressionLevel: 9, palette: false });
-  else pipeline = pipeline.webp({ quality: 82 });
+  else pipeline = pipeline.webp({ quality: thumb ? 74 : 82 });
   try {
     return await pipeline.toBuffer(); // pas de .withMetadata() : EXIF/GPS/ICC/XMP purgés
   } catch {
@@ -78,8 +81,20 @@ export async function processImage(src: string | Buffer, ext: 'jpg' | 'png' | 'w
 export async function finalizeUploadedImages(
   files: Array<{ path: string; filename: string }>,
 ): Promise<string[]> {
+  return (await finalizeUploadedImagesWithThumbs(files, false)).map((r) => r.url);
+}
+
+/**
+ * Variante pour les photos d'annonce : produit aussi une vignette (480 px, même format)
+ * utilisée par les listes et les miniatures, pour ne pas charger l'original dans les grilles.
+ */
+export async function finalizeUploadedImagesWithThumbs(
+  files: Array<{ path: string; filename: string }>,
+  withThumbs = true,
+): Promise<Array<{ url: string; thumbUrl: string | null }>> {
   const storage = getStorage();
   const urls: string[] = [];
+  const out: Array<{ url: string; thumbUrl: string | null }> = [];
   try {
     for (const file of files) {
       // Défense en profondeur : le chemin doit rester dans UPLOAD_DIR
@@ -97,10 +112,18 @@ export async function finalizeUploadedImages(
       if (!ext) throw new BadRequestException("Le fichier envoyé n'est pas une image JPEG, PNG ou WEBP valide.");
 
       const processed = await processImage(safePath, ext);
-      const key = publicUploadPath(`${basename(file.filename, '.tmp')}.${ext}`);
-      urls.push(await storage.put(key, processed, CONTENT_TYPES[ext]));
+      const base = basename(file.filename, '.tmp');
+      const url = await storage.put(publicUploadPath(`${base}.${ext}`), processed, CONTENT_TYPES[ext]);
+      urls.push(url);
+      let thumbUrl: string | null = null;
+      if (withThumbs) {
+        const thumb = await processImage(processed, ext, THUMB_SIDE);
+        thumbUrl = await storage.put(publicUploadPath(`${base}-min.${ext}`), thumb, CONTENT_TYPES[ext]);
+        urls.push(thumbUrl);
+      }
+      out.push({ url, thumbUrl });
     }
-    return urls;
+    return out;
   } catch (err) {
     await Promise.all(urls.map((u) => storage.delete(u).catch(() => undefined)));
     throw err;

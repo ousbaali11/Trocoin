@@ -54,7 +54,7 @@ export default function TransactionsPage() {
           <div className="table-wrap panel only-desktop" style={{ padding: 8 }}>
             <table className="table">
               <thead>
-                <tr><th>Annonce</th><th>Rôle</th><th>Montant</th><th>Remise</th><th>Statut</th><th>Date</th><th></th></tr>
+                <tr><th>Annonce</th><th>Rôle</th><th>Montant</th><th>Remise</th><th>Statut</th><th>Date</th><th><span className="sr-only">Actions</span></th></tr>
               </thead>
               <tbody>
                 {visible.map((t) => {

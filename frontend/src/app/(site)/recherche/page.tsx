@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function Page() {
   return (
-    <Suspense fallback={<div className="container page"><div className="skeleton" style={{ height: 400 }} /></div>}>
+    <Suspense fallback={<div className="container page" style={{ minHeight: "calc(100vh - var(--header-h))" }} aria-busy="true"><div className="skeleton" style={{ height: 44, width: 320, marginBottom: 22 }} /><div className="skeleton" style={{ height: 480 }} /></div>}>
       <SearchPage />
     </Suspense>
   );

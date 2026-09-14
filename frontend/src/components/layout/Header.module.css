@@ -1,3 +1,19 @@
+/* Lien d'évitement : visible uniquement au clavier (focus) */
+.skip {
+  position: absolute;
+  left: 8px;
+  top: -60px;
+  z-index: 100;
+  background: var(--accent);
+  color: #fff;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-weight: 700;
+}
+.skip:focus {
+  top: 8px;
+  text-decoration: none;
+}
 .header {
   background: var(--white);
   color: var(--ink);

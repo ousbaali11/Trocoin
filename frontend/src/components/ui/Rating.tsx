@@ -1,7 +1,7 @@
 export function Rating({ value, count, size = 14 }: { value: number; count?: number; size?: number }) {
   const rounded = Math.round(value * 2) / 2;
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }} aria-label={count ? `${value} sur 5, ${count} avis` : "Aucun avis"}>
+    <span role="img" style={{ display: "inline-flex", alignItems: "center", gap: 4 }} aria-label={count ? `${value} sur 5, ${count} avis` : "Aucun avis"}>
       {[1, 2, 3, 4, 5].map((i) => (
         <svg key={i} width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" fill={i <= rounded ? "var(--ochre)" : i - 0.5 === rounded ? "url(#half)" : "var(--line)"}>
           <defs>
