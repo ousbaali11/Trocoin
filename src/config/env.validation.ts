@@ -31,7 +31,7 @@ export function validateEnv(env: Record<string, unknown>): Record<string, unknow
     if ((env.NOTIFICATION_PROVIDER || 'mock') === 'mock') errors.push('NOTIFICATION_PROVIDER=mock est interdit en production (utilisez "none" : notifications in-app uniquement).');
     if (env.DB_TYPE !== 'postgres') errors.push('DB_TYPE doit valoir "postgres" en production.');
     if (env.THROTTLE_DISABLED === 'true') errors.push('THROTTLE_DISABLED=true est interdit en production.');
-    if ((env.EMAIL_PROVIDER || 'mock') === 'mock') errors.push('EMAIL_PROVIDER=mock est interdit en production (utilisez "none" tant qu\'aucun fournisseur n\'est configuré : la réinitialisation par e-mail répondra 503 et l\'admin pourra réinitialiser).');
+    if (env.EMAIL_PROVIDER === 'mock') errors.push('EMAIL_PROVIDER=mock est interdit en production (utilisez "none" tant qu\'aucun fournisseur n\'est configuré : la réinitialisation par e-mail répondra 503 et l\'admin pourra réinitialiser).');
   }
 
   // Fournisseur SMS réel : les identifiants doivent être présents dès le démarrage,
@@ -55,7 +55,7 @@ export function validateEnv(env: Record<string, unknown>): Record<string, unknow
     resend: ['RESEND_API_KEY', 'EMAIL_FROM'],
     brevo: ['BREVO_API_KEY', 'EMAIL_FROM'],
   };
-  const emailProvider = (env.EMAIL_PROVIDER as string | undefined) || 'mock';
+  const emailProvider = (env.EMAIL_PROVIDER as string | undefined) || (prod ? 'none' : 'mock');
   if (!['mock', 'none'].includes(emailProvider)) {
     const required = emailRequired[emailProvider];
     if (!required) errors.push(`EMAIL_PROVIDER="${emailProvider}" inconnu (valeurs : mock, none, resend, brevo).`);

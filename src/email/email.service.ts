@@ -56,7 +56,8 @@ export class EmailService {
   private lastResetLinksForDev = new Map<string, string>();
 
   constructor(private config: ConfigService) {
-    this.providerName = this.config.get<string>('EMAIL_PROVIDER') || 'mock';
+    // Défaut : mock hors production, none en production (jamais de mock en prod, et pas de panne au déploiement si la variable manque)
+    this.providerName = this.config.get<string>('EMAIL_PROVIDER') || (isProduction() ? 'none' : 'mock');
     this.isMock = this.providerName === 'mock' && !isProduction();
     if (this.isMock) this.provider = new MockEmailProvider();
     else if (this.providerName === 'none' || this.providerName === 'mock') this.provider = null;
