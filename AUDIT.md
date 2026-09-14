@@ -722,12 +722,15 @@ fin de section. Aucun secret n'est écrit dans ce dépôt.
   envoyé reste lisible par `GET /dev/last-reset-link/:email` pour vérifier un envoi réel.
 - Tests : `phase6` +2 (requête exacte vers un faux Resend ; 403 → `EmailDeliveryError`).
 - **Réel** [exécuté] : `POST /auth/password/forgot` avec `EMAIL_PROVIDER=resend` → appel réel
-  authentifié ; Resend répond **403 « You can only send testing emails to your own email address
-  (trocoin2026@gmail.com) »** : la clé est celle du compte Resend `trocoin2026@gmail.com`, et
-  l'expéditeur de test `onboarding@resend.dev` n'autorise que cette adresse. L'envoi vers
-  `ousbaali11@gmail.com` est donc impossible en l'état ; l'envoi vers l'adresse du compte n'a pas
-  été exécuté (action réelle non autorisée par la session). **Pour écrire à tous : vérifier un
-  domaine chez Resend et mettre `EMAIL_FROM` sur ce domaine** (`DEPLOIEMENT.md` §5b).
+  authentifié. Vers `ousbaali11@gmail.com`, Resend répond **403 « You can only send testing
+  emails to your own email address (trocoin2026@gmail.com) »** : la clé est celle du compte Resend
+  `trocoin2026@gmail.com` et l'expéditeur de test `onboarding@resend.dev` n'autorise que cette
+  adresse. **Envoi réel vers l'adresse du compte, autorisé explicitement le 15 septembre** : accepté
+  par Resend (identifiant de message `41867516-d468-4476-9633-8e908522c38f`), lien reçu par le
+  serveur identique à celui envoyé, page `/reinitialiser` → 200, réinitialisation acceptée,
+  connexion avec le nouveau mot de passe réussie, réutilisation du lien refusée (400). **Pour écrire
+  à tous les utilisateurs : vérifier un domaine chez Resend et mettre `EMAIL_FROM` sur ce domaine**
+  (`DEPLOIEMENT.md` §5b).
 
 ### 15.4 Paiement — Stripe (mode test)
 
