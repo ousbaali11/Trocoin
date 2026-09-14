@@ -136,7 +136,8 @@ jobs:
           if [ -z "$RENDER_DEPLOY_HOOK" ]; then echo "present=false" >> "$GITHUB_OUTPUT"; echo "::warning::RENDER_DEPLOY_HOOK absent : pas de déploiement automatique (voir DEPLOIEMENT.md §2b)"; else echo "present=true" >> "$GITHUB_OUTPUT"; fi
       - name: Déclencher le déploiement
         if: steps.hook.outputs.present == 'true'
-        run: curl -fsS -X POST "$RENDER_DEPLOY_HOOK" -o /dev/null -w "hook Render : HTTP %{http_code}
+        run: |
+          curl -fsS -X POST "$RENDER_DEPLOY_HOOK" -o /dev/null -w "hook Render, HTTP %{http_code}
 "
       - name: Attendre la mise en ligne de cette version
         if: steps.hook.outputs.present == 'true'
