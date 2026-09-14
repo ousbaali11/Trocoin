@@ -608,6 +608,7 @@ Relevé filtre par filtre de 9 catégories leboncoin (Voitures, Motos, Ventes im
 - Suite complète : **74/74** sur SQLite et **74/74** sur PostgreSQL (PGlite, migrations seules).
 - Navigateur (local) : `/mot-de-passe-oublie` → message neutre + lien de dev → `/reinitialiser` → œil (type `text`, « Masquer le mot de passe ») → succès → redirection `/connexion` → connexion API avec le nouveau mot de passe OK ; back-office : bouton → mot de passe temporaire affiché ; `/recherche` : suggestions dans l'ordre leboncoin, village choisi, rayon 5 km par défaut, flèche → 10 km dans l'URL, position 0 → `?city=…` ; mobile 375 px : œil 44 px, menu de localisation lisible.
 - `tsc` API + front : 0 erreur ; `next build` (URL de production) : succès, routes `/mot-de-passe-oublie` et `/reinitialiser` présentes.
+- Push `e4addca` puis `08384b9` → CI GitHub **verte** (run 34791613051). Vercel : `/mot-de-passe-oublie`, `/reinitialiser`, `/recherche`, accueil → 200, nouveau champ « Ajouter une localisation » et nouvelle accroche en ligne. **Render : toujours pas de déploiement automatique** ; au moment du push, Render exécutait `f9a5927` (`/health` → `1.1.0`), déployé à la main plus tôt : la route `/auth/password/forgot` répond 404 en production tant que `08384b9` n'est pas déployé manuellement. Les 3 migrations (dont `password_reset_tokens`) sont déjà appliquées sur Neon (démarrage de contrôle en mode production depuis le poste).
 
 ### 12.6 Ce qu'il manque de votre côté pour l'e-mail réel
 
