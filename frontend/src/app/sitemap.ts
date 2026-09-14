@@ -1,12 +1,14 @@
 import type { MetadataRoute } from "next";
 import { api, SITE_URL } from "@/lib/api";
 import type { CategoryNode, SearchResult } from "@/lib/types";
+import { HELP_ARTICLES } from "@/lib/help-content";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const entries: MetadataRoute.Sitemap = [
     { url: SITE_URL, changeFrequency: "hourly", priority: 1 },
     { url: `${SITE_URL}/recherche`, changeFrequency: "hourly", priority: 0.9 },
     { url: `${SITE_URL}/aide`, changeFrequency: "monthly", priority: 0.4 },
+    ...HELP_ARTICLES.map((a) => ({ url: `${SITE_URL}/aide/${a.slug}`, changeFrequency: "monthly" as const, priority: 0.3 })),
     { url: `${SITE_URL}/a-propos`, changeFrequency: "monthly", priority: 0.3 },
     { url: `${SITE_URL}/cgu`, changeFrequency: "yearly", priority: 0.2 },
     { url: `${SITE_URL}/confidentialite`, changeFrequency: "yearly", priority: 0.2 },

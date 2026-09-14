@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useToast } from "@/lib/toast-context";
+import { useConfirm } from "@/lib/confirm-context";
 import { formatDate, formatEuros } from "@/lib/format";
 import type { Entitlements, Plan } from "@/lib/types";
 
 export default function FormulePage() {
   const { toast } = useToast();
+  const confirm = useConfirm();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [ent, setEnt] = useState<Entitlements | null>(null);
   const [busy, setBusy] = useState(false);
@@ -32,7 +34,7 @@ export default function FormulePage() {
     }
   };
   const cancel = async () => {
-    if (!confirm("Résilier votre formule ?")) return;
+    if (!(await confirm({ title: "Résilier votre formule ?", text: "Vous repasserez sur les conditions du compte sans formule à la fin de la période en cours.", confirmLabel: "Résilier", danger: true }))) return;
     try {
       await api("/users/me/subscription", { method: "DELETE" });
       toast("Formule résiliée.", "success");

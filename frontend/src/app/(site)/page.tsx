@@ -4,6 +4,7 @@ import type { CategoryNode, SearchResult } from "@/lib/types";
 import { ListingCard } from "@/components/ui/ListingCard";
 import { CategoryIcon } from "@/components/ui/CategoryIcon";
 import { HomeSearch } from "@/components/home/HomeSearch";
+import { RecentlyViewed } from "@/components/home/RecentlyViewed";
 import styles from "./home.module.css";
 
 export const revalidate = 60;
@@ -45,6 +46,8 @@ export default async function HomePage() {
           </nav>
         </div>
       </section>
+
+      <RecentlyViewed />
 
       <section className="container" style={{ marginTop: 40 }}>
         <div className="page-head">
@@ -104,7 +107,7 @@ export default async function HomePage() {
               Badge Pro, page boutique, import de catalogue, gestion à plusieurs, statistiques. {free ? "Toutes les fonctionnalités sont gratuites pendant le lancement." : "Formules à partir de 29 € par mois."}
             </p>
           </div>
-          <Link href="/aide#pro" className="btn btn-primary btn-lg">Découvrir l&apos;offre pro</Link>
+          <Link href="/aide/espace-pro" className="btn btn-primary btn-lg">Découvrir l&apos;offre pro</Link>
         </div>
       </section>
     </>

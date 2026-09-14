@@ -10,6 +10,7 @@ import { formatEuros, REPORT_REASON_LABELS } from "@/lib/format";
 import type { ListingDetail, Quote } from "@/lib/types";
 import { FavoriteButton } from "@/components/ui/FavoriteButton";
 import { Modal } from "@/components/ui/Modal";
+import { ShareMenu } from "@/components/ui/ShareMenu";
 
 export function ListingActions({ listing }: { listing: ListingDetail }) {
   const { user, requireAuth } = useAuth();
@@ -73,26 +74,13 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
     }
   };
 
-  const share = async () => {
-    const url = window.location.href;
-    try {
-      if (navigator.share) await navigator.share({ title: listing.title, url });
-      else {
-        await navigator.clipboard.writeText(url);
-        toast("Lien copié dans le presse-papiers.", "success");
-      }
-    } catch {
-      /* annulé */
-    }
-  };
-
   if (isOwner) {
     return (
       <div className="card stack">
         <strong>C&apos;est votre annonce</strong>
         <Link href={`/compte/annonces/${listing.id}/modifier`} className="btn btn-primary btn-block">Modifier l&apos;annonce</Link>
         <Link href="/compte/annonces" className="btn btn-outline btn-block">Gérer mes annonces</Link>
-        <button className="btn btn-ghost btn-sm" onClick={share}>Partager</button>
+        <ShareMenu title={listing.title} text="Regarde cette annonce sur Trocoin" compact />
       </div>
     );
   }
@@ -119,7 +107,7 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
       )}
       <div className="row" style={{ justifyContent: "space-between" }}>
         <FavoriteButton listingId={listing.id} />
-        <button className="btn btn-ghost btn-sm" onClick={share}>Partager</button>
+        <ShareMenu title={listing.title} text="Regarde cette annonce sur Trocoin" compact />
         <button className="btn btn-ghost btn-sm" onClick={() => (user ? setReportOpen(true) : requireAuth(`/annonces/${listing.id}`))} style={{ color: "var(--brick)" }}>
           Signaler
         </button>

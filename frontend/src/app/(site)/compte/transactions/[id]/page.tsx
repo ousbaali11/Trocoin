@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useToast } from "@/lib/toast-context";
+import { useConfirm } from "@/lib/confirm-context";
 import { DELIVERY_LABELS, formatDateTime, formatEuros, TX_STATUS_LABELS } from "@/lib/format";
 import type { Review, Transaction } from "@/lib/types";
 import { Modal } from "@/components/ui/Modal";
@@ -12,6 +13,7 @@ import { Modal } from "@/components/ui/Modal";
 export default function TransactionPage() {
   const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
+  const confirm = useConfirm();
   const [tx, setTx] = useState<Transaction | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tracking, setTracking] = useState("");
@@ -123,14 +125,14 @@ export default function TransactionPage() {
               <button className="btn btn-primary" disabled={busy || (tx.deliveryMethod !== "main_propre" && tracking.trim().length < 4)} onClick={() => run(() => api(`/transactions/${tx.id}/ship`, { method: "POST", body: { trackingNumber: tracking.trim() || undefined } }), tx.deliveryMethod === "main_propre" ? "Acheteur prévenu." : "Expédition enregistrée.")}>
                 {tx.deliveryMethod === "main_propre" ? "Je suis prêt pour la remise" : "Confirmer l'expédition"}
               </button>
-              <button className="btn btn-ghost" disabled={busy} onClick={() => confirm("Annuler la vente et rembourser l'acheteur ?") && run(() => api(`/transactions/${tx.id}/cancel`, { method: "POST" }), "Vente annulée, acheteur remboursé.")}>Article indisponible : annuler</button>
+              <button className="btn btn-ghost" disabled={busy} onClick={async () => (await confirm({ title: "Annuler la vente ?", text: "L'acheteur sera intégralement remboursé et l'annonce restera en ligne.", confirmLabel: "Annuler la vente", danger: true })) && run(() => api(`/transactions/${tx.id}/cancel`, { method: "POST" }), "Vente annulée, acheteur remboursé.")}>Article indisponible : annuler</button>
             </div>
           </div>
         )}
         {tx.status === "sequestre" && buyer && (
           <div className="stack">
             <p className="small muted" style={{ margin: 0 }}>Le vendeur doit maintenant {tx.deliveryMethod === "main_propre" ? "organiser la remise avec vous" : "expédier l'article"}. Vous pouvez annuler tant qu&apos;il n&apos;a pas expédié.</p>
-            <button className="btn btn-ghost" style={{ alignSelf: "flex-start" }} disabled={busy} onClick={() => confirm("Annuler l'achat ? Vous serez intégralement remboursé.") && run(() => api(`/transactions/${tx.id}/cancel`, { method: "POST" }), "Achat annulé, remboursement en cours.")}>Annuler mon achat</button>
+            <button className="btn btn-ghost" style={{ alignSelf: "flex-start" }} disabled={busy} onClick={async () => (await confirm({ title: "Annuler mon achat ?", text: "Vous serez intégralement remboursé, frais compris.", confirmLabel: "Annuler l'achat", danger: true })) && run(() => api(`/transactions/${tx.id}/cancel`, { method: "POST" }), "Achat annulé, remboursement en cours.")}>Annuler mon achat</button>
           </div>
         )}
         {["sequestre", "livree"].includes(tx.status) && buyer && (
@@ -142,7 +144,7 @@ export default function TransactionPage() {
               </div>
             )}
             <div className="row">
-              <button className="btn btn-primary" disabled={busy} onClick={() => confirm("Confirmer la réception ? Le paiement sera versé au vendeur.") && run(() => api(`/transactions/${tx.id}/confirm-delivery`, { method: "POST" }), "Réception confirmée, merci !")}>J&apos;ai bien reçu l&apos;article</button>
+              <button className="btn btn-primary" disabled={busy} onClick={async () => (await confirm({ title: "Confirmer la réception ?", text: "Le paiement sera versé au vendeur. Vérifiez l'article avant de confirmer : cette action est définitive.", confirmLabel: "J'ai bien reçu l'article" })) && run(() => api(`/transactions/${tx.id}/confirm-delivery`, { method: "POST" }), "Réception confirmée, merci !")}>J&apos;ai bien reçu l&apos;article</button>
               <button className="btn btn-outline" disabled={busy} onClick={() => setDisputeOpen(true)} style={{ color: "var(--brick)" }}>Un problème ? Ouvrir un litige</button>
             </div>
           </div>

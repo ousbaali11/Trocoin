@@ -10,13 +10,14 @@ import { Rating } from "@/components/ui/Rating";
 
 export default function AvisPage() {
   const { user } = useAuth();
-  const [received, setReceived] = useState<Review[]>([]);
-  const [given, setGiven] = useState<Review[]>([]);
+  const [received, setReceived] = useState<Review[] | null>(null);
+  const [given, setGiven] = useState<Review[] | null>(null);
   const [tab, setTab] = useState<"received" | "given">("received");
   useEffect(() => {
-    api<Review[]>("/users/me/reviews-received").then(setReceived).catch(() => null);
-    api<Review[]>("/users/me/reviews-given").then(setGiven).catch(() => null);
+    api<Review[]>("/users/me/reviews-received").then(setReceived).catch(() => setReceived([]));
+    api<Review[]>("/users/me/reviews-given").then(setGiven).catch(() => setGiven([]));
   }, []);
+  if (received === null || given === null) return <div><h1>Avis</h1><div className="skeleton" style={{ height: 160 }} /></div>;
   const list = tab === "received" ? received : given;
   return (
     <div>

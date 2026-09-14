@@ -146,7 +146,8 @@ export class UsersController {
   /** Données visibles par l'utilisateur sur lui-même (jamais le SIRET masqué ni les IDs Stripe internes). */
   private sanitizeSelf(user: User | null) {
     if (!user) return user;
-    const { stripeAccountId, ...safe } = user;
-    return { ...safe, stripeConnected: !!stripeAccountId };
+    const { stripeAccountId, notificationPrefs, ...safe } = user;
+    void notificationPrefs;
+    return { ...safe, stripeConnected: !!stripeAccountId, notificationPrefs: UsersService.prefsOf(user) };
   }
 }

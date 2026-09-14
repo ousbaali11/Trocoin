@@ -57,7 +57,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           <button className="a-btn" style={{ marginTop: 8 }} onClick={logout}>Se déconnecter</button>
         </div>
       </aside>
-      <div>
+      <div className="admin-body">
         <div className="admin-topbar">CONSOLE D&apos;ADMINISTRATION — toutes les actions sont journalisées et traçables</div>
         <main className="admin-main">{children}</main>
       </div>

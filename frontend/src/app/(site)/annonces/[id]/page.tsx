@@ -39,6 +39,10 @@ export default async function ListingPage({ params }: { params: Promise<{ id: st
   const listing = await getListing(id);
   if (!listing) notFound();
   const similar = await api<ListingCardType[]>(`/listings/${id}/similar`, { token: null, revalidate: 120 }).catch(() => []);
+  // Autres annonces du même vendeur (comme « Les annonces de ce pro » sur leboncoin)
+  const fromSeller = listing.seller && !listing.seller.deleted
+    ? await api<{ items: ListingCardType[] }>(`/listings?seller=${listing.seller.id}&page_size=5`, { token: null, revalidate: 120 }).then((r) => r.items.filter((l) => l.id !== listing.id).slice(0, 4)).catch(() => [])
+    : [];
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -135,11 +139,23 @@ export default async function ListingPage({ params }: { params: Promise<{ id: st
               <li>Privilégiez le paiement sécurisé ou la remise en main propre dans un lieu public.</li>
               <li>Méfiez-vous des prix anormalement bas et des demandes de coordonnées.</li>
             </ul>
-            <Link href="/aide#securite" style={{ display: "inline-block", marginTop: 8 }}>Tous nos conseils</Link>
+            <Link href="/aide/conseils-de-securite" style={{ display: "inline-block", marginTop: 8 }}>Tous nos conseils</Link>
           </div>
           <p className="small muted" style={{ margin: 0 }}>Référence : {listing.id.slice(0, 8)} · {listing.viewsCount} vue{listing.viewsCount > 1 ? "s" : ""} · {listing.favoritesCount} favori{listing.favoritesCount > 1 ? "s" : ""}</p>
         </aside>
       </div>
+
+      {fromSeller.length > 0 && listing.seller && (
+        <section style={{ marginTop: 48 }}>
+          <div className="page-head">
+            <h2 style={{ margin: 0 }}>{listing.seller.accountType === "professionnel" ? "Les annonces de cette boutique" : "Les autres annonces de ce vendeur"}</h2>
+            <Link href={`/vendeurs/${listing.seller.id}`} className="btn btn-outline btn-sm">Tout voir</Link>
+          </div>
+          <div className="grid-cards">
+            {fromSeller.map((l) => <ListingCard key={l.id} listing={l} />)}
+          </div>
+        </section>
+      )}
 
       {similar.length > 0 && (
         <section style={{ marginTop: 48 }}>

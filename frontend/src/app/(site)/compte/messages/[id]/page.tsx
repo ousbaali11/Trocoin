@@ -257,7 +257,7 @@ export default function ConversationPage() {
           <>
             <div className="row" style={{ marginBottom: 8, gap: 6 }}>
               {conv.quickReplies.map((q) => (
-                <button key={q} type="button" className="pill" style={{ cursor: "pointer", border: 0 }} onClick={() => send(q)}>{q}</button>
+                <button key={q} type="button" className="pill" style={{ cursor: "pointer", border: 0, whiteSpace: "normal", textAlign: "left" }} onClick={() => send(q)}>{q}</button>
               ))}
             </div>
             <form onSubmit={(e) => { e.preventDefault(); send(); }} className="row" style={{ flexWrap: "nowrap" }}>

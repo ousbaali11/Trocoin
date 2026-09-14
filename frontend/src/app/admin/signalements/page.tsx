@@ -16,11 +16,13 @@ export default function AdminReportsPage() {
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [actions, setActions] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     const p = new URLSearchParams({ page: String(page), page_size: "25" });
     if (status) p.set("status", status);
-    return api<Paged<Report>>(`/admin/reports?${p}`).then(setData).catch(() => null);
+    setError(null);
+    return api<Paged<Report>>(`/admin/reports?${p}`).then(setData).catch((e) => setError((e as Error).message));
   }, [status, page]);
   useEffect(() => {
     load();
@@ -47,6 +49,8 @@ export default function AdminReportsPage() {
           <option value="ouvert">Ouverts</option><option value="traite">Traités</option><option value="rejete">Rejetés</option><option value="">Tous</option>
         </select>
       </div>
+      {error && <div className="a-alert danger">{error}</div>}
+      {!data && !error && <div className="a-panel a-loading">Chargement…</div>}
       <div style={{ display: "grid", gap: 12 }}>
         {data?.items.map((r) => {
           const s = statusPill(r.status);
@@ -83,7 +87,7 @@ export default function AdminReportsPage() {
             </div>
           );
         })}
-        {data && data.items.length === 0 && <div className="a-panel mono">Aucun signalement.</div>}
+        {data && data.items.length === 0 && <div className="a-panel mono">{status === "ouvert" ? "Aucun signalement ouvert : la file est vide." : "Aucun signalement dans cet état."}</div>}
       </div>
       {data && <AdminPager page={data.page} pageSize={data.pageSize} total={data.total} onChange={setPage} />}
     </div>

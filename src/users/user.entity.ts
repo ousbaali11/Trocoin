@@ -119,6 +119,10 @@ export class User {
   @Column({ default: false })
   notifySms: boolean;
 
+  /** Préférences granulaires (famille × canal), JSON sérialisé ; null = défauts. Voir notifications/notification-prefs.ts. */
+  @Column({ type: 'text', nullable: true })
+  notificationPrefs?: string | null;
+
   @CreateDateColumn({ type: DATE_TYPE })
   createdAt: Date;
 

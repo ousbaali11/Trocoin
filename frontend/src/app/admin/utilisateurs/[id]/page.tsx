@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useToast } from "@/lib/toast-context";
+import { useConfirm } from "@/lib/confirm-context";
 import { formatDate, formatDateTime, formatEuros, REPORT_REASON_LABELS } from "@/lib/format";
 import type { ListingCard, Report, Review, Transaction } from "@/lib/types";
 import { statusPill } from "@/components/admin/AdminPager";
@@ -40,11 +41,13 @@ interface AdminUserDetail {
 export default function AdminUserPage() {
   const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
+  const confirm = useConfirm();
   const [u, setU] = useState<AdminUserDetail | null>(null);
   const [form, setForm] = useState({ displayName: "", city: "", postalCode: "", accountType: "particulier", identityVerified: false, shopName: "", siret: "" });
   const [reason, setReason] = useState("");
   const [temp, setTemp] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(
     () =>
@@ -53,8 +56,8 @@ export default function AdminUserPage() {
           setU(d);
           setForm({ displayName: d.displayName, city: d.city ?? "", postalCode: d.postalCode ?? "", accountType: d.accountType, identityVerified: d.identityVerified, shopName: d.shopName ?? "", siret: d.siret ?? "" });
         })
-        .catch((e) => toast(e.message, "error")),
-    [id, toast],
+        .catch((e) => setError(e.message)),
+    [id],
   );
   useEffect(() => {
     load();
@@ -73,6 +76,7 @@ export default function AdminUserPage() {
     }
   };
 
+  if (error) return <div><Link href="/admin/utilisateurs" className="mono">← Utilisateurs</Link><div className="a-alert danger" style={{ marginTop: 12 }}>{error}</div></div>;
   if (!u) return <div className="skeleton" style={{ height: 300 }} />;
   const t = statusPill(u.accountType);
 
@@ -97,7 +101,7 @@ export default function AdminUserPage() {
           ) : (
             <>
               <textarea className="a-textarea" placeholder="Motif de suspension (transmis à l'utilisateur)" value={reason} onChange={(e) => setReason(e.target.value)} />
-              <button className="a-btn danger" style={{ marginTop: 8 }} disabled={busy || u.deleted || reason.trim().length < 3} onClick={() => confirm("Suspendre ce compte ? Ses annonces seront mises en pause.") && patch({ suspended: true, suspensionReason: reason.trim() }, "Compte suspendu.")}>Suspendre le compte</button>
+              <button className="a-btn danger" style={{ marginTop: 8 }} disabled={busy || u.deleted || reason.trim().length < 3} onClick={async () => (await confirm({ title: "Suspendre ce compte ?", text: "Ses annonces seront mises en pause et le motif lui sera transmis.", confirmLabel: "Suspendre", danger: true })) && patch({ suspended: true, suspensionReason: reason.trim() }, "Compte suspendu.")}>Suspendre le compte</button>
             </>
           )}
           <h3>Mot de passe</h3>
@@ -108,7 +112,7 @@ export default function AdminUserPage() {
             </div>
           ) : (
             <button className="a-btn" disabled={busy || u.deleted} onClick={async () => {
-              if (!confirm("Générer un mot de passe temporaire et déconnecter toutes les sessions de cet utilisateur ?")) return;
+              if (!(await confirm({ title: "Réinitialiser le mot de passe ?", text: "Un mot de passe temporaire sera généré et toutes les sessions de cet utilisateur seront déconnectées.", confirmLabel: "Générer" }))) return;
               setBusy(true);
               try {
                 const r = await api<{ temporaryPassword: string }>(`/admin/users/${u.id}/reset-password`, { method: "POST" });

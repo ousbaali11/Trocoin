@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import { User } from '../users/user.entity';
+import { UsersService } from '../users/users.service';
 import { Notification, NotificationType } from './notification.entity';
 
 export interface NotificationPayload {
@@ -74,10 +75,13 @@ export class NotificationsService {
       const user = await this.usersRepo.findOne({ where: { id: userId } });
       if (!user || user.deletedAt) return null;
       const saved = await this.notificationsRepo.save(this.notificationsRepo.create({ userId, ...payload }));
-      if (user.notifyPush) await this.provider.push(user, payload).catch((e) => this.logger.warn(`push: ${e.message}`));
-      if (user.notifySms && ['transaction', 'moderation'].includes(payload.type)) {
+      // Préférences granulaires (famille × canal) : l'in-app est toujours enregistré ci-dessus.
+      const prefs = UsersService.prefsOf(user)[payload.type];
+      if (prefs.push) await this.provider.push(user, payload).catch((e) => this.logger.warn(`push: ${e.message}`));
+      if (prefs.sms) {
         await this.provider.sms(user, `${payload.title} — ${payload.body ?? ''}`).catch((e) => this.logger.warn(`sms: ${e.message}`));
       }
+      // prefs.email : canal enregistré, diffusion branchée avec le fournisseur d'e-mail (différé par choix).
       return saved;
     } catch (err) {
       this.logger.error(`Notification impossible pour ${userId}: ${(err as Error).message}`);

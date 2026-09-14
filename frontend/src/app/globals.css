@@ -467,6 +467,25 @@ textarea {
   justify-content: space-between;
 }
 
+/* ---------- Affichage conditionnel mobile / grand écran ---------- */
+.only-mobile {
+  display: none !important;
+}
+@media (max-width: 720px) {
+  .only-desktop {
+    display: none !important;
+  }
+  .only-mobile {
+    display: flex !important;
+  }
+  .page {
+    padding: 18px 0 48px;
+  }
+  .page-head {
+    margin-bottom: 16px;
+  }
+}
+
 /* ---------- Leaflet ---------- */
 .leaflet-container {
   font-family: var(--font-body);

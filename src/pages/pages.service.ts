@@ -13,7 +13,7 @@ export const DEFAULT_PAGES: Array<Pick<LegalPage, 'slug' | 'title' | 'content'>>
 Trocoin met à disposition une plateforme de mise en relation entre vendeurs et acheteurs de biens et services, à destination des personnes physiques et morales situées en France. Trocoin n'est pas partie aux transactions conclues entre membres, sauf dans le cadre du service de paiement sécurisé décrit à l'article 6.
 
 ## 2. Inscription
-L'inscription requiert un numéro de téléphone mobile français (+33 6 ou +33 7) vérifié par code SMS. Un seul compte par numéro. L'utilisateur doit être majeur ou disposer de l'autorisation de son représentant légal. Les professionnels doivent renseigner un SIRET valide.
+L'inscription requiert un numéro de téléphone mobile français (+33 6 ou +33 7), une adresse e-mail et un mot de passe. Un seul compte par numéro de mobile ; Trocoin peut demander à tout moment une vérification de ce numéro par code SMS. L'utilisateur doit être majeur ou disposer de l'autorisation de son représentant légal. Les professionnels doivent renseigner un SIRET valide.
 
 ## 3. Contenu des annonces
 L'utilisateur est seul responsable du contenu publié. Les annonces doivent être rédigées en français, décrire fidèlement le bien, être classées dans la bonne catégorie et localisées au lieu réel du bien. Sont interdits : les armes, le tabac et les produits de vapotage, les médicaments et stupéfiants, les contrefaçons, les documents officiels, les espèces protégées, les contenus à caractère sexuel, les offres de crédit ou d'investissement, ainsi que tout bien ou service dont la vente est interdite par la loi française.
@@ -45,7 +45,7 @@ Les présentes conditions sont soumises au droit français. Le consommateur peut
     content: `_Modèle à compléter (responsable de traitement, DPO, sous-traitants) avant ouverture publique._
 
 ## Données collectées
-- **Compte** : numéro de mobile (identifiant), pseudo, ville et code postal, photo de profil facultative, SIRET pour les professionnels.
+- **Compte** : numéro de mobile, adresse e-mail, nom d'utilisateur, prénom et nom, mot de passe (haché, jamais lisible), ville et code postal, photo de profil facultative, raison sociale et SIRET pour les professionnels.
 - **Annonces** : textes, photos, prix, localisation approximative.
 - **Échanges** : messages de la messagerie interne, signalements.
 - **Transactions** : montants, statuts, identifiants de paiement (les données de carte ne transitent jamais par Trocoin).
@@ -55,7 +55,7 @@ Les présentes conditions sont soumises au droit français. Le consommateur peut
 Exécution du contrat, obligation légale (conservation des transactions, lutte contre la fraude), intérêt légitime (sécurité, modération), consentement (notifications).
 
 ## Durées de conservation
-Données de compte : jusqu'à suppression du compte, puis anonymisation immédiate. Codes SMS : 5 minutes. Journaux de sécurité : 12 mois. Transactions : 10 ans.
+Données de compte : jusqu'à suppression du compte, puis anonymisation immédiate. Codes de vérification (SMS, réinitialisation de mot de passe) : de 5 minutes à 1 heure. Journaux de sécurité : 12 mois. Transactions : 10 ans.
 
 ## Vos droits
 Accès, rectification, portabilité (export depuis vos paramètres), effacement (suppression de compte), opposition et limitation. Réclamation possible auprès de la CNIL.
@@ -70,7 +70,7 @@ Trocoin utilise uniquement un stockage local strictement nécessaire (jeton de s
 [Raison sociale] — [forme juridique, capital] — RCS [ville] [numéro] — Siège social : [adresse] — Directeur de la publication : [nom].
 
 ## Hébergement
-[Hébergeur, adresse] — données hébergées dans l'Union européenne.
+[Hébergeur, adresse] — [localisation des serveurs à préciser avant l'ouverture publique].
 
 ## Médiation de la consommation
 Conformément aux articles L.611-1 et suivants du Code de la consommation, le consommateur peut recourir gratuitement au médiateur suivant : [nom et coordonnées].
@@ -90,7 +90,7 @@ Trocoin est né d'un constat simple : vendre un objet devrait prendre deux minut
 ## Nos engagements
 - **Gratuit pour les particuliers.** Déposer une annonce ne coûte rien.
 - **Transparent.** Les frais éventuels sont affichés avant chaque paiement, jamais après.
-- **Souverain.** Données hébergées dans l'Union européenne, conformité RGPD, export et suppression de compte en un clic.
+- **Respectueux de vos données.** Conformité RGPD, export et suppression de compte en un clic, aucun traceur publicitaire.
 - **Responsable.** Liste noire des objets interdits, vérification des annonces sensibles, signalement en un geste.`,
   },
 ];
@@ -99,9 +99,19 @@ Trocoin est né d'un constat simple : vendre un objet devrait prendre deux minut
 export class PagesService implements OnModuleInit {
   constructor(@InjectRepository(LegalPage) private repo: Repository<LegalPage>) {}
 
+  /**
+   * Amorce les pages manquantes et remet à jour celles qui n'ont jamais été
+   * éditées depuis le back-office (updatedBy vide) : le texte par défaut du
+   * code fait foi tant qu'un administrateur ne l'a pas repris.
+   */
   async onModuleInit() {
     for (const p of DEFAULT_PAGES) {
-      if (!(await this.repo.findOne({ where: { slug: p.slug } }))) await this.repo.save(this.repo.create(p));
+      const existing = await this.repo.findOne({ where: { slug: p.slug } });
+      if (!existing) {
+        await this.repo.save(this.repo.create(p));
+      } else if (!existing.updatedBy && (existing.title !== p.title || existing.content !== p.content)) {
+        await this.repo.update(p.slug, { title: p.title, content: p.content });
+      }
     }
   }
 

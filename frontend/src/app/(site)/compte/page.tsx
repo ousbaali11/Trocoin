@@ -20,13 +20,14 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [listings, setListings] = useState<ListingCard[]>([]);
   const [convs, setConvs] = useState<ConversationSummary[]>([]);
+  const [convCount, setConvCount] = useState(0);
   const [txs, setTxs] = useState<Transaction[]>([]);
   const [notifs, setNotifs] = useState<Notification[]>([]);
 
   useEffect(() => {
     api<Stats>("/listings/mine/stats").then(setStats).catch(() => null);
     api<ListingCard[]>("/listings/mine").then((l) => setListings(l.slice(0, 4))).catch(() => null);
-    api<ConversationSummary[]>("/conversations").then((c) => setConvs(c.slice(0, 4))).catch(() => null);
+    api<ConversationSummary[]>("/conversations").then((c) => { setConvCount(c.length); setConvs(c.slice(0, 4)); }).catch(() => null);
     api<Transaction[]>("/transactions/mine").then((t) => setTxs(t.filter((x) => ["sequestre", "livree", "litige"].includes(x.status)))).catch(() => null);
     api<Notification[]>("/notifications").then((n) => setNotifs(n.filter((x) => !x.readAt).slice(0, 4))).catch(() => null);
   }, []);
@@ -60,7 +61,7 @@ export default function DashboardPage() {
         <Stat label="Annonces en ligne" value={stats?.byStatus.en_ligne ?? 0} href="/compte/annonces" />
         <Stat label="Vues cumulées" value={stats?.views ?? 0} />
         <Stat label="Mises en favori" value={stats?.favorites ?? 0} />
-        <Stat label="Conversations" value={convs.length} href="/compte/messages" />
+        <Stat label="Conversations" value={convCount} href="/compte/messages" />
       </div>
 
       <section className="panel">

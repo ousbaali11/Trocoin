@@ -109,6 +109,15 @@ export interface SearchResult {
   pageSize: number;
 }
 
+export type NotificationChannelPrefs = { push: boolean; sms: boolean; email: boolean };
+export interface NotificationPrefs {
+  message: NotificationChannelPrefs;
+  transaction: NotificationChannelPrefs;
+  alerte_recherche: NotificationChannelPrefs;
+  moderation: NotificationChannelPrefs;
+  systeme: NotificationChannelPrefs;
+}
+
 export interface Me {
   id: string;
   phoneNumber: string;
@@ -139,6 +148,8 @@ export interface Me {
   identityVerified: boolean;
   notifyPush: boolean;
   notifySms: boolean;
+  /** Préférences effectives par famille d'évènement et canal (voir Paramètres → Notifications). */
+  notificationPrefs?: NotificationPrefs;
   createdAt: string;
   suspendedAt?: string | null;
 }

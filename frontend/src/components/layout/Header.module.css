@@ -320,3 +320,14 @@
     align-items: center;
   }
 }
+
+@media (max-width: 400px) {
+  /* Très petits écrans : logo réduit pour garder logo + compte + menu sur une seule ligne */
+  .logo > span {
+    font-size: 1.2rem !important;
+    gap: 6px !important;
+  }
+  .inner {
+    gap: 6px;
+  }
+}

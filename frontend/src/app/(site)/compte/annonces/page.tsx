@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api, mediaUrl } from "@/lib/api";
 import { useToast } from "@/lib/toast-context";
+import { useConfirm } from "@/lib/confirm-context";
 import { formatDate, formatPrice, LISTING_STATUS_LABELS } from "@/lib/format";
 import type { Entitlements, ListingCard, ListingStatus } from "@/lib/types";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -19,6 +20,7 @@ const TABS: Array<{ key: string; label: string; statuses: ListingStatus[] }> = [
 
 export default function MesAnnoncesPage() {
   const { toast } = useToast();
+  const confirm = useConfirm();
   const [listings, setListings] = useState<ListingCard[] | null>(null);
   const [ent, setEnt] = useState<Entitlements | null>(null);
   const [tab, setTab] = useState("all");
@@ -44,9 +46,13 @@ export default function MesAnnoncesPage() {
   const duplicate = (id: string) => act(() => api(`/listings/${id}/duplicate`, { method: "POST" }), "Brouillon créé à partir de l'annonce.");
   const promote = (id: string, type: "boost" | "urgent") =>
     act(() => api(`/listings/${id}/promote`, { method: "POST", body: { type } }), type === "boost" ? "Annonce remontée en tête des résultats pour 7 jours." : "Macaron « Urgent » activé pour 7 jours.");
-  const remove = (id: string) => {
-    if (!confirm("Supprimer définitivement cette annonce ?")) return;
+  const remove = async (id: string) => {
+    if (!(await confirm({ title: "Supprimer cette annonce ?", text: "L'annonce, ses photos et ses statistiques seront définitivement supprimées.", confirmLabel: "Supprimer", danger: true }))) return;
     act(() => api(`/listings/${id}`, { method: "DELETE" }), "Annonce supprimée.");
+  };
+  const markSold = async (id: string) => {
+    if (!(await confirm({ title: "Marquer comme vendue ?", text: "L'annonce sera retirée des résultats. Vous pourrez la remettre en ligne depuis l'onglet « Vendues / refusées ».", confirmLabel: "Marquer vendue" }))) return;
+    setStatus(id, "vendue", "Annonce marquée comme vendue.");
   };
 
   const current = TABS.find((t) => t.key === tab)!;
@@ -118,7 +124,7 @@ export default function MesAnnoncesPage() {
                       <>
                         {!l.isBoosted && <button className="btn btn-ghost btn-sm" onClick={() => promote(l.id, "boost")} title="Remonter en tête des résultats pendant 7 jours">⬆ Mettre en avant{free ? " (gratuit)" : ""}</button>}
                         {!l.isUrgent && <button className="btn btn-ghost btn-sm" onClick={() => promote(l.id, "urgent")} title="Afficher le macaron Urgent pendant 7 jours">⚡ Urgent{free ? " (gratuit)" : ""}</button>}
-                        <button className="btn btn-ghost btn-sm" onClick={() => setStatus(l.id, "vendue", "Annonce marquée comme vendue.")}>Vendue</button>
+                        <button className="btn btn-ghost btn-sm" onClick={() => markSold(l.id)}>Vendue</button>
                         <button className="btn btn-ghost btn-sm" onClick={() => setStatus(l.id, "desactivee", "Annonce mise en pause.")}>Mettre en pause</button>
                       </>
                     )}

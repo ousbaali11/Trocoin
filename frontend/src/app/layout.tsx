@@ -3,6 +3,7 @@ import { Fraunces, Public_Sans } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
 import { ToastProvider } from "@/lib/toast-context";
+import { ConfirmProvider } from "@/lib/confirm-context";
 import { SITE_URL } from "@/lib/api";
 
 const publicSans = Public_Sans({ subsets: ["latin"], variable: "--font-public-sans", display: "swap" });
@@ -22,7 +23,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="fr" className={`${publicSans.variable} ${fraunces.variable}`}>
       <body>
         <AuthProvider>
-          <ToastProvider>{children}</ToastProvider>
+          <ToastProvider>
+            <ConfirmProvider>{children}</ConfirmProvider>
+          </ToastProvider>
         </AuthProvider>
       </body>
     </html>

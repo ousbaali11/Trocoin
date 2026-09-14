@@ -1,0 +1,69 @@
+/* Navigation du compte : colonne fixe sur grand écran, bandeau horizontal défilant sur mobile
+   (sinon 13 liens empilés repoussent le contenu sous l'écran). */
+.nav {
+  position: sticky;
+  top: calc(var(--header-h) + 16px);
+  padding: 10px;
+}
+.who {
+  padding: 8px 12px 12px;
+  border-bottom: 1px solid var(--line-soft);
+  margin-bottom: 6px;
+}
+.link {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 6px;
+  font-weight: 500;
+  font-size: 0.93rem;
+  min-height: 38px;
+  white-space: nowrap;
+}
+.link:hover {
+  background: var(--ivory-warm);
+  text-decoration: none;
+}
+.active {
+  font-weight: 700;
+  background: var(--accent-tint);
+  color: var(--accent-dark);
+}
+.active:hover {
+  background: var(--accent-tint);
+}
+.deposit {
+  margin-top: 10px;
+}
+@media (max-width: 860px) {
+  .nav {
+    position: static;
+    padding: 8px 6px;
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .nav::-webkit-scrollbar {
+    display: none;
+  }
+  .who,
+  .deposit {
+    display: none;
+  }
+  .link {
+    flex: 0 0 auto;
+    padding: 7px 12px;
+    min-height: 36px;
+    font-size: 0.88rem;
+    border: 1px solid var(--line-soft);
+    border-radius: 999px;
+    background: var(--white);
+  }
+  .active {
+    border-color: var(--accent);
+  }
+}

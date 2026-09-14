@@ -22,8 +22,11 @@ français, SIRET vérifié au registre public), connexion e-mail ou username + m
 passe oublié (parcours complet, **envoi d'e-mail non branché**), changement de mot de passe,
 réinitialisation par l'admin, œil sur les champs mot de passe, sessions révocables, messagerie,
 favoris, alertes, avis, signalements, back-office complet, CMS légal, photos retraitées
-(EXIF/GPS supprimés, ≤ 1600 px, plafond par compte), CI GitHub (85 tests sur SQLite et sur
-PostgreSQL 16, image Docker).
+(EXIF/GPS supprimés, ≤ 1600 px, plafond par compte), CI GitHub (94 tests sur SQLite et sur
+PostgreSQL 16, image Docker). Depuis le tour « polish » du 14 septembre après-midi (§9) : centre
+d'aide structuré, partage d'annonce, autres annonces du vendeur, reprise des consultations sur
+l'accueil, préférences de notification par famille et canal, navigation compte et console admin
+utilisables sur mobile, boîte de confirmation unique.
 
 **Ce qui est en place dans le code, testé, mais pas activé en production par choix (bêta entre
 proches, décision du 14 septembre, voir §6) :** e-mail transactionnel (Resend/Brevo), stockage
@@ -78,9 +81,10 @@ Synthèse par domaine (le détail filtre par filtre et famille par famille est e
 | Compte | SMS/e-mail, pro avec SIRET | Formulaire particulier/pro, SIRET vérifié au registre, mot de passe, username | Pas de connexion sociale ; téléphone non vérifié (différé) |
 | Dépôt | Champs par catégorie, exemple de titre, photos, brouillon | Idem : 60 exemples de titre, schémas alignés (voir ci-dessous), 10 photos retraitées, brouillon, import CSV/XML, multi-utilisateurs pro, prix moyen constaté, fiche complète | Listes dépendantes marque → modèle → finition (référentiel constructeur absent) |
 | Recherche | Mots-clés, localisation (Autour de moi / Toute la France / commune + rayon), filtres, tri, carte, sauvegarde | Identique, paliers de rayon exacts (0/1/5/10/20/30/50/100/200 km, 5 par défaut), plein texte français, dons/échanges en un clic | Historique des localisations ; arrondissements « toute la ville » |
-| Annonce | Galerie, critères, vendeur, similaires, signalement | Identique + badge « Fiche complète » | — |
+| Annonce | Galerie, critères, vendeur, similaires, annonces du pro, partage, signalement | Identique + badge « Fiche complète », menu Partager (lien, WhatsApp, e-mail, Facebook, X, natif), « autres annonces de ce vendeur » | — |
 | Messagerie / transaction | Messagerie, paiement sécurisé, livraison | Messagerie temps réel, offres de prix, photos ; paiement **désactivé** | [différé] paiement ; pas d'étiquettes transporteur |
 | Confiance / modération | Vérifications, modération | Pré-modération mots-clés, file admin, signalements, suspension, audit ; SIRET vérifié | Pas de vérification d'identité ni de téléphone |
+| Aide / notifications / RGPD | Centre d'aide structuré, préférences de notification, export | Centre d'aide (6 rubriques, 22 articles, recherche), préférences famille × canal, export JSON | E-mail enregistré mais non envoyé (différé) |
 | Pro | Boutique, formules, stats | Vitrine, formules (monétisation off), import, multi-comptes, stats | Facturation réelle (différé) |
 
 **Familles, champs et filtres — état après ce tour** (12 familles) :
@@ -189,7 +193,7 @@ ouverture publique :**
 7. Sauvegarde automatisée : workflow prêt, à activer avec deux secrets (`DEPLOIEMENT.md` §6) ; test de restauration à faire une fois ; Sentry alimenté (DSN).
 
 **Confort / après ouverture**
-8. Relevé manuel des 6 panneaux de filtres leboncoin non observés (Matériel pro, Famille,
+8. Canaux exacts du menu « Partager » de leboncoin à observer depuis un navigateur normal (bandeau cookies) ; relevé manuel des 6 panneaux de filtres leboncoin non observés (Matériel pro, Famille,
    Loisirs, Vacances, Services, Animaux) et alignement fin.
 9. Listes marque → modèle pour les véhicules ; historique des localisations ; arrondissements
     groupés.
@@ -217,3 +221,93 @@ Le SIRET au registre est confirmé actif en production : un SIRET inconnu est re
 - Push `99549d4` puis correctifs YAML `3b8c5ef` → `ce7723d` (le nouveau job de déploiement avait deux erreurs de syntaxe YAML, détectées par GitHub puis validées localement avec js-yaml). Run **34830238107 vert** : 5 jobs — API SQLite (85 tests, audit 0 vulnérabilité), API PostgreSQL 16 (85 tests, 6 migrations), front (`next build`), image Docker (sharp/libvips chargés dans l'image), **« Déploiement Render (deploy hook) + preuve /health » exécuté** : il a constaté l'absence du secret `RENDER_DEPLOY_HOOK` et affiché l'avertissement prévu, sans déployer.
 - Vercel : déploiement réussi ; `/connexion` (lien « Mot de passe oublié ? », bouton œil), `/inscription` (deux boutons œil de 44 px), `/mot-de-passe-oublie`, `/reinitialiser` vérifiés en ligne dans le navigateur.
 - Render : **toujours le build de la phase 8, version 1.1.0** (`/health`), donc ni le SIRET au registre, ni le stockage S3, ni Redis, ni la version 1.2.0 ne sont en ligne. Preuve du point 0 impossible sans l'une des deux actions de votre côté (§5) ; dès que le secret existe, le prochain push déploie et le job CI vérifie `/health` = version du `package.json`. À défaut, un Manual Deploy de `ce7723d` met l'API à jour (la migration `SiretVerified` s'exécutera au démarrage).
+
+
+---
+
+## 9. Tour « polish » du 14 septembre 2026 (après-midi) — revue page par page
+
+Méthode : chaque page ouverte dans le navigateur, connecté avec un compte administrateur sur des
+données locales représentatives (27 annonces, conversation, transaction, favori, historique,
+recherche sauvegardée créés pour l'occasion), en **375 px** (mobile) puis à la largeur du panneau
+(~800 px) ; mesure automatique du débordement horizontal (`scrollWidth`) sur les 35 pages ;
+lecture du code de chaque page pour les états vide / erreur / chargement. Corrections testées
+dans le navigateur avant commit ; suites e2e complètes rejouées (SQLite et PostgreSQL) ;
+`next build` vert. Les quatre points de configuration différés (paiement réel, e-mail, R2,
+région Neon) n'ont pas été touchés.
+
+### 9.1 Site public
+
+| Page | Constat | Correction |
+|---|---|---|
+| Accueil | Rien à reprendre sur la recherche ; aucun retour vers ce que le membre regardait | Bloc « Vos dernières annonces consultées » (membre connecté, historique non vide) ; lien offre pro vers l'article d'aide |
+| Résultats (liste et carte) | États vide / erreur / chargement déjà traités ; pas de débordement à 375 px | — |
+| Détail d'une annonce | « Partager » = simple copie du lien ; pas d'autres annonces du vendeur | Menu Partager complet (copier, WhatsApp, e-mail, Facebook, X, partage natif) ; section « Les autres annonces de ce vendeur / de cette boutique » ; lien conseils vers l'article dédié |
+| Vitrine vendeur / pro | Badge « Téléphone vérifié » encore affiché (contraire au différé SMS) ; pas de partage | Badge retiré ; bouton « Partager » la boutique |
+| Inscription, connexion, mot de passe oublié | Corrects sur mobile et grand écran, messages d'erreur explicites | — |
+| CGU, confidentialité, mentions légales, à propos | Textes par défaut périmés : « vérifié par code SMS », données collectées incomplètes, promesse « hébergées dans l'Union européenne » fausse aujourd'hui (Neon us-east-2) | Textes par défaut corrigés ; **resynchronisation automatique au démarrage** tant qu'un administrateur n'a jamais édité la page (`updatedBy` vide) ; test phase 11 |
+| Aide / FAQ | Page statique unique, périmée (code SMS, « abonnements dans une prochaine version ») | Centre d'aide structuré : 6 rubriques, 22 articles, recherche instantanée, questions les plus consultées, pages `/aide/<slug>`, fil d'Ariane, articles liés, sitemap ; liens du site mis à jour |
+| Pied de page | « numéro de mobile français vérifié », « données hébergées en Union européenne » | Formulations exactes ; liens vers les articles d'aide |
+| Page 404 | Correcte | — |
+| En-tête | Sous 375 px, le logo repoussait compte et menu à la ligne | Logo réduit sous 400 px |
+
+### 9.2 Espace compte
+
+| Page | Constat | Correction |
+|---|---|---|
+| Navigation du compte (toutes les pages) | Sur mobile, 13 liens empilés (~700 px) avant le contenu | Bandeau horizontal défilant, lien actif centré ; colonne inchangée sur grand écran |
+| Tableau de bord | Compteur « Conversations » plafonné à 4 (liste tronquée) | Compteur exact |
+| Mes annonces | Suppression et « Vendue » via `confirm()` natif (un clic suffisait pour retirer une annonce) | Boîte de confirmation du site, texte explicite, bouton rouge pour la suppression |
+| Dépôt / modification (Voitures, Locations de vacances, Services testés) | Champs distincts par famille corrects ; listes numérotées non rendues dans l'aide | Rendu des listes numérotées ajouté au Markdown |
+| Favoris, Annonces consultées | Corrects (états vides avec action) | — |
+| Messagerie (liste) | Correcte | — |
+| Conversation | Réponses rapides débordant à 375 px | Retour à la ligne autorisé |
+| Achats et ventes | Tableau débordant sur mobile (628 px) ; erreur réseau silencieuse | Cartes sur mobile, tableau sur grand écran ; filtre « En cours / Terminées » ; message d'erreur |
+| Détail d'une transaction | Trois `confirm()` natifs (annulation, réception) | Boîtes de confirmation explicites |
+| Avis | « Aucun avis » affiché pendant le chargement | État de chargement |
+| Paramètres | E-mail, nom d'utilisateur et nom invisibles ; notifications limitées à deux cases ; bouton pro d'une autre couleur | Section « Identifiants » ; **préférences de notification** 5 familles × in-app / push / e-mail / SMS ; boutons harmonisés ; lien vers le profil public ; retours (toast) sur déblocage et export |
+| Passage en pro, Ma boutique | Corrects ; lien croisé Paramètres ↔ Boutique | Lien « Équipe et import » ajouté |
+| Formule, Paiements, Notifications, Mes recherches | Corrects | Confirmation de résiliation via la boîte du site |
+
+### 9.3 Back-office
+
+| Page | Constat | Correction |
+|---|---|---|
+| Console (toutes les pages) | Sur mobile, colonne de 8 liens occupant tout l'écran ; page qui défile horizontalement (utilisateurs 716 px, réglages 879 px, fiche utilisateur 523 px) | Bandeau de navigation horizontal collant ; `min-width: 0` sur la zone de contenu ; tableaux défilants dans leur panneau |
+| Tableau de bord | Correct | — |
+| Utilisateurs (liste, fiche) | Aucun état de chargement ni d'erreur (tableau vide silencieux) ; `confirm()` natifs | « Chargement… », message d'erreur, message vide précis ; boîtes de confirmation (suspension, mot de passe temporaire) |
+| Annonces (liste, fiche) | Idem | Idem (retrait d'annonce) |
+| Signalements, Litiges | Idem ; « Aucun signalement » ambigu | États ; « la file est vide » / « aucun litige en cours » ; confirmations de décision |
+| Journal d'audit | Pas d'état | États |
+| Réglages (monétisation, formules) | `confirm()` natif sur l'interrupteur global | Boîte de confirmation ; tableau des formules défilant |
+| Pages légales (CMS) | Correct | — |
+
+### 9.4 Cohérence visuelle
+
+- Dix `confirm()` natifs (site et console) remplacés par une boîte de dialogue unique
+  (`ConfirmProvider`), même modale et mêmes boutons que le reste du site.
+- Boutons d'action principale tous en `btn-primary` (le bouton « Activer le compte
+  professionnel » était sombre) ; onglets et filtres inchangés (déjà uniformes).
+- Espacements de page réduits sous 720 px ; utilitaires `only-mobile` / `only-desktop`.
+- Palette claire conservée sur le site public ; le back-office garde son identité ardoise/indigo.
+- Reste connu : les styles en ligne restent nombreux dans les pages du compte ; ils utilisent
+  tous les jetons du design system, la dette est de lisibilité, pas d'apparence.
+
+### 9.5 Comparaison fonctionnelle élargie (point 3 du brief)
+
+Détail dans `analyse-concurrentielle.md` §11. Fait : partage (lien, WhatsApp, e-mail,
+Facebook, X, natif), annonces similaires **et** autres annonces du vendeur, historique (vérifié,
+déjà en place) + reprise sur l'accueil, centre d'aide structuré, préférences de notification par
+famille et canal (API testée, 6 tests), export RGPD (déjà en place, complété). Non repris et
+documenté : « Voir le numéro » (choix : pas de téléphone public), simulation de crédit, bons
+plans, étiquettes transporteur (avec le paiement réel). Limite : les canaux exacts du partage
+leboncoin n'ont pas pu être observés (bandeau cookies) ; l'existence du bouton l'a été.
+
+### 9.6 Preuves
+
+- SQLite : 14 suites, 94 tests (93 passés, 1 ignoré — plein texte PostgreSQL). PostgreSQL
+  (PGlite, migrations dont `NotificationPrefs`) : 94 tests passés.
+- `next build` vert (routes `/aide/[slug]` pré-rendues).
+- Navigateur : 35 pages sans débordement horizontal à 375 px après corrections ; menu Partager,
+  recherche d'aide, article d'aide, préférences de notification (aller-retour API), boîte de
+  confirmation, bloc « autres annonces de ce vendeur » (4 cartes) vérifiés en direct.

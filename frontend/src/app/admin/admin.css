@@ -32,6 +32,9 @@
 .admin a:hover {
   text-decoration: none;
 }
+.admin > .admin-body {
+  min-width: 0;
+}
 .admin-side {
   background: var(--a-bg);
   color: #cbd5e1;
@@ -293,14 +296,74 @@
   .admin {
     grid-template-columns: 1fr;
   }
+  /* Petit écran : la colonne devient un bandeau de liens défilant, le contenu reste en haut */
   .admin-side {
-    position: static;
+    position: sticky;
+    top: 0;
+    z-index: 20;
     height: auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .admin-side::-webkit-scrollbar {
+    display: none;
+  }
+  .admin-brand {
+    padding: 4px 8px;
+    border-bottom: 0;
+    margin: 0 6px 0 0;
+    white-space: nowrap;
+  }
+  .admin-side a {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    padding: 7px 10px;
+    font-size: 0.84rem;
+  }
+  .admin-side .foot {
+    margin-top: 0;
+    border-top: 0;
+    padding: 0 0 0 6px;
+    white-space: nowrap;
+  }
+  .admin-side .foot br {
+    display: none;
+  }
+  .admin-side .foot .mono {
+    display: none;
+  }
+  .admin-side .foot .a-btn {
+    margin: 0 0 0 8px !important;
   }
   .admin-main {
     padding: 20px 16px 40px;
   }
+  .admin-topbar {
+    padding: 6px 16px;
+  }
   .a-two {
     grid-template-columns: 1fr;
   }
+  .a-kv {
+    grid-template-columns: 1fr;
+    gap: 2px 0;
+  }
+  .a-kv dt {
+    margin-top: 6px;
+  }
+}
+/* Tableaux placés directement dans un panneau : défilement horizontal au lieu de déborder la page */
+.a-panel:has(> .a-table) {
+  overflow-x: auto;
+}
+.a-loading {
+  padding: 24px;
+  text-align: center;
+  color: var(--a-muted);
+  font-size: 0.88rem;
 }

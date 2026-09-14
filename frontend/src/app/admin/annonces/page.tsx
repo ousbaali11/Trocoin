@@ -16,6 +16,7 @@ function AdminListingsInner() {
   const [page, setPage] = useState(1);
   const [tree, setTree] = useState<CategoryNode[]>([]);
   const [data, setData] = useState<Paged<ListingCard> | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     api<CategoryNode[]>("/categories/tree").then(setTree).catch(() => null);
@@ -25,7 +26,8 @@ function AdminListingsInner() {
     if (q) p.set("q", q);
     if (status) p.set("status", status);
     if (category) p.set("category", category);
-    api<Paged<ListingCard>>(`/admin/listings?${p}`).then(setData).catch(() => null);
+    setError(null);
+    api<Paged<ListingCard>>(`/admin/listings?${p}`).then(setData).catch((e) => setError((e as Error).message));
   }, [q, status, category, page]);
 
   return (
@@ -42,6 +44,7 @@ function AdminListingsInner() {
           {tree.map((r) => <optgroup key={r.slug} label={r.name}><option value={r.slug}>Tout {r.name}</option>{r.children.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}</optgroup>)}
         </select>
       </div>
+      {error && <div className="a-alert danger">{error}</div>}
       <div className="a-panel" style={{ padding: 0, overflowX: "auto" }}>
         <table className="a-table">
           <thead><tr><th></th><th>Annonce</th><th>Vendeur</th><th>Prix</th><th>Statut</th><th>Créée</th><th></th></tr></thead>
@@ -64,7 +67,8 @@ function AdminListingsInner() {
                 </tr>
               );
             })}
-            {data && data.items.length === 0 && <tr><td colSpan={7} style={{ textAlign: "center", color: "var(--a-muted)" }}>Aucune annonce.</td></tr>}
+            {!data && !error && <tr><td colSpan={7} className="a-loading">Chargement…</td></tr>}
+            {data && data.items.length === 0 && <tr><td colSpan={7} style={{ textAlign: "center", color: "var(--a-muted)" }}>Aucune annonce ne correspond à ces filtres.</td></tr>}
           </tbody>
         </table>
       </div>

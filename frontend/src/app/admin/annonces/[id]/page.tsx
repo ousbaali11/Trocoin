@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { api, mediaUrl } from "@/lib/api";
 import { useToast } from "@/lib/toast-context";
+import { useConfirm } from "@/lib/confirm-context";
 import { formatDateTime, formatPrice, REPORT_REASON_LABELS } from "@/lib/format";
 import type { ListingPhoto, PriceType, Report, Transaction } from "@/lib/types";
 import { statusPill } from "@/components/admin/AdminPager";
@@ -35,11 +36,13 @@ export default function AdminListingPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { toast } = useToast();
+  const confirm = useConfirm();
   const [l, setL] = useState<AdminListing | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(
     () =>
@@ -50,8 +53,8 @@ export default function AdminListingPage() {
           setDescription(d.description);
           setReason(d.moderationReason ?? "");
         })
-        .catch((e) => toast(e.message, "error")),
-    [id, toast],
+        .catch((e) => setError(e.message)),
+    [id],
   );
   useEffect(() => {
     load();
@@ -70,7 +73,7 @@ export default function AdminListingPage() {
     }
   };
   const remove = async () => {
-    if (!confirm("Supprimer définitivement cette annonce (ou la désactiver si une transaction existe) ?")) return;
+    if (!(await confirm({ title: "Retirer cette annonce ?", text: "Suppression définitive, ou simple désactivation si une transaction y est rattachée. Le motif saisi est transmis au vendeur.", confirmLabel: "Retirer l'annonce", danger: true }))) return;
     setBusy(true);
     try {
       await api(`/admin/listings/${id}?reason=${encodeURIComponent(reason || "Retirée par la modération")}`, { method: "DELETE" });
@@ -82,6 +85,7 @@ export default function AdminListingPage() {
     }
   };
 
+  if (error) return <div><Link href="/admin/annonces" className="mono">← Annonces</Link><div className="a-alert danger" style={{ marginTop: 12 }}>{error}</div></div>;
   if (!l) return <div className="skeleton" style={{ height: 300 }} />;
   const s = statusPill(l.status);
 

@@ -6,6 +6,8 @@ import type { PublicProfile, Review, SearchResult } from "@/lib/types";
 import { ListingCard } from "@/components/ui/ListingCard";
 import { Rating } from "@/components/ui/Rating";
 import { BlockButton } from "@/components/listing/BlockButton";
+import { ShareMenu } from "@/components/ui/ShareMenu";
+import { SITE_URL } from "@/lib/api";
 
 async function getProfile(id: string): Promise<PublicProfile | null> {
   try {
@@ -52,7 +54,6 @@ export default async function SellerPage({ params }: { params: Promise<{ id: str
           <div className="row">
             {isPro ? <span className="pill pill-dark">Professionnel</span> : <span className="pill">Particulier</span>}
             {profile.identityVerified && <span className="pill pill-green">Identité vérifiée</span>}
-            {profile.phoneVerified && <span className="pill pill-sage">Téléphone vérifié</span>}
           </div>
           <div style={{ margin: "10px 0" }}><Rating value={profile.ratingAvg} count={profile.ratingCount} size={16} /></div>
           <p className="muted small" style={{ margin: 0 }}>
@@ -70,7 +71,10 @@ export default async function SellerPage({ params }: { params: Promise<{ id: str
             </dl>
           )}
         </div>
-        <BlockButton userId={profile.id} />
+        <div className="row" style={{ alignItems: "flex-start" }}>
+          <ShareMenu url={`${SITE_URL}/vendeurs/${profile.id}`} title={`${name} sur Trocoin`} text={isPro ? "Découvrez cette boutique" : "Découvrez ce vendeur"} compact />
+          <BlockButton userId={profile.id} />
+        </div>
       </section>
 
       <section style={{ marginTop: 36 }}>

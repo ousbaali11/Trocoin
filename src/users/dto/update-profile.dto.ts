@@ -1,5 +1,6 @@
 import {
   IsBoolean,
+  IsObject,
   IsOptional,
   IsString,
   IsUrl,
@@ -44,6 +45,10 @@ export class UpdateProfileDto {
 
   @IsOptional() @IsBoolean()
   notifySms?: boolean;
+
+  /** Préférences granulaires { message: { push, sms, email }, … } — validées dans UsersService. */
+  @IsOptional() @IsObject()
+  notificationPrefs?: Record<string, Record<string, boolean>>;
 }
 
 export class BecomeProDto {

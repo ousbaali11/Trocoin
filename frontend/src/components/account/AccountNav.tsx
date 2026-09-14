@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef } from "react";
 import { useAuth } from "@/lib/auth-context";
+import styles from "./AccountNav.module.css";
 
 const items = [
   { href: "/compte", label: "Tableau de bord", exact: true },
@@ -23,9 +25,16 @@ const items = [
 export function AccountNav() {
   const pathname = usePathname();
   const { user, unreadMessages, unreadNotifications } = useAuth();
+  const activeRef = useRef<HTMLAnchorElement>(null);
+
+  // Mobile : le lien actif est ramené dans la zone visible du bandeau
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ block: "nearest", inline: "center" });
+  }, [pathname]);
+
   return (
-    <nav aria-label="Mon compte" className="card" style={{ padding: 10, position: "sticky", top: "calc(var(--header-h) + 16px)" }}>
-      <div style={{ padding: "8px 12px 12px", borderBottom: "1px solid var(--line-soft)", marginBottom: 6 }}>
+    <nav aria-label="Mon compte" className={`card ${styles.nav}`}>
+      <div className={styles.who}>
         <strong style={{ display: "block" }}>{user?.displayName}</strong>
         <span className="small muted">{user?.accountType === "professionnel" ? "Compte professionnel" : user?.accountType === "admin" ? "Administrateur" : "Compte particulier"}</span>
       </div>
@@ -35,13 +44,13 @@ export function AccountNav() {
           const active = it.exact ? pathname === it.href : pathname.startsWith(it.href);
           const count = it.counter === "messages" ? unreadMessages : it.counter === "notifications" ? unreadNotifications : 0;
           return (
-            <Link key={it.href} href={it.href} aria-current={active ? "page" : undefined} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 12px", borderRadius: 6, fontWeight: active ? 700 : 500, background: active ? "var(--accent-tint)" : undefined, color: active ? "var(--accent-dark)" : undefined, fontSize: ".93rem", minHeight: 38 }}>
+            <Link key={it.href} href={it.href} ref={active ? activeRef : undefined} aria-current={active ? "page" : undefined} className={`${styles.link} ${active ? styles.active : ""}`}>
               {it.label}
               {count > 0 && <span className="pill pill-brick">{count}</span>}
             </Link>
           );
         })}
-      <Link href="/deposer" className="btn btn-primary btn-block" style={{ marginTop: 10 }}>Déposer une annonce</Link>
+      <Link href="/deposer" className={`btn btn-primary btn-block ${styles.deposit}`}>Déposer une annonce</Link>
     </nav>
   );
 }

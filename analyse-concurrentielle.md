@@ -750,3 +750,24 @@ Les panneaux marqués **non** n'ont pas pu être ouverts : après une quarantain
 chargées automatiquement, leboncoin a affiché « Accès temporairement restreint » (protection
 anti-robot). Aucun contournement n'a été tenté ; ces relevés restent à faire depuis un
 navigateur ordinaire (≈ 15 minutes) et ne sont pas devinés ici.
+
+
+## 11. Fonctionnalités transverses (relevé du 14 septembre 2026, après-midi)
+
+Relevé fait sur une page d'annonce leboncoin (« Studio 1 pièce 20 m² », ventes immobilières)
+depuis le navigateur, après refus des cookies. Une deuxième fenêtre (« Les cookies solidaires »)
+a recouvert la page au moment d'ouvrir le menu de partage : les canaux exacts n'ont pas été
+observés, seule l'existence du bouton l'a été. Aucun contournement tenté.
+
+| Fonctionnalité | leboncoin (observé) | Trocoin après ce tour | Statut |
+|---|---|---|---|
+| Partage d'une annonce | Bouton « Partager » à côté du compteur de favoris (canaux non observés) | Menu « Partager » : copier le lien, WhatsApp, e-mail, Facebook, X, partage natif du téléphone (Web Share) ; aussi sur la vitrine d'un vendeur | Fait |
+| Annonces similaires / recommandées | Blocs « Ces annonces peuvent vous intéresser » et « Les annonces de ce pro » | « Annonces similaires » (même catégorie, prix proche) **et** « Les autres annonces de ce vendeur / de cette boutique » | Fait |
+| Historique de consultation | Présent (annonces vues récemment) | Fait en phase 2 (`/compte/historique`, 40 dernières, effaçable) — vérifié : l'ouverture d'une annonce connecté l'enregistre ; ajout d'un bloc « Vos dernières annonces consultées » sur l'accueil | Fait |
+| Centre d'aide structuré | Centre d'aide avec rubriques, articles et recherche | `/aide` : 6 rubriques, 22 articles avec page dédiée (`/aide/<slug>`), recherche instantanée, questions les plus consultées, articles liés, sitemap | Fait |
+| Préférences de notification granulaires | Réglages par type d'évènement et canal | Paramètres → Notifications : 5 familles (messages, achats et ventes, alertes, modération, informations) × in-app (toujours) / push / e-mail / SMS (critiques seulement) ; interrupteurs globaux ; API `notificationPrefs` testée (6 tests) ; l'e-mail est enregistré mais pas envoyé tant que le fournisseur est différé | Fait |
+| Export des données personnelles (RGPD) | Demande depuis le compte | Existait (JSON immédiat depuis Paramètres) ; complété avec les préférences, hash de mot de passe jamais inclus (test) | Fait (déjà présent) |
+| Compteur « X personnes ont ajouté cette annonce en favori » | Affiché sur la page | Vues et favoris affichés sous les actions | Équivalent |
+| « Voir le numéro » du vendeur | Présent (pros) | Non : Trocoin ne publie jamais le téléphone, la messagerie est le seul canal (choix produit) | Non repris |
+| Simulation de crédit (immobilier), « Bons plans », renfort de contraste (accessibilité) | Présents | Absents | Non repris (partenaires financiers ; promotion ; l'accessibilité passe par les contrastes déjà conformes) |
+| Étiquettes transporteur intégrées | Présentes avec le paiement | Absentes | Différé avec le paiement réel |

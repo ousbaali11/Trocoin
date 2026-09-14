@@ -10,6 +10,7 @@ import { Favorite } from '../favorites/favorite.entity';
 import { deleteUploadedFile } from '../common/upload/image-upload';
 import { UserBlock } from './user-block.entity';
 import { SiretVerificationService } from './siret-verification.service';
+import { effectivePrefs, sanitizePrefs, type NotificationPrefs } from '../notifications/notification-prefs';
 import { User } from './user.entity';
 
 /** Validation de la clé de contrôle d'un SIRET (algorithme de Luhn). */
@@ -76,6 +77,19 @@ export class UsersService {
     if (check.status === 'closed') throw new BadRequestException(`Cet établissement (${check.companyName}) est fermé au registre des entreprises.`);
     if (check.status === 'verified') return { siretVerified: true, siretVerifiedAt: new Date(), officialName: check.companyName };
     return { siretVerified: false };
+  }
+
+  /** Préférences de notification effectives (défauts + enregistrées + interrupteurs globaux). */
+  static prefsOf(user: Pick<User, 'notificationPrefs' | 'notifyPush' | 'notifySms'>): NotificationPrefs {
+    let stored: Partial<NotificationPrefs> | null = null;
+    if (user.notificationPrefs) {
+      try {
+        stored = JSON.parse(user.notificationPrefs);
+      } catch {
+        stored = null;
+      }
+    }
+    return effectivePrefs(stored, { notifyPush: user.notifyPush, notifySms: user.notifySms });
   }
 
   findByPhone(phoneNumber: string) {
@@ -169,8 +183,15 @@ export class UsersService {
     return this.usersRepo.save(user);
   }
 
-  async updateProfile(id: string, patch: Partial<User>): Promise<User> {
-    const clean = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
+  async updateProfile(id: string, patch: Partial<Omit<User, 'notificationPrefs'>> & { notificationPrefs?: unknown }): Promise<User> {
+    const clean: Record<string, unknown> = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
+    if (clean.notificationPrefs !== undefined) {
+      try {
+        clean.notificationPrefs = JSON.stringify(sanitizePrefs(clean.notificationPrefs));
+      } catch (e) {
+        throw new BadRequestException((e as Error).message);
+      }
+    }
     if (Object.keys(clean).length > 0) await this.usersRepo.update(id, clean);
     return this.findById(id) as Promise<User>;
   }
@@ -333,7 +354,7 @@ export class UsersService {
       : [];
     return {
       exportedAt: new Date().toISOString(),
-      profile: user,
+      profile: { ...user, notificationPrefs: UsersService.prefsOf(user) },
       listings,
       conversations,
       messages,

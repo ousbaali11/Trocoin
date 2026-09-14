@@ -1,7 +1,8 @@
 /**
- * Rendu Markdown minimal et sûr pour les pages du CMS (titres ##, listes -,
- * gras **, italique _, paragraphes). Tout le HTML source est échappé : aucun
- * script ni balise ne peut être injecté depuis le back-office.
+ * Rendu Markdown minimal et sûr pour les pages du CMS et du centre d'aide
+ * (titres ##, listes - et 1., gras **, italique _, paragraphes). Tout le HTML
+ * source est échappé : aucun script ni balise ne peut être injecté depuis le
+ * back-office.
  */
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -17,12 +18,13 @@ export function renderMarkdown(src: string): string {
   const out: string[] = [];
   let para: string[] = [];
   let list: string[] = [];
+  let listTag: "ul" | "ol" = "ul";
   const flushPara = () => {
     if (para.length) out.push(`<p>${inline(para.join(" "))}</p>`);
     para = [];
   };
   const flushList = () => {
-    if (list.length) out.push(`<ul>${list.map((l) => `<li>${inline(l)}</li>`).join("")}</ul>`);
+    if (list.length) out.push(`<${listTag}>${list.map((l) => `<li>${inline(l)}</li>`).join("")}</${listTag}>`);
     list = [];
   };
   for (const raw of lines) {
@@ -35,9 +37,13 @@ export function renderMarkdown(src: string): string {
       continue;
     }
     const li = line.match(/^\s*[-*]\s+(.*)$/);
-    if (li) {
+    const oli = line.match(/^\s*\d+[.)]\s+(.*)$/);
+    if (li || oli) {
       flushPara();
-      list.push(li[1]);
+      const tag: "ul" | "ol" = li ? "ul" : "ol";
+      if (list.length && tag !== listTag) flushList();
+      listTag = tag;
+      list.push((li ?? oli)![1]);
       continue;
     }
     if (line.trim() === "") {

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useToast } from "@/lib/toast-context";
+import { useConfirm } from "@/lib/confirm-context";
 import { DELIVERY_LABELS, formatDateTime, formatEuros } from "@/lib/format";
 import type { Paged } from "@/lib/types";
 import { AdminPager, statusPill } from "@/components/admin/AdminPager";
@@ -28,16 +29,19 @@ interface AdminTx {
 
 export default function AdminDisputesPage() {
   const { toast } = useToast();
+  const confirm = useConfirm();
   const [status, setStatus] = useState("litige");
   const [page, setPage] = useState(1);
   const [data, setData] = useState<Paged<AdminTx> | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     const p = new URLSearchParams({ page: String(page), page_size: "25" });
     if (status) p.set("status", status);
-    return api<Paged<AdminTx>>(`/admin/transactions?${p}`).then(setData).catch(() => null);
+    setError(null);
+    return api<Paged<AdminTx>>(`/admin/transactions?${p}`).then(setData).catch((e) => setError((e as Error).message));
   }, [status, page]);
   useEffect(() => {
     load();
@@ -46,7 +50,7 @@ export default function AdminDisputesPage() {
   const resolve = async (t: AdminTx, decision: "rembourser" | "liberer") => {
     const note = notes[t.id]?.trim() || "";
     if (note.length < 5) return toast("Une note d'au moins 5 caractères est requise.", "error");
-    if (!confirm(decision === "rembourser" ? "Rembourser intégralement l'acheteur ?" : "Libérer les fonds au vendeur ?")) return;
+    if (!(await confirm({ title: decision === "rembourser" ? "Rembourser intégralement l'acheteur ?" : "Libérer les fonds au vendeur ?", text: "La décision et votre note seront transmises aux deux parties. Elle est définitive.", confirmLabel: decision === "rembourser" ? "Rembourser" : "Libérer les fonds", danger: decision === "rembourser" }))) return;
     setBusy(t.id);
     try {
       await api(`/admin/transactions/${t.id}/resolve`, { method: "POST", body: { decision, note } });
@@ -67,6 +71,8 @@ export default function AdminDisputesPage() {
           <option value="litige">Litiges en cours</option><option value="sequestre">Séquestre</option><option value="livree">Expédiées</option><option value="confirme">Terminées</option><option value="rembourse">Remboursées</option><option value="annulee">Annulées</option><option value="">Toutes</option>
         </select>
       </div>
+      {error && <div className="a-alert danger">{error}</div>}
+      {!data && !error && <div className="a-panel a-loading">Chargement…</div>}
       <div style={{ display: "grid", gap: 12 }}>
         {data?.items.map((t) => {
           const s = statusPill(t.status);
@@ -98,7 +104,7 @@ export default function AdminDisputesPage() {
             </div>
           );
         })}
-        {data && data.items.length === 0 && <div className="a-panel mono">Aucune transaction.</div>}
+        {data && data.items.length === 0 && <div className="a-panel mono">{status === "litige" ? "Aucun litige en cours." : "Aucune transaction dans cet état."}</div>}
       </div>
       {data && <AdminPager page={data.page} pageSize={data.pageSize} total={data.total} onChange={setPage} />}
     </div>

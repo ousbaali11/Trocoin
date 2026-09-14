@@ -36,7 +36,7 @@ cd frontend && npm install && cp .env.example .env.local && npm run dev -- -p 30
 ## Tests
 
 ```bash
-npm test                 # 87 tests e2e (Jest + supertest, SQLite en mémoire)
+npm test                 # 94 tests e2e (Jest + supertest, SQLite en mémoire)
 # Les mêmes tests sur PostgreSQL (schéma créé par les migrations) :
 E2E_DB=postgres DB_TYPE=postgres DATABASE_URL=postgresql://... DB_SYNCHRONIZE=false npm test
 node test/ws-smoke.js    # messagerie temps réel contre un serveur lancé
@@ -112,6 +112,7 @@ libération), journal d'audit.
 - **Rate limiting partagé** via `REDIS_URL` (`RedisThrottlerStorage`, script Lua atomique), sinon mémoire.
 - **CI → Render** : job `deploy-render` déclenché par le secret `RENDER_DEPLOY_HOOK` après une CI verte, avec preuve par `/health` (`DEPLOIEMENT.md` §2b).
 - Documents : `AUDIT.md` (état consolidé), `AUDIT-HISTORIQUE.md` (journal des phases).
+- **Polish page par page** (14 septembre, après-midi) : centre d'aide structuré (`/aide`, 6 rubriques, 22 articles, recherche), partage d'annonce et de boutique (lien, WhatsApp, e-mail, Facebook, X, partage natif), « autres annonces de ce vendeur » et reprise des dernières consultations sur l'accueil, préférences de notification par famille et canal (`notificationPrefs`), boîte de confirmation unique à la place des `confirm()` natifs, navigation compte et console admin adaptées au mobile, textes légaux par défaut resynchronisés.
 - **Auto-deploy prouvé** (14 septembre) : secret `RENDER_DEPLOY_HOOK` en place, la CI déclenche Render et vérifie `/health`.
 - Sauvegarde hebdomadaire chiffrée (`.github/workflows/backup.yml`, secrets `DATABASE_URL_BACKUP` + `BACKUP_PASSPHRASE`) ; suppression de compte revue pour les comptes à mot de passe ; « Paris / Lyon / Marseille (toute la ville) » dans la localisation.
 

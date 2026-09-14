@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useToast } from "@/lib/toast-context";
+import { useConfirm } from "@/lib/confirm-context";
 import type { Plan } from "@/lib/types";
 
 interface SettingsPayload {
@@ -12,6 +13,7 @@ interface SettingsPayload {
 
 export default function AdminSettingsPage() {
   const { toast } = useToast();
+  const confirm = useConfirm();
   const [data, setData] = useState<SettingsPayload | null>(null);
   const [form, setForm] = useState({ free_listings_per_30_days: "20", boost_price_eur: "2.99", urgent_price_eur: "1.99" });
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -65,7 +67,7 @@ export default function AdminSettingsPage() {
             <h3 style={{ margin: "0 0 4px" }}>Monétisation : <span className={`a-pill ${enabled ? "warn" : "ok"}`}>{enabled ? "ACTIVÉE" : "DÉSACTIVÉE (site gratuit)"}</span></h3>
             <p className="mono" style={{ margin: 0 }}>{enabled ? "Quotas d'annonces, formules et mises en avant payantes en vigueur." : "Annonces illimitées, mises en avant gratuites, formules sans effet."}</p>
           </div>
-          <button className={`a-btn ${enabled ? "" : "danger"}`} disabled={busy} onClick={() => confirm(enabled ? "Désactiver la monétisation ? Tout redevient gratuit et illimité." : "Activer la monétisation ? Les quotas et les prix s'appliqueront immédiatement à tous les comptes.") && patch({ monetization_enabled: !enabled }, enabled ? "Monétisation désactivée : le site est gratuit." : "Monétisation activée.")}>
+          <button className={`a-btn ${enabled ? "" : "danger"}`} disabled={busy} onClick={async () => (await confirm({ title: enabled ? "Désactiver la monétisation ?" : "Activer la monétisation ?", text: enabled ? "Tout redevient gratuit et illimité pour tous les comptes." : "Les quotas et les prix s'appliqueront immédiatement à tous les comptes.", confirmLabel: enabled ? "Désactiver" : "Activer", danger: !enabled })) && patch({ monetization_enabled: !enabled }, enabled ? "Monétisation désactivée : le site est gratuit." : "Monétisation activée.")}>
             {enabled ? "Désactiver (repasser en gratuit)" : "Activer la monétisation"}
           </button>
         </div>

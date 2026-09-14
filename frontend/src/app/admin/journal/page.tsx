@@ -23,11 +23,13 @@ export default function AdminAuditPage() {
   const [target, setTarget] = useState("");
   const [page, setPage] = useState(1);
   const [data, setData] = useState<Paged<AuditEntry> | null>(null);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     const p = new URLSearchParams({ page: String(page), page_size: "50" });
     if (action) p.set("action", action);
     if (target) p.set("target_id", target);
-    api<Paged<AuditEntry>>(`/admin/audit-log?${p}`).then(setData).catch(() => null);
+    setError(null);
+    api<Paged<AuditEntry>>(`/admin/audit-log?${p}`).then(setData).catch((e) => setError((e as Error).message));
   }, [action, target, page]);
 
   return (
@@ -39,6 +41,7 @@ export default function AdminAuditPage() {
         </select>
         <input className="a-input" placeholder="Identifiant de la ressource" value={target} onChange={(e) => { setTarget(e.target.value); setPage(1); }} />
       </div>
+      {error && <div className="a-alert danger">{error}</div>}
       <div className="a-panel" style={{ padding: 0, overflowX: "auto" }}>
         <table className="a-table">
           <thead><tr><th>Date</th><th>Administrateur</th><th>Action</th><th>Ressource</th><th>Détails</th><th>IP</th></tr></thead>
@@ -53,7 +56,8 @@ export default function AdminAuditPage() {
                 <td className="mono">{e.ip || "—"}</td>
               </tr>
             ))}
-            {data && data.items.length === 0 && <tr><td colSpan={6} style={{ textAlign: "center", color: "var(--a-muted)" }}>Aucune entrée.</td></tr>}
+            {!data && !error && <tr><td colSpan={6} className="a-loading">Chargement…</td></tr>}
+            {data && data.items.length === 0 && <tr><td colSpan={6} style={{ textAlign: "center", color: "var(--a-muted)" }}>Aucune entrée pour ces filtres.</td></tr>}
           </tbody>
         </table>
       </div>

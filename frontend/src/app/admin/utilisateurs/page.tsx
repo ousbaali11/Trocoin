@@ -29,13 +29,15 @@ export default function AdminUsersPage() {
   const [status, setStatus] = useState("");
   const [page, setPage] = useState(1);
   const [data, setData] = useState<Paged<AdminUser> | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const p = new URLSearchParams({ page: String(page), page_size: "25" });
     if (q) p.set("q", q);
     if (type) p.set("account_type", type);
     if (status) p.set("status", status);
-    api<Paged<AdminUser>>(`/admin/users?${p}`).then(setData).catch(() => null);
+    setError(null);
+    api<Paged<AdminUser>>(`/admin/users?${p}`).then(setData).catch((e) => setError((e as Error).message));
   }, [q, type, status, page]);
 
   return (
@@ -52,6 +54,7 @@ export default function AdminUsersPage() {
           <option value="">Tous statuts</option><option value="actif">Actifs</option><option value="suspendu">Suspendus</option><option value="supprime">Supprimés</option>
         </select>
       </div>
+      {error && <div className="a-alert danger">{error}</div>}
       <div className="a-panel" style={{ padding: 0, overflowX: "auto" }}>
         <table className="a-table">
           <thead><tr><th>Utilisateur</th><th>Téléphone</th><th>Type</th><th>Ville</th><th>Note</th><th>État</th><th>Inscrit le</th><th></th></tr></thead>
@@ -71,7 +74,8 @@ export default function AdminUsersPage() {
                 </tr>
               );
             })}
-            {data && data.items.length === 0 && <tr><td colSpan={8} style={{ textAlign: "center", color: "var(--a-muted)" }}>Aucun utilisateur.</td></tr>}
+            {!data && !error && <tr><td colSpan={8} className="a-loading">Chargement…</td></tr>}
+            {data && data.items.length === 0 && <tr><td colSpan={8} style={{ textAlign: "center", color: "var(--a-muted)" }}>Aucun utilisateur ne correspond à ces filtres.</td></tr>}
           </tbody>
         </table>
       </div>
