@@ -349,7 +349,7 @@ dépend, donc un scénario rouge bloque la mise en production).
 | M7 refus d'annonce sans effet (API) | 06 refus | échec détecté |
 | M8 élément de 600 px sur l'inscription (front) | 02 mobile, contrôle de débordement | **non détecté au premier essai** : (1) le contrôle tournait sur le squelette vide avant l'hydratation, (2) en émulation mobile `window.innerWidth` s'élargit au contenu débordant ; contrôle déplacé après rendu et mesuré sur `clientWidth` → détecté (« la page défile horizontalement (621 > 375) ») |
 
-**Trois défauts réels trouvés par les tests et corrigés** :
+**Quatre défauts réels trouvés par les tests et corrigés** :
 1. Sélecteur de localisation : un **clic réel** sur un palier de rayon (« 1 km ») était perdu — le
    champ perdait le focus au `mousedown`, la liste se réorganisait et le `mouseup` tombait
    ailleurs. Invisible aux vérifications par script des tours précédents. Corrigé
@@ -358,6 +358,13 @@ dépend, donc un scénario rouge bloque la mise en production).
    `RequireAuth`, qui renvoyait vers `/connexion?next=…`. Corrigé (état `loggingOut`).
 3. Cases « oui/non » des critères de dépôt (piscine, wifi…) sans lien avec leur libellé ; le
    bouton du menu compte sans nom accessible. Corrigés (`id` et `aria-label`).
+4. Déconnexion : le jeton local restait lisible jusqu'à la réponse du serveur (vu en CI, où le
+   scénario a échoué une fois sur deux). La session locale est désormais effacée avant l'appel.
+
+**CI** : premier passage du job navigateur vert sur Linux (run 34844305559) ; les deux runs suivants
+ont été bloqués respectivement par Jest (qui ramassait les fichiers Playwright) puis par le défaut 4,
+déploiement Render **ignoré** les deux fois comme prévu ; run 34844951580 entièrement vert, version
+1.3.1 déployée et vérifiée par `/health`.
 
 **Limites connues** : un seul navigateur (Chromium) ; scénarios dépendants d'un ordre (un seul
 worker, base partagée, le projet mobile passe avant les mutations de données de l'achat et de
