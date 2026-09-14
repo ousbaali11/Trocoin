@@ -133,21 +133,29 @@ jobs:
       - name: Secret présent ?
         id: hook
         run: |
-          if [ -z "$RENDER_DEPLOY_HOOK" ]; then echo "present=false" >> "$GITHUB_OUTPUT"; echo "::warning::RENDER_DEPLOY_HOOK absent : pas de déploiement automatique (voir DEPLOIEMENT.md §2b)"; else echo "present=true" >> "$GITHUB_OUTPUT"; fi
+          if [ -z "$RENDER_DEPLOY_HOOK" ]; then
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::RENDER_DEPLOY_HOOK absent, pas de déploiement automatique (voir DEPLOIEMENT.md 2b)"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: Déclencher le déploiement
         if: steps.hook.outputs.present == 'true'
         run: |
-          curl -fsS -X POST "$RENDER_DEPLOY_HOOK" -o /dev/null -w "hook Render, HTTP %{http_code}
-"
+          curl -fsS -X POST "$RENDER_DEPLOY_HOOK" -o /dev/null -w 'hook Render, HTTP %{http_code}\n'
       - name: Attendre la mise en ligne de cette version
         if: steps.hook.outputs.present == 'true'
         run: |
           EXPECTED=$(node -p "require('./package.json').version")
-          echo "Version attendue : $EXPECTED"
+          echo "Version attendue, $EXPECTED"
           for i in $(seq 1 60); do
             LIVE=$(curl -s -m 30 "$HEALTH_URL" | node -pe "try{JSON.parse(require('fs').readFileSync(0)).version}catch{''}")
-            echo "[$i] version en ligne : $LIVE"
-            if [ "$LIVE" = "$EXPECTED" ]; then echo "Déployé et vérifié : $HEALTH_URL sert la version $EXPECTED"; exit 0; fi
+            echo "[$i] version en ligne, $LIVE"
+            if [ "$LIVE" = "$EXPECTED" ]; then
+              echo "Déployé et vérifié, $HEALTH_URL sert la version $EXPECTED"
+              exit 0
+            fi
             sleep 15
           done
-          echo "::error::La version $EXPECTED n'est pas en ligne après 15 min (dernière vue : $LIVE)"; exit 1
+          echo "::error::La version $EXPECTED n'est pas en ligne après 15 min (dernière vue, $LIVE)"
+          exit 1
