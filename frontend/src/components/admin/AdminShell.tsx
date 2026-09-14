@@ -36,7 +36,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="admin">
-      <aside className="admin-side">
+      <aside className="admin-side" aria-label="Navigation de la console">
         <div className="admin-brand">Trocoin <span>ADMIN</span></div>
         {NAV.map((n) => {
           const active = n.exact ? pathname === n.href : pathname.startsWith(n.href);
@@ -58,7 +58,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
       <div className="admin-body">
-        <div className="admin-topbar">CONSOLE D&apos;ADMINISTRATION — toutes les actions sont journalisées et traçables</div>
+        <header className="admin-topbar">CONSOLE D&apos;ADMINISTRATION — toutes les actions sont journalisées et traçables</header>
         <main className="admin-main">{children}</main>
       </div>
     </div>

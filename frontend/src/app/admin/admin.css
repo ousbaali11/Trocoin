@@ -7,14 +7,14 @@
   --a-ground: #f1f5f9;
   --a-line: #e2e8f0;
   --a-ink: #0f172a;
-  --a-muted: #64748b;
+  --a-muted: #556270; /* 5,0:1 sur le fond #f1f5f9 (WCAG AA) */
   --a-accent: #4f46e5;
   --a-accent-soft: #e0e7ff;
-  --a-danger: #dc2626;
+  --a-danger: #b91c1c;
   --a-danger-soft: #fee2e2;
-  --a-ok: #16a34a;
+  --a-ok: #15803d;
   --a-ok-soft: #dcfce7;
-  --a-warn: #d97706;
+  --a-warn: #b45309;
   --a-warn-soft: #fef3c7;
   min-height: 100vh;
   background: var(--a-ground);
@@ -28,6 +28,11 @@
 .admin h3 {
   font-family: var(--font-public-sans), system-ui, sans-serif;
   letter-spacing: -0.01em;
+}
+/* Titres de section : h2 sous le h1 de la page (taille d'un h3) */
+.admin h2.h3 {
+  font-size: 1.05rem;
+  margin: 18px 0 10px;
 }
 .admin a:hover {
   text-decoration: none;
@@ -165,17 +170,18 @@
   background: var(--a-line);
   color: var(--a-ink);
 }
+/* Pastilles : texte foncé sur fond pâle (≥ 4,5:1 même en 11 px gras) */
 .a-pill.ok {
   background: var(--a-ok-soft);
-  color: var(--a-ok);
+  color: #166534;
 }
 .a-pill.warn {
   background: var(--a-warn-soft);
-  color: var(--a-warn);
+  color: #92400e;
 }
 .a-pill.danger {
   background: var(--a-danger-soft);
-  color: var(--a-danger);
+  color: #991b1b;
 }
 .a-pill.accent {
   background: var(--a-accent-soft);

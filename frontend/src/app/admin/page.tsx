@@ -45,21 +45,21 @@ export default function AdminDashboard() {
         <div className="a-alert" style={{ background: "var(--a-ok-soft)", color: "#166534" }}>Aucune action en attente. Tout est à jour.</div>
       )}
 
-      <h3 style={{ margin: "20px 0 10px" }}>Utilisateurs</h3>
+      <h2 className="h3" style={{ margin: "20px 0 10px" }}>Utilisateurs</h2>
       <div className="a-grid">
         <Stat v={stats.users.total} l="Comptes actifs" />
         <Stat v={stats.users.pro} l="Professionnels" />
         <Stat v={stats.users.newToday} l="Inscrits aujourd'hui" />
         <Stat v={stats.users.suspended} l="Suspendus" />
       </div>
-      <h3 style={{ margin: "20px 0 10px" }}>Annonces</h3>
+      <h2 className="h3" style={{ margin: "20px 0 10px" }}>Annonces</h2>
       <div className="a-grid">
         <Stat v={stats.listings.active} l="En ligne" />
         <Stat v={stats.listings.newToday} l="Déposées aujourd'hui" />
         <Stat v={stats.listings.pending} l="En attente de vérification" />
         <Stat v={stats.reports.open} l="Signalements ouverts" />
       </div>
-      <h3 style={{ margin: "20px 0 10px" }}>Transactions</h3>
+      <h2 className="h3" style={{ margin: "20px 0 10px" }}>Transactions</h2>
       <div className="a-grid">
         <Stat v={stats.transactions.today} l="Aujourd'hui" />
         <Stat v={stats.transactions.month} l="Ce mois" />

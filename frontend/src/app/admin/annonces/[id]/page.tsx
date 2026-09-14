@@ -103,15 +103,15 @@ export default function AdminListingPage() {
 
       <div className="a-two">
         <section className="a-panel">
-          <h3 style={{ marginTop: 0 }}>Décision de modération</h3>
-          <textarea className="a-textarea" placeholder="Motif (obligatoire pour un refus, transmis au vendeur)" value={reason} onChange={(e) => setReason(e.target.value)} />
+          <h2 className="h3" style={{ marginTop: 0 }}>Décision de modération</h2>
+          <textarea className="a-textarea" aria-label="Motif de la décision (obligatoire pour un refus, transmis au vendeur)" placeholder="Motif (obligatoire pour un refus, transmis au vendeur)" value={reason} onChange={(e) => setReason(e.target.value)} />
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
             {l.status !== "en_ligne" && <button className="a-btn ok" disabled={busy} onClick={() => patch({ status: "en_ligne" }, "Annonce publiée.")}>Approuver et publier</button>}
             {l.status !== "refusee" && <button className="a-btn danger" disabled={busy || reason.trim().length < 3} onClick={() => patch({ status: "refusee", moderationReason: reason.trim() }, "Annonce refusée.")}>Refuser</button>}
             {l.status === "en_ligne" && <button className="a-btn" disabled={busy} onClick={() => patch({ status: "desactivee", moderationReason: reason.trim() || "Mise en pause par la modération" }, "Annonce mise en pause.")}>Mettre en pause</button>}
             <button className="a-btn" disabled={busy} onClick={remove} style={{ color: "var(--a-danger)" }}>Supprimer</button>
           </div>
-          <h3>Vendeur</h3>
+          <h2 className="h3">Vendeur</h2>
           {l.owner ? (
             <dl className="a-kv">
               <dt>Nom</dt><dd><Link href={`/admin/utilisateurs/${l.owner.id}`} style={{ textDecoration: "underline" }}>{l.owner.displayName}</Link> {l.owner.suspended && <span className="a-pill danger">Suspendu</span>}</dd>
@@ -121,13 +121,13 @@ export default function AdminListingPage() {
           ) : <p className="mono">Inconnu</p>}
         </section>
         <section className="a-panel">
-          <h3 style={{ marginTop: 0 }}>Corriger le contenu</h3>
+          <h2 className="h3" style={{ marginTop: 0 }}>Corriger le contenu</h2>
           <label className="mono">Titre<input className="a-input" value={title} onChange={(e) => setTitle(e.target.value)} /></label>
           <label className="mono" style={{ display: "block", marginTop: 8 }}>Description<textarea className="a-textarea" style={{ minHeight: 160 }} value={description} onChange={(e) => setDescription(e.target.value)} /></label>
           <button className="a-btn primary" style={{ marginTop: 8 }} disabled={busy} onClick={() => patch({ title, description }, "Contenu corrigé.")}>Enregistrer la correction</button>
           {l.attributes && Object.keys(l.attributes).length > 0 && (
             <>
-              <h3>Critères</h3>
+              <h2 className="h3">Critères</h2>
               <dl className="a-kv">{Object.entries(l.attributes).map(([k, v]) => <div key={k} style={{ display: "contents" }}><dt>{k}</dt><dd>{String(v)}</dd></div>)}</dl>
             </>
           )}
@@ -135,7 +135,7 @@ export default function AdminListingPage() {
       </div>
 
       <section className="a-panel" style={{ marginTop: 16 }}>
-        <h3 style={{ marginTop: 0 }}>Photos ({l.photos.length})</h3>
+        <h2 className="h3" style={{ marginTop: 0 }}>Photos ({l.photos.length})</h2>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {l.photos.map((p) => (
             // eslint-disable-next-line @next/next/no-img-element
@@ -147,7 +147,7 @@ export default function AdminListingPage() {
 
       <div className="a-two" style={{ marginTop: 16 }}>
         <section className="a-panel">
-          <h3 style={{ marginTop: 0 }}>Signalements ({l.reports.length})</h3>
+          <h2 className="h3" style={{ marginTop: 0 }}>Signalements ({l.reports.length})</h2>
           {l.reports.length === 0 ? <p className="mono">Aucun.</p> : l.reports.map((r) => {
             const rs = statusPill(r.status);
             return (
@@ -159,7 +159,7 @@ export default function AdminListingPage() {
           })}
         </section>
         <section className="a-panel">
-          <h3 style={{ marginTop: 0 }}>Transactions ({l.transactions.length})</h3>
+          <h2 className="h3" style={{ marginTop: 0 }}>Transactions ({l.transactions.length})</h2>
           {l.transactions.length === 0 ? <p className="mono">Aucune.</p> : l.transactions.map((t) => {
             const ts = statusPill(t.status);
             return (

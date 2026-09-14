@@ -1,0 +1,33 @@
+# Mises à jour de dépendances proposées en pull request (groupées, hebdomadaires).
+# Chaque PR passe la CI complète (tests API, tests navigateur, image Docker) avant fusion.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Paris
+    groups:
+      api-mineures:
+        update-types: [minor, patch]
+    open-pull-requests-limit: 5
+    labels: [dépendances]
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Paris
+    groups:
+      front-mineures:
+        update-types: [minor, patch]
+    open-pull-requests-limit: 5
+    labels: [dépendances]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    labels: [dépendances]

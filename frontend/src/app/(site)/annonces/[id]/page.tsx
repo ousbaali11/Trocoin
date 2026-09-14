@@ -44,21 +44,39 @@ export default async function ListingPage({ params }: { params: Promise<{ id: st
     ? await api<{ items: ListingCardType[] }>(`/listings?seller=${listing.seller.id}&page_size=5`, { token: null, revalidate: 120 }).then((r) => r.items.filter((l) => l.id !== listing.id).slice(0, 4)).catch(() => [])
     : [];
 
-  const jsonLd = {
-    "@context": "https://schema.org",
-    "@type": "Product",
-    name: listing.title,
-    description: listing.description,
-    image: listing.photos.map((p) => mediaUrl(p.url)),
-    offers: {
-      "@type": "Offer",
-      priceCurrency: "EUR",
-      price: listing.price ?? 0,
-      availability: listing.status === "en_ligne" ? "https://schema.org/InStock" : "https://schema.org/SoldOut",
-      itemCondition: listing.condition === "neuf" ? "https://schema.org/NewCondition" : "https://schema.org/UsedCondition",
-      areaServed: "FR",
+  const pageUrl = `${SITE_URL}/annonces/${listing.id}`;
+  const jsonLd = [
+    {
+      "@context": "https://schema.org",
+      "@type": "Product",
+      name: listing.title,
+      description: listing.description.slice(0, 5000),
+      sku: listing.id,
+      url: pageUrl,
+      image: listing.photos.map((p) => mediaUrl(p.url)),
+      ...(listing.category ? { category: listing.category.name } : {}),
+      offers: {
+        "@type": "Offer",
+        url: pageUrl,
+        priceCurrency: "EUR",
+        price: listing.price ?? 0,
+        availability: listing.status === "en_ligne" ? "https://schema.org/InStock" : "https://schema.org/SoldOut",
+        itemCondition: listing.condition === "neuf" ? "https://schema.org/NewCondition" : "https://schema.org/UsedCondition",
+        areaServed: "FR",
+        ...(listing.seller ? { seller: { "@type": listing.seller.accountType === "professionnel" ? "Organization" : "Person", name: listing.seller.accountType === "professionnel" && listing.seller.shopName ? listing.seller.shopName : listing.seller.displayName } } : {}),
+      },
     },
-  };
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { "@type": "ListItem", position: 1, name: "Accueil", item: SITE_URL },
+        ...(listing.rootCategory ? [{ "@type": "ListItem", position: 2, name: listing.rootCategory.name, item: `${SITE_URL}/recherche?category=${listing.rootCategory.slug}` }] : []),
+        ...(listing.category && listing.category.id !== listing.rootCategory?.id ? [{ "@type": "ListItem", position: 3, name: listing.category.name, item: `${SITE_URL}/recherche?category=${listing.category.slug}` }] : []),
+        { "@type": "ListItem", position: listing.category && listing.category.id !== listing.rootCategory?.id ? 4 : 3, name: listing.title, item: pageUrl },
+      ],
+    },
+  ];
 
   return (
     <div className="container page">

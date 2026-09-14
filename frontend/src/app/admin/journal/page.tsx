@@ -36,10 +36,10 @@ export default function AdminAuditPage() {
     <div>
       <div className="a-head"><div><h1>Journal d&apos;audit</h1><p>Chaque action d&apos;administration (qui, quoi, quand, sur quelle ressource). Lecture seule.</p></div></div>
       <div className="a-filters">
-        <select className="a-select" value={action} onChange={(e) => { setAction(e.target.value); setPage(1); }}>
+        <select className="a-select" aria-label="Type d'action" value={action} onChange={(e) => { setAction(e.target.value); setPage(1); }}>
           <option value="">Toutes les actions</option><option value="user">Utilisateurs</option><option value="listing">Annonces</option><option value="report">Signalements</option><option value="transaction">Transactions</option>
         </select>
-        <input className="a-input" placeholder="Identifiant de la ressource" value={target} onChange={(e) => { setTarget(e.target.value); setPage(1); }} />
+        <input className="a-input" aria-label="Identifiant de la ressource" placeholder="Identifiant de la ressource" value={target} onChange={(e) => { setTarget(e.target.value); setPage(1); }} />
       </div>
       {error && <div className="a-alert danger">{error}</div>}
       <div className="a-panel" style={{ padding: 0, overflowX: "auto" }}>

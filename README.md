@@ -1,17 +1,18 @@
 # Trocoin — plateforme de petites annonces (France)
 
 Monorepo : **API NestJS 12 + TypeORM** (racine) et **front Next.js 16** (`frontend/`).
-Règle non négociable : un compte = un numéro de **mobile français (+33 6/7)** vérifié
-par SMS. Tout autre indicatif est refusé à l'inscription.
+Règle non négociable : un compte = un numéro de **mobile français (+33 6/7)**. Tout autre
+indicatif est refusé à l'inscription. La vérification de ce numéro par SMS est **différée par
+choix** pendant la bêta (voir `AUDIT.md` §6) : le code Vonage reste en place, désactivé.
 
 Documents : `cahier-des-charges.md`, `architecture-technique.md`,
 `analyse-concurrentielle.md` (étude leboncoin + écarts), `AUDIT.md` (sécurité,
 complétude, ce qui n'a pas pu être testé, recommandations avant lancement),
 `DEPLOIEMENT.md` (mise en ligne pas à pas : Neon + Render + Vercel, sauvegardes, SMS).
 
-**Production** : API `https://trocoin.onrender.com` (Render, Docker, PostgreSQL Neon, SMS Vonage) ;
-front Next.js sur Vercel (URL à confirmer, `https://trocoin.vercel.app` répondait `NOT_FOUND` le
-13 septembre 2026). Procédure : `DEPLOIEMENT.md`.
+**Production** : API `https://trocoin.onrender.com` (Render, Docker, PostgreSQL Neon) et front
+`https://trocoin.vercel.app` (Vercel). Déploiement automatique à chaque push sur `main` après une
+CI verte (tests API, tests navigateur, image Docker) ; procédure et variables : `DEPLOIEMENT.md`.
 
 ## Démarrage rapide (développement)
 
@@ -25,13 +26,12 @@ npm run dev
 cd frontend && npm install && cp .env.example .env.local && npm run dev -- -p 3001
 ```
 
-- Site public : http://localhost:3001 — le code OTP s'affiche dans la page de
-  connexion (raccourci actif uniquement avec `SMS_PROVIDER=mock` hors production).
+- Site public : http://localhost:3001 — inscription par formulaire (aucun SMS) ; pour l'ancien
+  parcours par code SMS, le code s'affiche dans la page (`SMS_PROVIDER=mock` hors production).
 - Données de démonstration : `node test/seed-demo.js` (3 comptes, 12 annonces avec photos,
   1 annonce bloquée par la pré-modération, 1 signalement, 1 conversation).
-- Premier administrateur : `npm run create-admin -- 0611223344 "Admin"` puis
-  connexion normale par OTP → menu « Console d'administration » → `/admin`.
-- Page de test interne historique : `public/index.html` (servie uniquement hors production).
+- Premier administrateur : `npm run create-admin -- 0611223344 "Admin"` (crée ou promeut le
+  compte portant ce numéro) puis connexion → menu « Console d'administration » → `/admin`.
 
 ## Tests
 
@@ -41,7 +41,6 @@ npm run e2e:build        # construit l'API (dist/) et le front (next build) pour
 npm run e2e              # 40 scénarios Playwright dans Chromium (desktop 1280 px + mobile 375 px), dont accessibilité (axe) et clavier (Jest + supertest, SQLite en mémoire)
 # Les mêmes tests sur PostgreSQL (schéma créé par les migrations) :
 E2E_DB=postgres DB_TYPE=postgres DATABASE_URL=postgresql://... DB_SYNCHRONIZE=false npm test
-node test/ws-smoke.js    # messagerie temps réel contre un serveur lancé
 cd frontend && npx tsc --noEmit && npx next build
 ```
 
@@ -91,7 +90,7 @@ particulier/pro, date, rayon km avec carte, filtres spécifiques par catégorie,
 détail d'annonce (galerie, caractéristiques, carte approximative, vendeur, similaires,
 partage, signalement), vitrine vendeur/pro, pages légales, sitemap, robots.
 
-**Compte** (OTP) : dépôt d'annonce par étapes (champs dynamiques par catégorie,
+**Compte** : dépôt d'annonce par étapes (champs dynamiques par catégorie,
 photos réordonnables, brouillon, aperçu), gestion des annonces (pause, vendue,
 renouvellement, duplication), favoris, messagerie temps réel (WebSocket, réponses
 rapides, blocage, signalement), paiement sécurisé (séquestre, expédition ou remise en

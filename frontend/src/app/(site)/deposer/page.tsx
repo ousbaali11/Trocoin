@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { RequireAuth } from "@/components/ui/RequireAuth";
 import { ListingForm } from "@/components/listing/ListingForm";
 
-export const metadata: Metadata = { title: "Déposer une annonce", robots: { index: false } };
+export const metadata: Metadata = { title: "Déposer une annonce", description: "Publiez une annonce gratuitement en cinq étapes : catégorie, description, photos, localisation, aperçu.", robots: { index: false } };
 
 export default function DeposerPage() {
   return (

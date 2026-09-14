@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 import { OtpLoginForm } from "@/components/auth/OtpLoginForm";
 
-export const metadata: Metadata = { title: "Connexion par code SMS", robots: { index: false } };
+export const metadata: Metadata = { title: "Connexion par code SMS", description: "Connexion par code SMS pour les comptes créés avant l'inscription par formulaire.", robots: { index: false } };
 
 /** Ancien parcours OTP, conservé pour les comptes créés par SMS avant la phase 5. */
 export default function Page() {

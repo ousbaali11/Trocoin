@@ -4,7 +4,7 @@
 
 Chaque affirmation de ce document est étiquetée :
 **[exécuté]** = vérifié par exécution réelle (tests e2e `npm test` 54/54 après la phase 3, sur SQLite et sur PostgreSQL, appels HTTP,
-`test/ws-smoke.js`, parcours complets dans le navigateur sur le front Next.js) ;
+`test/ws-smoke.js` — script retiré le 14 septembre au profit du scénario Playwright `05-achat` —, parcours complets dans le navigateur sur le front Next.js) ;
 **[lecture]** = vérifié par relecture du code seulement ;
 **[non testé]** = impossible à tester dans cet environnement, avec la raison.
 

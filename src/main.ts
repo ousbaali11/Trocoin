@@ -48,10 +48,6 @@ async function bootstrap() {
   );
   app.useGlobalFilters(new AllExceptionsFilter());
 
-  if (!isProduction()) {
-    // Interface de test interne (public/index.html) : jamais servie en production.
-    app.useStaticAssets(join(process.cwd(), 'public'));
-  }
   // Photos uploadées. En production : S3/OVH Object Storage + CDN plutôt que le disque local.
   app.useStaticAssets(join(process.cwd(), 'uploads'), {
     prefix: '/uploads/',

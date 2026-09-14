@@ -35,11 +35,11 @@ function AdminListingsInner() {
       <div className="a-head"><div><h1>Annonces</h1><p>Toutes les annonces, tous statuts. Les annonces « à vérifier » ont été bloquées par la pré-modération automatique.</p></div></div>
       <div className="a-filters">
         <input className="a-input" placeholder="Titre, description ou identifiant" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />
-        <select className="a-select" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
+        <select className="a-select" aria-label="Statut de l'annonce" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
           <option value="">Tous statuts</option>
           {["en_attente", "en_ligne", "brouillon", "vendue", "refusee", "expiree", "desactivee"].map((s) => <option key={s} value={s}>{statusPill(s).label}</option>)}
         </select>
-        <select className="a-select" value={category} onChange={(e) => { setCategory(e.target.value); setPage(1); }}>
+        <select className="a-select" aria-label="Catégorie" value={category} onChange={(e) => { setCategory(e.target.value); setPage(1); }}>
           <option value="">Toutes catégories</option>
           {tree.map((r) => <optgroup key={r.slug} label={r.name}><option value={r.slug}>Tout {r.name}</option>{r.children.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}</optgroup>)}
         </select>
@@ -47,7 +47,7 @@ function AdminListingsInner() {
       {error && <div className="a-alert danger">{error}</div>}
       <div className="a-panel" style={{ padding: 0, overflowX: "auto" }}>
         <table className="a-table">
-          <thead><tr><th></th><th>Annonce</th><th>Vendeur</th><th>Prix</th><th>Statut</th><th>Créée</th><th></th></tr></thead>
+          <thead><tr><th><span className="sr-only">Photo</span></th><th>Annonce</th><th>Vendeur</th><th>Prix</th><th>Statut</th><th>Créée</th><th><span className="sr-only">Actions</span></th></tr></thead>
           <tbody>
             {data?.items.map((l) => {
               const s = statusPill(l.status);

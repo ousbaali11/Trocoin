@@ -47,17 +47,17 @@ export default function AdminUsersPage() {
       </div>
       <div className="a-filters">
         <input className="a-input" placeholder="Rechercher…" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />
-        <select className="a-select" value={type} onChange={(e) => { setType(e.target.value); setPage(1); }}>
+        <select className="a-select" aria-label="Type de compte" value={type} onChange={(e) => { setType(e.target.value); setPage(1); }}>
           <option value="">Tous types</option><option value="particulier">Particuliers</option><option value="professionnel">Professionnels</option><option value="admin">Administrateurs</option>
         </select>
-        <select className="a-select" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
+        <select className="a-select" aria-label="État du compte" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
           <option value="">Tous statuts</option><option value="actif">Actifs</option><option value="suspendu">Suspendus</option><option value="supprime">Supprimés</option>
         </select>
       </div>
       {error && <div className="a-alert danger">{error}</div>}
       <div className="a-panel" style={{ padding: 0, overflowX: "auto" }}>
         <table className="a-table">
-          <thead><tr><th>Utilisateur</th><th>Téléphone</th><th>Type</th><th>Ville</th><th>Note</th><th>État</th><th>Inscrit le</th><th></th></tr></thead>
+          <thead><tr><th>Utilisateur</th><th>Téléphone</th><th>Type</th><th>Ville</th><th>Note</th><th>État</th><th>Inscrit le</th><th><span className="sr-only">Actions</span></th></tr></thead>
           <tbody>
             {data?.items.map((u) => {
               const t = statusPill(u.accountType);

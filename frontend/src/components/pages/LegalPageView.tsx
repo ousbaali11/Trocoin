@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, SITE_URL } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { renderMarkdown } from "@/lib/markdown";
 import type { LegalPage } from "@/lib/types";
@@ -14,9 +14,21 @@ export async function getLegalPage(slug: string): Promise<LegalPage | null> {
   }
 }
 
+/** Description SEO : premier paragraphe de la page, sans Markdown ni mentions « modèle à compléter ». */
+function describe(content: string): string | undefined {
+  const para = content
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith("#") && !l.startsWith("_") && !l.startsWith("[") && !l.startsWith("-"));
+  const first = para[0]?.replace(/\*\*/g, "").replace(/_/g, "");
+  return first ? (first.length > 155 ? first.slice(0, 152).trimEnd() + "…" : first) : undefined;
+}
+
 export async function legalMetadata(slug: string): Promise<Metadata> {
   const page = await getLegalPage(slug);
-  return { title: page?.title ?? "Page introuvable" };
+  if (!page) return { title: "Page introuvable" };
+  return { title: page.title, description: describe(page.content), alternates: { canonical: `${SITE_URL}/${slug}` } };
 }
 
 /** Page éditée depuis le back-office (CMS) : contenu Markdown rendu et échappé. */

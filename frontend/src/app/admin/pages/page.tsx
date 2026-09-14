@@ -61,7 +61,7 @@ export default function AdminPagesPage() {
           {preview ? (
             <div style={{ border: "1px solid var(--a-line)", borderRadius: 8, padding: 20, background: "#fff" }} dangerouslySetInnerHTML={{ __html: renderMarkdown(draft.content) }} />
           ) : (
-            <textarea className="a-textarea" style={{ minHeight: 520, fontFamily: "ui-monospace, Consolas, monospace", fontSize: ".85rem" }} value={draft.content} onChange={(e) => setDraft({ ...draft, content: e.target.value })} />
+            <textarea className="a-textarea" aria-label="Contenu de la page (Markdown)" style={{ minHeight: 520, fontFamily: "ui-monospace, Consolas, monospace", fontSize: ".85rem" }} value={draft.content} onChange={(e) => setDraft({ ...draft, content: e.target.value })} />
           )}
         </div>
       )}

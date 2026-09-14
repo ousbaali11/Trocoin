@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { api } from "@/lib/api";
+import { api, SITE_URL } from "@/lib/api";
 import type { CategoryNode, SearchResult } from "@/lib/types";
 import { ListingCard } from "@/components/ui/ListingCard";
 import { CategoryIcon } from "@/components/ui/CategoryIcon";
@@ -25,8 +25,13 @@ async function load() {
 
 export default async function HomePage() {
   const { tree, recent, pro, total, ok, free } = await load();
+  const jsonLd = [
+    { "@context": "https://schema.org", "@type": "WebSite", name: "Trocoin", url: SITE_URL, inLanguage: "fr-FR", potentialAction: { "@type": "SearchAction", target: { "@type": "EntryPoint", urlTemplate: `${SITE_URL}/recherche?q={search_term_string}` }, "query-input": "required name=search_term_string" } },
+    { "@context": "https://schema.org", "@type": "Organization", name: "Trocoin", url: SITE_URL, logo: `${SITE_URL}/favicon.ico` },
+  ];
   return (
     <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <section className={styles.hero}>
         <div className="container">
           <div className={styles.heroHead}>

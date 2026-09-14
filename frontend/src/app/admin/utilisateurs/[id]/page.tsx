@@ -95,16 +95,16 @@ export default function AdminUserPage() {
 
       <div className="a-two">
         <section className="a-panel">
-          <h3 style={{ marginTop: 0 }}>Suspension</h3>
+          <h2 className="h3" style={{ marginTop: 0 }}>Suspension</h2>
           {u.suspended ? (
             <button className="a-btn ok" disabled={busy || u.deleted} onClick={() => patch({ suspended: false }, "Compte réactivé.")}>Réactiver le compte</button>
           ) : (
             <>
-              <textarea className="a-textarea" placeholder="Motif de suspension (transmis à l'utilisateur)" value={reason} onChange={(e) => setReason(e.target.value)} />
+              <textarea className="a-textarea" aria-label="Motif de suspension (transmis à l'utilisateur)" placeholder="Motif de suspension (transmis à l'utilisateur)" value={reason} onChange={(e) => setReason(e.target.value)} />
               <button className="a-btn danger" style={{ marginTop: 8 }} disabled={busy || u.deleted || reason.trim().length < 3} onClick={async () => (await confirm({ title: "Suspendre ce compte ?", text: "Ses annonces seront mises en pause et le motif lui sera transmis.", confirmLabel: "Suspendre", danger: true })) && patch({ suspended: true, suspensionReason: reason.trim() }, "Compte suspendu.")}>Suspendre le compte</button>
             </>
           )}
-          <h3>Mot de passe</h3>
+          <h2 className="h3">Mot de passe</h2>
           {temp ? (
             <div className="a-alert">
               Mot de passe temporaire (affiché une seule fois) : <code className="mono" style={{ fontSize: "1.05rem", userSelect: "all" }}>{temp}</code>
@@ -125,7 +125,7 @@ export default function AdminUserPage() {
               }
             }}>Réinitialiser le mot de passe</button>
           )}
-          <h3>Vérifications</h3>
+          <h2 className="h3">Vérifications</h2>
           <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: ".88rem" }}>
             <input type="checkbox" checked={form.identityVerified} disabled={busy || u.deleted} onChange={(e) => patch({ identityVerified: e.target.checked }, "Badge identité mis à jour.")} /> Identité vérifiée (badge public)
           </label>
@@ -138,7 +138,7 @@ export default function AdminUserPage() {
         </section>
 
         <section className="a-panel">
-          <h3 style={{ marginTop: 0 }}>Modifier le compte</h3>
+          <h2 className="h3" style={{ marginTop: 0 }}>Modifier le compte</h2>
           <div style={{ display: "grid", gap: 8 }}>
             <label className="mono">Pseudo<input className="a-input" value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} /></label>
             <label className="mono">Type de compte
@@ -157,9 +157,9 @@ export default function AdminUserPage() {
       </div>
 
       <section className="a-panel" style={{ marginTop: 16 }}>
-        <h3 style={{ marginTop: 0 }}>Annonces ({u.listings.length})</h3>
+        <h2 className="h3" style={{ marginTop: 0 }}>Annonces ({u.listings.length})</h2>
         <table className="a-table">
-          <thead><tr><th>Titre</th><th>Statut</th><th>Prix</th><th>Vues</th><th>Créée</th><th></th></tr></thead>
+          <thead><tr><th>Titre</th><th>Statut</th><th>Prix</th><th>Vues</th><th>Créée</th><th><span className="sr-only">Actions</span></th></tr></thead>
           <tbody>
             {u.listings.map((l) => {
               const s = statusPill(l.status);
@@ -174,7 +174,7 @@ export default function AdminUserPage() {
 
       <div className="a-two" style={{ marginTop: 16 }}>
         <section className="a-panel">
-          <h3 style={{ marginTop: 0 }}>Signalements reçus</h3>
+          <h2 className="h3" style={{ marginTop: 0 }}>Signalements reçus</h2>
           {u.reportsAgainst.length === 0 ? <p className="mono">Aucun.</p> : u.reportsAgainst.map((r) => {
             const s = statusPill(r.status);
             return (
@@ -186,7 +186,7 @@ export default function AdminUserPage() {
           })}
         </section>
         <section className="a-panel">
-          <h3 style={{ marginTop: 0 }}>Transactions ({u.transactions.length})</h3>
+          <h2 className="h3" style={{ marginTop: 0 }}>Transactions ({u.transactions.length})</h2>
           {u.transactions.length === 0 ? <p className="mono">Aucune.</p> : u.transactions.map((tx) => {
             const s = statusPill(tx.status);
             return (

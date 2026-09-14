@@ -45,7 +45,7 @@ export default function AdminReportsPage() {
     <div>
       <div className="a-head"><div><h1>Signalements</h1><p>File de modération. Traiter = infraction constatée (avec action éventuelle) ; rejeter = rien à signaler.</p></div></div>
       <div className="a-filters">
-        <select className="a-select" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
+        <select className="a-select" aria-label="État des signalements" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
           <option value="ouvert">Ouverts</option><option value="traite">Traités</option><option value="rejete">Rejetés</option><option value="">Tous</option>
         </select>
       </div>
@@ -70,13 +70,13 @@ export default function AdminReportsPage() {
                 </div>
                 {r.status === "ouvert" && (
                   <div style={{ minWidth: 300, display: "grid", gap: 6 }}>
-                    <select className="a-select" value={actions[r.id] || "aucune"} onChange={(e) => setActions({ ...actions, [r.id]: e.target.value })}>
+                    <select className="a-select" aria-label="Action associée au signalement" value={actions[r.id] || "aucune"} onChange={(e) => setActions({ ...actions, [r.id]: e.target.value })}>
                       <option value="aucune">Aucune action associée</option>
                       {r.listingId && <option value="retirer_annonce">Retirer l&apos;annonce</option>}
                       {r.reportedUserId && <option value="suspendre_utilisateur">Suspendre l&apos;utilisateur</option>}
                       {r.listingId && r.reportedUserId && <option value="retirer_et_suspendre">Retirer l&apos;annonce ET suspendre</option>}
                     </select>
-                    <input className="a-input" placeholder="Note (transmise aux parties)" value={notes[r.id] || ""} onChange={(e) => setNotes({ ...notes, [r.id]: e.target.value })} />
+                    <input className="a-input" aria-label="Note de décision (transmise aux parties)" placeholder="Note (transmise aux parties)" value={notes[r.id] || ""} onChange={(e) => setNotes({ ...notes, [r.id]: e.target.value })} />
                     <div style={{ display: "flex", gap: 6 }}>
                       <button className="a-btn danger" disabled={busy === r.id} onClick={() => resolve(r, "traite")}>Traiter</button>
                       <button className="a-btn" disabled={busy === r.id} onClick={() => resolve(r, "rejete")}>Rejeter</button>

@@ -67,7 +67,7 @@ export default function AdminDisputesPage() {
     <div>
       <div className="a-head"><div><h1>Transactions et litiges</h1><p>Vue globale du paiement sécurisé. Un litige se tranche par remboursement de l&apos;acheteur ou libération des fonds au vendeur.</p></div></div>
       <div className="a-filters">
-        <select className="a-select" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
+        <select className="a-select" aria-label="État des transactions" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
           <option value="litige">Litiges en cours</option><option value="sequestre">Séquestre</option><option value="livree">Expédiées</option><option value="confirme">Terminées</option><option value="rembourse">Remboursées</option><option value="annulee">Annulées</option><option value="">Toutes</option>
         </select>
       </div>
@@ -93,7 +93,7 @@ export default function AdminDisputesPage() {
                 </div>
                 {t.status === "litige" && (
                   <div style={{ minWidth: 300, display: "grid", gap: 6 }}>
-                    <textarea className="a-textarea" placeholder="Note de décision (transmise aux deux parties)" value={notes[t.id] || ""} onChange={(e) => setNotes({ ...notes, [t.id]: e.target.value })} />
+                    <textarea className="a-textarea" aria-label="Note de décision (transmise aux deux parties)" placeholder="Note de décision (transmise aux deux parties)" value={notes[t.id] || ""} onChange={(e) => setNotes({ ...notes, [t.id]: e.target.value })} />
                     <div style={{ display: "flex", gap: 6 }}>
                       <button className="a-btn danger" disabled={busy === t.id} onClick={() => resolve(t, "rembourser")}>Rembourser l&apos;acheteur</button>
                       <button className="a-btn ok" disabled={busy === t.id} onClick={() => resolve(t, "liberer")}>Libérer au vendeur</button>
