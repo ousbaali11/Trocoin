@@ -10,6 +10,5 @@ test
 !.env.example
 *.md
 maquette-premium.html
-public
 .git
 .github

@@ -386,7 +386,7 @@ Les annonces sponsorisées / boostées sont insérées avec mention.
 ## 8. Écarts identifiés (leboncoin vs cahier des charges vs code réel)
 
 Légende : **Backend** = API NestJS ; **Front** = interface utilisateur
-finale (Next.js à construire ; `public/index.html` n'est qu'un outil de
+finale (Next.js à construire ; `public/index.html`, retiré depuis, n'était qu'un outil de
 dev). « Absent » = rien dans le code au moment de l'analyse.
 
 ### 8.1 Comptes

@@ -3,6 +3,9 @@ import { api, SITE_URL } from "@/lib/api";
 import type { CategoryNode, SearchResult } from "@/lib/types";
 import { HELP_ARTICLES } from "@/lib/help-content";
 
+// Généré à la demande (pas figé au build, où l'API n'est pas forcément joignable) ; les appels API sont mis en cache.
+export const dynamic = "force-dynamic";
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const entries: MetadataRoute.Sitemap = [
     { url: SITE_URL, changeFrequency: "hourly", priority: 1 },

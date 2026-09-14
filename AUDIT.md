@@ -480,3 +480,108 @@ pas mesurables ici (base de test sans photos) ; la vignette 480 px s'applique au
 - Carte Leaflet : non utilisable au clavier ni au lecteur d'écran (contenu redondant avec la ville
   affichée en texte).
 - Back-office : non audité (identité distincte, usage interne).
+
+
+---
+
+## 12. Back-office accessible, SEO, ménage, test de charge — 14 septembre 2026, nuit
+
+### 12.1 Accessibilité du back-office
+
+Même méthode que le site public (§11) : axe-core sur les 10 pages de la console, connecté comme
+administrateur, avec un signalement et un litige réels dans les files ; navigation au clavier.
+
+| Constat initial (axe) | Occurrences | Correction |
+|---|---|---|
+| color-contrast | 41 | palette du back-office reprise : texte secondaire #556270 (5,0:1), pastilles ok / warn / danger en texte foncé sur fond pâle (≥ 7:1), boutons verts et rouges assombris, bandeau rouge #b91c1c |
+| label (champs sans libellé) | 28 | tableau des formules : chaque champ nommé avec la formule concernée (« Prix mensuel de la formule Pro »…) ; éditeur CMS nommé |
+| select-name | 9 | tous les filtres des listes nommés (type de compte, statut, catégorie, action associée…) |
+| region (contenu hors point de repère) | 10 | bandeau d'avertissement en `<header>`, colonne de navigation nommée |
+| empty-table-header | 5 | colonnes « Photo » et « Actions » nommées pour les lecteurs d'écran |
+| heading-order | 4 | sections en h2 sous le h1 de chaque page |
+
+Après corrections : **0 violation** sur les 10 pages. Surveillance : `e2e/09-admin-accessibilite.spec.ts`
+(axe sur la console + suspension et réactivation d'un compte **au clavier seul**, boîte de
+confirmation comprise, trace vérifiée dans le journal).
+
+### 12.2 Référencement
+
+- **Sitemap** : généré à la demande (il était figé au build, donc vide de catégories quand l'API
+  n'était pas joignable au moment du build) ; couvre accueil, recherche, 12 familles et toutes les
+  sous-catégories, 22 articles d'aide, CGU, confidentialité, mentions légales (manquaient), à propos,
+  50 dernières annonces ; aucune page privée. Vérifié en production : 100+ entrées.
+- **robots.txt** : `/admin`, `/compte`, `/connexion`, `/deposer` exclus, sitemap déclaré. Inchangé, vérifié.
+- **Titres et descriptions** : les pages de catégorie ont désormais leur propre titre
+  (« Vélos : annonces d'occasion (Loisirs) »), description et canonique ; les pages légales
+  tirent leur description de leur premier paragraphe ; connexion, inscription, dépôt, mot de passe
+  oublié, réinitialisation, SMS ont une description propre (et restent `noindex`) ; les recherches
+  par mot-clé sont `noindex` (contenu dupliqué).
+- **JSON-LD** : `Product` de l'annonce relu après les changements récents (photos, vendeur, vente) :
+  toujours valide, complété par `url`, `sku`, `category`, `offers.url` et `offers.seller`
+  (Person ou Organization) ; ajout d'un `BreadcrumbList` (Accueil › famille › catégorie › annonce)
+  et, sur l'accueil, `WebSite` avec `SearchAction` + `Organization`.
+- Surveillance : `e2e/10-seo.spec.ts` (sitemap, robots, unicité titre + description sur 14 pages,
+  `noindex` des pages privées, JSON-LD parsé et contrôlé champ par champ).
+
+### 12.3 Ménage du dépôt
+
+Supprimés : `maquette-premium.html` (maquette d'avant le front Next, jamais référencée),
+`public/index.html` (interface de test interne de la phase 1, servie hors production ; le code de
+service statique correspondant est retiré de `main.ts`), `test/ws-smoke.js` (vérification manuelle
+du temps réel, remplacée par le scénario Playwright `05-achat`), `frontend/README.md` (texte
+par défaut de create-next-app). Les scripts `patch-*.js` cités dans le brief n'ont jamais été
+dans le dépôt : ils vivaient dans l'espace de travail temporaire de l'assistant. Conservé :
+`test/seed-demo.js` (données de démonstration locales, documenté dans le README).
+README revu : règle du numéro de mobile (vérification SMS différée, plus « vérifié par SMS »),
+production à jour (Vercel en ligne, déploiement automatique), premier administrateur, plus de
+mention du parcours OTP comme parcours principal. `AUDIT.md` (état consolidé) et
+`AUDIT-HISTORIQUE.md` (journal des phases 1 à 8) restent complémentaires : l'historique
+signale les scripts retirés.
+
+### 12.4 Test de charge léger en production
+
+`node scripts/charge.js --api https://trocoin.onrender.com --front https://trocoin.vercel.app --vus 10 --minutes 3`
+(script sans dépendance, lectures publiques uniquement, temps de réflexion 0,8–3 s entre pages).
+Exécuté le 14 septembre 2026 à 14:36 UTC (16:36 à Paris, aucun utilisateur réel sur le site),
+contre les 2 annonces réelles de la base Neon.
+
+| Point d'entrée | Requêtes | Erreurs | p50 | p95 | p99 | max |
+|---|---|---|---|---|---|---|
+| API /categories/tree | 210 | 0 | 57 ms | 129 ms | 340 ms | 436 ms |
+| API /listings?q= | 210 | 0 | 159 ms | 389 ms | 770 ms | 1 007 ms |
+| API /listings?category= | 70 | 0 | 358 ms | 455 ms | 710 ms | 710 ms |
+| API /listings (récentes) | 156 | 0 | 365 ms | 1 068 ms | 1 648 ms | 2 010 ms |
+| API /listings/:id | 210 | 0 | 557 ms | 982 ms | 2 240 ms | 3 004 ms |
+| API /listings/:id/similar | 210 | 0 | 555 ms | 980 ms | 1 233 ms | 1 850 ms |
+| Front /annonces/:id (rendu serveur) | 210 | 0 | 931 ms | 2 038 ms | 2 376 ms | 2 577 ms |
+| Front /recherche | 98 | 0 | 68 ms | 157 ms | 208 ms | 208 ms |
+
+1 374 requêtes en 187 s (7,3 req/s), **0 erreur**, **aucun redémarrage** (uptime passé de 292 à
+480 s), aucune erreur de connexion à la base : le pool (`DB_POOL_MAX=5`) suffit largement à
+10 utilisateurs simultanés, contrairement à PGlite (1 connexion) rencontré en développement.
+
+**Lecture** : pas de dégradation anormale (les latences n'augmentent pas au fil du test), mais
+la fiche d'annonce est lente en absolu (p50 ≈ 0,55 s API, ≈ 0,9 s rendue) : chaque requête vers
+Neon traverse l'Atlantique (base en `us-east-2`, API Render en Europe), et une fiche enchaîne
+plusieurs requêtes. C'est l'effet direct de la région Neon différée (§6) : la migration vers
+Francfort devrait diviser ces temps par 3 à 5 sans autre changement. Deux index composites
+(`status, publishedAt` et `rootCategoryId, status, publishedAt`, migration
+`ListingsSearchIndex`) ont été ajoutés pour que le tri par date des listes ne dépende plus d'un
+tri en mémoire quand le catalogue grossira.
+
+### 12.5 Jugement : ce qui valait encore la peine, et ce qui ne vaut plus
+
+Fait dans ce tour, sans compte externe : index composites de recherche (ci-dessus) et
+**Dependabot** (`.github/dependabot.yml` : mises à jour npm de l'API et du front groupées chaque
+lundi, actions GitHub chaque mois ; chaque proposition passe la CI complète, tests navigateur
+compris, avant fusion).
+
+Ce qui reste et qui **ne dépend que des quatre points différés ou de vrais utilisateurs** :
+la latence de la base (région Neon), la persistance des photos (R2), les e-mails (fournisseur),
+les paiements réels ; et tout ce qui touche à l'usage réel (quels filtres servent, quelles
+catégories manquent, où les testeurs butent). Je n'identifie plus de chantier technique
+substantiel qui serait raisonnable sans ces éléments : les suites (94 tests API, 46 scénarios
+navigateur, axe, clavier, SEO, charge) couvrent ce qui peut l'être, et ajouter du code sans
+retour d'usage produirait des fonctionnalités inventées. Point d'attention pour plus tard,
+non urgent : les styles en ligne du compte (lisibilité), et l'inline du CSS critique pour le
+LCP desktop (§11.4).
