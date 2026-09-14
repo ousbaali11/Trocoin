@@ -721,7 +721,8 @@ Les points P0 restent à votre main (SMS, e-mail, Render, disque, région, juris
 - `test/phase8.e2e-spec.ts` : plein texte (exécuté sur PostgreSQL uniquement, ignoré sur SQLite) — « velos electriques », « freins hydraulique » (mot de la description), « ville vélo » (ordre inversé) trouvent l'annonce « Vélo électrique de ville », pas la Clio ; « clio » passe ; plafond — avec `MAX_PHOTOS_PER_DAY=3`, la 4ᵉ photo du compte est refusée « Limite de 3 photos par 24 h », rien n'est conservé, un autre compte n'est pas affecté.
 - Une première version du plein texte (`plainto_tsquery` sans retrait d'accents) échouait sur PGlite (« velos » non réduit par le stemmer, accents non ignorés) : corrigée par l'approche préfixe + `translate`, validée par sonde SQL sur 6 cas puis par le test.
 - Suite complète : **79/79** sur PostgreSQL (PGlite, migrations seules, dont `ListingsFullText`, aucune dérive) ; SQLite : **78 réussis + 1 ignoré** (le test plein texte).
-- `tsc` API + front : 0 erreur ; `next build` : succès. CI / Vercel / Render : voir la ligne ajoutée après le push.
+- `tsc` API + front : 0 erreur ; `next build` : succès.
+- Push `3124b89` → CI **verte** (run 34794397142 : 79 tests PostgreSQL 16 avec la migration plein texte, 78 + 1 ignoré SQLite, front, image Docker avec sharp). Vercel : déployé, l'accueil en ligne porte `placeholder="QUOI ?"` et `placeholder="OÙ ?"`. **Render** : vous avez déployé à la main le build de la phase 7 entre-temps (`POST /auth/password/change` → 401, `/health` 1.1.0), mais **pas encore la phase 8** : la migration `ListingsFullText` est absente de Neon, la recherche par mots en production reste en `LIKE` et le plafond de photos n'est pas actif tant que `3124b89` n'est pas déployé manuellement (toujours aucun webhook GitHub).
 
 ## Annexe — journal des vérifications exécutées le 12 septembre 2026
 
