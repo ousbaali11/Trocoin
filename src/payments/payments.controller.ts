@@ -1,5 +1,6 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Req, UseGuards } from '@nestjs/common';
-import { Throttle } from '@nestjs/throttler';
+import { Body, Controller, Get, Headers, HttpCode, Param, ParseUUIDPipe, Post, Query, RawBodyRequest, Req, UseGuards } from '@nestjs/common';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
+import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
 import {
@@ -13,6 +14,17 @@ import { PaymentsService } from './payments.service';
 @Controller('transactions')
 export class PaymentsController {
   constructor(private paymentsService: PaymentsService) {}
+
+  /**
+   * Webhook Stripe (déclaré avant les routes « :id »). Pas d'authentification utilisateur :
+   * la signature du corps brut (STRIPE_WEBHOOK_SECRET) fait foi ; 400 si elle est absente ou fausse.
+   */
+  @Post('webhook/stripe')
+  @SkipThrottle()
+  @HttpCode(200)
+  stripeWebhook(@Req() req: RawBodyRequest<Request>, @Headers('stripe-signature') signature?: string) {
+    return this.paymentsService.handleWebhook(req.rawBody, signature);
+  }
 
   /** Devis public (frais affichés avant d'acheter, même sans compte). */
   @UseGuards(OptionalJwtAuthGuard)

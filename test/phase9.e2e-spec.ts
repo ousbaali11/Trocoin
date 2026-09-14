@@ -87,6 +87,45 @@ describe('Phase 9 : stockage S3, SIRET vérifié au registre, Redis pour le rate
       expect(objects.has(key)).toBe(false);
     });
 
+    it('la vignette 480 px est envoyée dans le bucket et supprimée avec la photo', async () => {
+      const user = await login(app);
+      const listing = await createListing(app, user);
+      const res = await request(server).post(`/listings/${listing.id}/photos`).set(user.auth).attach('files', PNG_1x1, { filename: 'p.png', contentType: 'image/png' }).expect(201);
+      const thumbUrl: string = res.body[0].thumbUrl;
+      expect(thumbUrl).toMatch(/^https:\/\/cdn\.example\.test\/uploads\/[0-9a-f-]{36}-min\.png$/);
+      const thumbKey = '/trocoin-test/' + thumbUrl.replace('https://cdn.example.test/', '');
+      expect(objects.has(thumbKey)).toBe(true);
+      await request(server).delete(`/listings/${listing.id}`).set(user.auth).expect(204);
+      expect(log).toContain(`DELETE ${thumbKey}`);
+      expect(objects.has(thumbKey)).toBe(false);
+      expect(objects.has('/trocoin-test/' + res.body[0].url.replace('https://cdn.example.test/', ''))).toBe(false);
+    });
+
+    it('sans S3_PUBLIC_URL : URL relatives, GET /uploads/… relayé depuis le bucket avec cache long, 404 après suppression', async () => {
+      setStorageForTests(new S3Storage({ endpoint, region: 'auto', bucket: 'trocoin-test', accessKeyId: 'k', secretAccessKey: 's', forcePathStyle: true }));
+      try {
+        const user = await login(app);
+        const listing = await createListing(app, user);
+        const res = await request(server).post(`/listings/${listing.id}/photos`).set(user.auth).attach('files', PNG_1x1, { filename: 'p.png', contentType: 'image/png' }).expect(201);
+        const url: string = res.body[0].url;
+        expect(url).toMatch(/^\/uploads\/[0-9a-f-]{36}\.png$/);
+        expect(res.body[0].thumbUrl).toMatch(/^\/uploads\/[0-9a-f-]{36}-min\.png$/);
+        expect(objects.has('/trocoin-test' + url)).toBe(true);
+        const served = await request(server).get(url).expect(200);
+        expect(served.headers['content-type']).toBe('image/png');
+        expect(served.headers['cache-control']).toBe('public, max-age=31536000, immutable');
+        expect((await sharp(served.body).metadata()).format).toBe('png');
+        await request(server).get(res.body[0].thumbUrl).expect(200);
+        await request(server).get('/uploads/pas-un-uuid.png').expect(404);
+        await request(server).delete(`/listings/${listing.id}/photos/${res.body[0].id}`).set(user.auth).expect(204);
+        expect(objects.has('/trocoin-test' + url)).toBe(false);
+        expect(objects.has('/trocoin-test' + res.body[0].thumbUrl)).toBe(false);
+        await request(server).get(url).expect(404);
+      } finally {
+        setStorageForTests(new S3Storage({ endpoint, region: 'auto', bucket: 'trocoin-test', accessKeyId: 'k', secretAccessKey: 's', publicUrl: 'https://cdn.example.test', forcePathStyle: true }));
+      }
+    });
+
     it('un fichier corrompu n\'est jamais envoyé au bucket', async () => {
       const user = await login(app);
       const listing = await createListing(app, user);

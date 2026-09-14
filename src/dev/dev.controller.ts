@@ -26,7 +26,6 @@ export class DevController {
   @Get('last-reset-link/:email')
   getLastResetLink(@Param('email') email: string) {
     if (isProduction()) throw new NotFoundException();
-    if ((this.config.get<string>('EMAIL_PROVIDER') || 'mock') !== 'mock') throw new NotFoundException(); // en production : 404 inconditionnel ci-dessus
     const link = this.emailService.getLastResetLinkForDev(email);
     if (!link) throw new NotFoundException('Aucun lien récent pour cette adresse.');
     return { email: email.toLowerCase(), link };

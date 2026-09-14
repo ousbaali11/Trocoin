@@ -65,9 +65,9 @@ export function validateEnv(env: Record<string, unknown>): Record<string, unknow
     }
   }
 
-  // Stockage objet : clés vérifiées au démarrage. Noms exacts attendus :
+  // Stockage objet : clés vérifiées au démarrage (S3_PUBLIC_URL facultative : sans elle, l'API relaie les fichiers). Noms exacts attendus :
   if (env.STORAGE_PROVIDER === 's3') {
-    const missing = ['S3_ENDPOINT', 'S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY', 'S3_PUBLIC_URL'].filter((k) => !env[k]);
+    const missing = ['S3_ENDPOINT', 'S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY'].filter((k) => !env[k]);
     if (missing.length) errors.push(`STORAGE_PROVIDER=s3 : variables manquantes ${missing.join(', ')}.`);
   } else if (env.STORAGE_PROVIDER && env.STORAGE_PROVIDER !== 'local') {
     errors.push(`STORAGE_PROVIDER="${env.STORAGE_PROVIDER}" inconnu (valeurs : local, s3).`);
@@ -78,6 +78,9 @@ export function validateEnv(env: Record<string, unknown>): Record<string, unknow
 
   if (env.PAYMENT_PROVIDER === 'stripe' && !env.STRIPE_SECRET_KEY) {
     errors.push('STRIPE_SECRET_KEY est requis quand PAYMENT_PROVIDER=stripe.');
+  }
+  if (env.PAYMENT_PROVIDER === 'stripe' && !env.STRIPE_WEBHOOK_SECRET) {
+    errors.push('STRIPE_WEBHOOK_SECRET est requis quand PAYMENT_PROVIDER=stripe (signature des webhooks, Stripe → Developers → Webhooks).');
   }
 
   if (errors.length > 0) {
@@ -103,4 +106,12 @@ export function resolveCorsOrigins(env: Record<string, unknown> = process.env): 
   if (isProduction(env)) return [];
   const port = env.PORT || 3000;
   return [`http://localhost:${port}`, 'http://localhost:3001', 'http://127.0.0.1:3001'];
+}
+
+/** URL publique du site (liens des e-mails, retours de paiement) : SITE_URL, sinon la première origine CORS qui n'est pas l'API elle-même, sinon le front local. */
+export function resolveSiteUrl(env: Record<string, unknown> = process.env): string {
+  const explicit = (env.SITE_URL as string | undefined)?.trim();
+  if (explicit) return explicit.replace(/\/$/, '');
+  const cors = resolveCorsOrigins(env).filter((o) => !/localhost:3000$/.test(o));
+  return (cors[0] || 'http://localhost:3001').replace(/\/$/, '');
 }

@@ -11,9 +11,11 @@ import { isProduction } from '../config/env.validation';
  *   EMAIL_PROVIDER=none   : aucun envoi possible → « mot de passe oublié » répond 503
  *                           avec un message clair (autorisé en production le temps
  *                           de brancher un fournisseur ; l'admin peut réinitialiser).
- *   EMAIL_PROVIDER=resend : RESEND_API_KEY + EMAIL_FROM requis   ─┐ appel HTTP NON implémenté
- *   EMAIL_PROVIDER=brevo  : BREVO_API_KEY  + EMAIL_FROM requis   ─┘ tant qu'aucune clé n'est disponible
- *                           pour le tester (voir AUDIT.md §12). Le démarrage vérifie les clés.
+ *   EMAIL_PROVIDER=resend : RESEND_API_KEY + EMAIL_FROM requis — appel HTTP réel (POST /emails de
+ *                           api.resend.com), testé le 14 septembre 2026 avec un envoi réel (AUDIT.md §15).
+ *                           RESEND_API_URL (tests) permet de viser un faux serveur.
+ *   EMAIL_PROVIDER=brevo  : BREVO_API_KEY + EMAIL_FROM requis — appel HTTP NON implémenté (aucune clé
+ *                           pour le tester) : chaque envoi répond 503. Le démarrage vérifie les clés.
  */
 export interface EmailMessage {
   to: string;
@@ -40,6 +42,29 @@ class MockEmailProvider implements IEmailProvider {
   }
 }
 
+/** Resend (https://resend.com) : POST https://api.resend.com/emails, jeton Bearer. */
+export class ResendEmailProvider implements IEmailProvider {
+  private readonly logger = new Logger('Email(resend)');
+  lastMessageId: string | null = null;
+  constructor(private readonly apiKey: string, private readonly from: string, private readonly apiUrl = process.env.RESEND_API_URL || 'https://api.resend.com') {}
+  async send(m: EmailMessage): Promise<void> {
+    let res: Response;
+    try {
+      res = await fetch(`${this.apiUrl.replace(/\/$/, '')}/emails`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: this.from, to: [m.to], subject: m.subject, text: m.text, html: m.html }),
+      });
+    } catch (err) {
+      throw new EmailDeliveryError('resend', `réseau : ${(err as Error).message}`);
+    }
+    const body = (await res.json().catch(() => ({}))) as { id?: string; name?: string; message?: string };
+    if (!res.ok) throw new EmailDeliveryError('resend', `HTTP ${res.status} ${[body.name, body.message].filter(Boolean).join(' : ')}`.trim());
+    this.lastMessageId = body.id ?? null;
+    this.logger.log(`Envoyé à ${m.to.replace(/^(.{2}).*(@.*)$/, '$1…$2')} (id ${body.id ?? '?'})`);
+  }
+}
+
 class UnconfiguredEmailProvider implements IEmailProvider {
   constructor(private name: string) {}
   async send(): Promise<void> {
@@ -61,6 +86,7 @@ export class EmailService {
     this.isMock = this.providerName === 'mock' && !isProduction();
     if (this.isMock) this.provider = new MockEmailProvider();
     else if (this.providerName === 'none' || this.providerName === 'mock') this.provider = null;
+    else if (this.providerName === 'resend') this.provider = new ResendEmailProvider(this.config.get<string>('RESEND_API_KEY')!, this.config.get<string>('EMAIL_FROM')!);
     else this.provider = new UnconfiguredEmailProvider(this.providerName);
     this.logger.log(`Fournisseur e-mail : ${this.providerName}${this.provider ? '' : ' (aucun envoi possible)'}`);
   }
@@ -94,11 +120,13 @@ export class EmailService {
       this.logger.error(`Envoi e-mail impossible vers ${to.replace(/^(.{2}).*(@.*)$/, '$1…$2')} via ${this.providerName} : ${reason}`);
       throw new ServiceUnavailableException("L'envoi de l'e-mail a échoué. Réessayez dans quelques instants.");
     }
-    if (this.isMock) this.lastResetLinksForDev.set(to.toLowerCase(), link);
+    // Hors production, le dernier lien reste consultable via GET /dev/last-reset-link/:email (module dev
+    // absent en production) : permet de vérifier un envoi réel de bout en bout sans lire la boîte mail.
+    if (!isProduction()) this.lastResetLinksForDev.set(to.toLowerCase(), link);
   }
 
   getLastResetLinkForDev(email: string): string | undefined {
-    if (!this.isMock) return undefined;
+    if (isProduction()) return undefined;
     return this.lastResetLinksForDev.get(email.toLowerCase());
   }
 }

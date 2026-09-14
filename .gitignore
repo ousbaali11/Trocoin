@@ -19,3 +19,4 @@ frontend/CLAUDE.md
 e2e/.tmp/
 playwright-report/
 test-results/
+data/pglite-*/

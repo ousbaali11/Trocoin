@@ -54,9 +54,10 @@ automatiquement) ou Fly.io. Les étapes ci-dessous restent les mêmes, seule l'i
    | `REFRESH_TOKEN_TTL_DAYS` | `30` |
    | `CORS_ORIGINS` | `https://<votre-projet>.vercel.app` (puis vos vrais domaines, séparés par des virgules) |
    | `SMS_PROVIDER` | `vonage` ou `twilio` + les clés correspondantes (§5) |
-   | `PAYMENT_PROVIDER` | `disabled` (paiement sécurisé indisponible, endpoints en 503) tant que Stripe n'est pas configuré |
+   | `PAYMENT_PROVIDER` | `stripe` + `STRIPE_SECRET_KEY` (`sk_test_…` pour le mode test, `sk_live_…` ensuite) + `STRIPE_WEBHOOK_SECRET` (§5c) ; ou `disabled` (endpoints en 503) |
    | `NOTIFICATION_PROVIDER` | `none` (notifications in-app seulement) |
-   | `EMAIL_PROVIDER` | `none` tant qu'aucune clé Resend/Brevo n'est fournie (le lien « mot de passe oublié » répond alors 503 ; l'admin peut réinitialiser depuis le back-office) |
+   | `EMAIL_PROVIDER` | `resend` + `RESEND_API_KEY` + `EMAIL_FROM` (§5b) ; ou `none` (« mot de passe oublié » en 503, l'admin réinitialise depuis le back-office) |
+   | `STORAGE_PROVIDER` | `s3` + `S3_ENDPOINT`, `S3_REGION=auto`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` (+ `S3_PUBLIC_URL` facultative, voir « Fichiers envoyés ») ; `local` = disque éphémère |
    | `SITE_URL` | `https://trocoin.vercel.app` (liens des e-mails) |
    | `SENTRY_DSN` | facultatif (§7) |
    | `APP_VERSION` | facultatif, ex. `1.0.0` (affiché par `/health`) |
@@ -99,19 +100,22 @@ est recommandé (10 Go et 10 M de lectures/mois gratuits, pas de frais de sortie
 
 1. dash.cloudflare.com → *R2 Object Storage* → *Create bucket* → nom `trocoin`, région
    automatique (choisir *EU* dans *Location hint* pour des données en Europe).
-2. Bucket → *Settings* → *Public access* → *Allow Access* (r2.dev) → noter l'URL
-   `https://pub-xxxxxxxx.r2.dev` (ou rattacher un domaine, ex. `media.trocoin.fr`).
+2. *Facultatif* — Bucket → *Settings* → *Public access* → *Allow Access* (r2.dev) → noter l'URL
+   `https://pub-xxxxxxxx.r2.dev` (ou rattacher un domaine, ex. `media.trocoin.fr`). Sans accès
+   public, l'API relaie elle-même les images (`GET /uploads/<uuid>.<ext>`, cache 1 an) : c'est le
+   mode actuel ; l'URL publique décharge simplement Render du trafic des images.
 3. R2 → *Manage R2 API Tokens* → *Create API token* → permission *Object Read & Write* limitée
    au bucket → noter *Access Key ID*, *Secret Access Key* et l'endpoint
    `https://<account_id>.r2.cloudflarestorage.com`.
 4. Render → Environment : `STORAGE_PROVIDER=s3`, `S3_ENDPOINT`, `S3_REGION=auto`,
-   `S3_BUCKET=trocoin`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_PUBLIC_URL`.
-   Le démarrage refuse une configuration incomplète (variable manquante nommée).
+   `S3_BUCKET=trocoin-photos`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` (+ `S3_PUBLIC_URL` si
+   l'étape 2 a été faite). Le démarrage refuse une configuration incomplète (variable nommée).
 5. Les photos déjà envoyées sur le disque Render ne sont pas migrées (elles auront de toute
    façon disparu au redéploiement suivant).
 
-Le chemin S3 est testé en e2e contre un faux serveur S3 en mémoire (`test/phase9`) ; l'appel
-réel vers R2 n'a pas pu être exécuté sans compte.
+Le chemin S3 est testé en e2e contre un faux serveur S3 en mémoire (`test/phase9`, avec et sans URL
+publique, vignettes comprises) et **contre le bucket R2 réel `trocoin-photos` le 14 septembre 2026**
+(`AUDIT.md` §15 : envoi, relais, suppression avec l'annonce).
 
 ## 3. Front (Vercel, 4 min)
 
@@ -163,6 +167,52 @@ Twilio (`SMS_PROVIDER=twilio`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILI
 **non implémenté** faute d'identifiants pour le tester ; le démarrage l'accepte mais chaque envoi
 répond 503 explicitement.
 
+## 5b. E-mail (Resend)
+
+Variables, **noms exacts** : `EMAIL_PROVIDER=resend`, `RESEND_API_KEY` (clé « sending access »
+suffit), `EMAIL_FROM` (ex. `Trocoin <no-reply@votre-domaine.fr>`), `SITE_URL` (lien des
+e-mails). Appel : `POST https://api.resend.com/emails` (`src/email/email.service.ts`,
+`ResendEmailProvider`), délai 10 s, chaque refus du fournisseur est journalisé avec sa raison et
+l'utilisateur reçoit un 503 neutre.
+
+**Restriction du mode bac à sable Resend** : avec l'expéditeur `onboarding@resend.dev`, Resend
+n'accepte que l'adresse e-mail du propriétaire du compte Resend (réponse
+`403 validation_error : You can only send testing emails to your own email address`). Pour écrire
+aux vrais utilisateurs : resend.com/domains → *Add domain* → ajouter les enregistrements DNS
+indiqués (SPF/DKIM) → puis `EMAIL_FROM=Trocoin <no-reply@<ce domaine>>`.
+
+Vérifier un envoi réel hors production : `POST /auth/password/forgot` puis
+`GET /dev/last-reset-link/:email` (module dev, absent en production) donne le lien envoyé ; le
+comparer à l'e-mail reçu.
+
+## 5c. Paiement (Stripe)
+
+Modèle : **Stripe Checkout** (page de paiement hébergée, aucune clé publiable ni formulaire de
+carte côté front) avec **capture différée** : l'acheteur autorise le montant, la transaction passe
+« Fonds bloqués » (`sequestre`), la capture n'a lieu qu'à la confirmation de réception ; une
+annulation avant envoi libère l'autorisation (rien n'est débité). Quand le vendeur a terminé son
+onboarding Stripe Connect (Express, `/compte/paiements`), le paiement est une « destination
+charge » : la part plateforme (commission 8 % + frais acheteur) est retenue, le reste transféré
+au compte du vendeur ; sinon la plateforme encaisse et reverse manuellement.
+
+1. Stripe → *Developers* → *API keys* : `STRIPE_SECRET_KEY` (`sk_test_…` tant que l'on teste ;
+   `sk_live_…` après activation du compte).
+2. Stripe → *Developers* → *Webhooks* → *Add endpoint* :
+   URL `https://trocoin.onrender.com/transactions/webhook/stripe`, évènements
+   `checkout.session.completed`, `checkout.session.expired`,
+   `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`,
+   `payment_intent.canceled`, `charge.refunded` → *Signing secret* = `STRIPE_WEBHOOK_SECRET`.
+   (Créé le 14 septembre 2026 pour le compte de test : endpoint `we_1UFhaP5YWLqgMw96qQYHFUhZ`.)
+3. Render → Environment : `PAYMENT_PROVIDER=stripe`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
+   `SITE_URL` (URL de retour après paiement). Le démarrage refuse une configuration incomplète.
+4. Test : carte `4242 4242 4242 4242`, date future, CVC quelconque. Une transaction
+   « en_attente » sans paiement est annulée après 30 minutes (relecture au retour de l'acheteur,
+   webhook, ou tâche périodique toutes les 10 minutes).
+
+Le retour de l'acheteur (`/compte/transactions/<id>?paiement=retour`) relit la session chez
+Stripe : le webhook n'est pas indispensable pour confirmer, mais il l'est pour les annulations
+et remboursements faits depuis le tableau de bord Stripe.
+
 ## 6. Sauvegardes et restauration
 
 **Neon** conserve automatiquement l'historique (PITR) : 6 h sur l'offre gratuite, 7 à 30 jours
@@ -199,20 +249,25 @@ et `pg_restore` comme ci-dessus.
 
 ### 6b. Base Neon : passer de la région US à l'Europe (RGPD)
 
-Le projet Neon actuel est en `us-east-2` (Ohio). Pour des données de résidents français,
-recréer le projet à **Francfort (eu-central-1)** avant l'ouverture publique. Deux options,
-**à choisir par vous** (je ne le fais pas sans validation : la base actuelle est la base de démo) :
+Le nouveau projet Neon **Frankfurt (eu-central-1)** a reçu les 8 migrations le 14 septembre 2026
+(`DB_TYPE=postgres DATABASE_URL=<URL EU> npm run migration:run`). La copie des données se fait
+sans `pg_dump`, avec le pilote `pg` du projet :
 
-- **Option 1 — nouvelle base vide** (5 min) : Neon → *New project* → région Frankfurt → copier
-  la nouvelle `DATABASE_URL` dans Render → redéployer : les migrations recréent le schéma,
-  les comptes de test actuels sont perdus (1 compte à ce jour).
-- **Option 2 — migration des données** (15 min) : `pg_dump "$DATABASE_URL_US" --format=custom
-  --no-owner --file=trocoin.dump` puis `pg_restore --dbname="$DATABASE_URL_EU" --no-owner
-  --clean --if-exists trocoin.dump` (postgres 16+ via Docker `postgres:16-alpine` si
-  `pg_dump` n'est pas installé), puis changer `DATABASE_URL` dans Render. Vérifier
-  `SELECT count(*) FROM users` des deux côtés avant de supprimer le projet US.
-- **Option 3 — risque accepté pour la bêta fermée** : garder la base US le temps des tests,
-  en le notant dans la politique de confidentialité, et migrer (option 2) avant l'ouverture.
+```bash
+SOURCE_DATABASE_URL="<URL Neon US>" TARGET_DATABASE_URL="<URL Neon EU>" node scripts/migrer-base.js
+```
+
+Le script vérifie que la cible a les migrations, ordonne les tables par clés étrangères, vide la
+cible puis copie toutes les tables dans une seule transaction, remet les séquences à niveau et
+termine par une preuve d'intégrité : comptage **et** empreinte md5 du contenu de chaque table,
+des deux côtés (sortie non nulle à la moindre différence). Il est rejouable : le relancer juste
+avant de basculer reprend les écritures survenues entre-temps. Répété à blanc le 14 septembre
+(source PGlite → Frankfurt, 23 tables identiques, `AUDIT.md` §15).
+
+Bascule : relancer la copie → Render → `DATABASE_URL` = URL EU → redéployer → vérifier
+`/health` (`database: postgres`), se connecter avec un compte existant, relancer
+`node scripts/charge.js` pour constater la latence. Ne supprimer le projet US qu'après ces
+vérifications (et mettre à jour `DATABASE_URL_BACKUP` du workflow de sauvegarde).
 
 ### 8b. Redis pour le rate limiting (quand la deuxième instance arrive)
 

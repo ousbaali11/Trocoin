@@ -22,23 +22,28 @@ français, SIRET vérifié au registre public), connexion e-mail ou username + m
 passe oublié (parcours complet, **envoi d'e-mail non branché**), changement de mot de passe,
 réinitialisation par l'admin, œil sur les champs mot de passe, sessions révocables, messagerie,
 favoris, alertes, avis, signalements, back-office complet, CMS légal, photos retraitées
-(EXIF/GPS supprimés, ≤ 1600 px, plafond par compte), CI GitHub (97 tests sur SQLite et sur
+(EXIF/GPS supprimés, ≤ 1600 px, plafond par compte), CI GitHub (105 tests sur SQLite et sur
 PostgreSQL 16, image Docker). Depuis le tour « polish » du 14 septembre après-midi (§9) : centre
 d'aide structuré, partage d'annonce, autres annonces du vendeur, reprise des consultations sur
 l'accueil, préférences de notification par famille et canal, navigation compte et console admin
 utilisables sur mobile, boîte de confirmation unique.
 
-**Ce qui est en place dans le code, testé, mais pas activé en production par choix (bêta entre
-proches, décision du 14 septembre, voir §6) :** e-mail transactionnel (Resend/Brevo), stockage
-objet des photos (S3/R2), base Neon en Europe. À activer avant une vraie ouverture publique.
-Redis pour le rate limiting multi-instances reste facultatif tant qu'il n'y a qu'une instance.
+**Les quatre points de configuration différés sont implémentés et testés contre les vrais services
+le 14 septembre au soir (§15) :** stockage des photos sur Cloudflare R2 (envoi, relais, suppression
+réels), e-mail Resend (appel réel ; envoi aux vrais utilisateurs conditionné à un domaine vérifié
+chez Resend), paiement Stripe en mode test (Checkout hébergé, capture à la réception, annulation,
+webhook signé), base Neon Frankfurt migrée (schéma) avec script de copie prouvé. **Activation en
+production : variables à saisir dans Render par vous** (liste §15) ; la copie des données US → EU
+attend l'URL de l'ancienne base. Redis reste facultatif tant qu'il n'y a qu'une instance.
 
-**Ce qui est volontairement différé (choix produit, §6) :** paiement Stripe/PayPal réel,
-vérification SMS du téléphone à l'inscription (désactivée depuis le passage au mot de passe ;
-le badge « téléphone vérifié » n'est affiché nulle part), validation juridique des textes.
+**Ce qui est volontairement différé (choix produit, §6) :** PayPal (après validation de Stripe),
+clés Stripe réelles (`sk_live`), vérification SMS du téléphone à l'inscription (désactivée depuis
+le passage au mot de passe ; le badge « téléphone vérifié » n'est affiché nulle part), validation
+juridique des textes.
 
-**État de la base :** 1 compte réel en production (le vôtre), 0 annonce. Base Neon en
-région **États-Unis** (`us-east-2`) : à migrer en Europe avant ouverture publique (§7).
+**État de la base :** production encore sur Neon **États-Unis** (`us-east-2`) ; le projet Neon
+**Frankfurt** est prêt (schéma à jour, vide) et la copie est prête à être jouée dès que l'URL de
+l'ancienne base est fournie (§15).
 
 **Préalable auto-deploy (point 0 du brief) : résolu et prouvé le 14 septembre [exécuté].**
 Le service Render n'a jamais été relié au dépôt (0 webhook GitHub) ; la solution retenue est
@@ -67,7 +72,7 @@ déploiement qui ne remonte pas en 15 minutes fait échouer la CI.
 | Production | Démarrage refusé si `JWT_SECRET` faible/absent, CORS absent, base ≠ Postgres, fournisseur `mock` (SMS, paiement, notifications, e-mail, Sirene) ou clés manquantes ; `synchronize` désactivé, migrations seules ; `/dev/*` → 404 ; utilisateur Docker non-root ; `npm audit` bloquant en CI | [exécuté] boot de contrôle en mode production ; CI | Sentry non alimenté (pas de DSN) |
 | Autorisation | Rôle admin relu en base à chaque requête ; aucune route HTTP ne promeut admin ; audit log des actions admin (dont réinitialisation de mot de passe) ; propriété vérifiée sur annonces/photos/conversations | [exécuté] tests | — |
 | Données | Export RGPD, suppression = anonymisation ; profil public sans téléphone/e-mail/SIRET complet | [exécuté] | **Base en région US** (§7) ; photos (`/uploads`) hors sauvegarde |
-| Paiement | `PAYMENT_PROVIDER=disabled` en production : aucun flux d'argent possible | [exécuté] | [différé] Stripe/PayPal réels + webhooks |
+| Paiement | Stripe Checkout hébergé (aucune donnée de carte chez Trocoin), capture différée, webhook à signature vérifiée (corps brut), URL de paiement visible du seul acheteur ; `disabled` en production tant que les variables ne sont pas saisies | [exécuté] phase 13 + parcours Stripe réel en mode test (§15) | Clés `sk_live` ; PayPal [différé] |
 
 ---
 
@@ -82,9 +87,9 @@ Synthèse par domaine (le détail filtre par filtre et famille par famille est e
 | Dépôt | Champs par catégorie, exemple de titre, photos, brouillon | Idem : 60 exemples de titre, schémas alignés (voir ci-dessous), 10 photos retraitées, brouillon, import CSV/XML, multi-utilisateurs pro, prix moyen constaté, fiche complète | Listes dépendantes marque → modèle → finition (référentiel constructeur absent) |
 | Recherche | Mots-clés, localisation (Autour de moi / Toute la France / commune + rayon), filtres, tri, carte, sauvegarde | Identique, paliers de rayon exacts (0/1/5/10/20/30/50/100/200 km, 5 par défaut), plein texte français, dons/échanges en un clic | Historique des localisations ; arrondissements « toute la ville » |
 | Annonce | Galerie, critères, vendeur, similaires, annonces du pro, partage, signalement | Identique + badge « Fiche complète », menu Partager (lien, WhatsApp, e-mail, Facebook, X, natif), « autres annonces de ce vendeur » | — |
-| Messagerie / transaction | Messagerie, paiement sécurisé, livraison | Messagerie temps réel, offres de prix, photos ; paiement **désactivé** | [différé] paiement ; pas d'étiquettes transporteur |
+| Messagerie / transaction | Messagerie, paiement sécurisé, livraison | Messagerie temps réel, offres de prix, photos ; paiement sécurisé Stripe (Checkout, capture à la réception) | Activation Render (§15) ; pas d'étiquettes transporteur |
 | Confiance / modération | Vérifications, modération | Pré-modération mots-clés, file admin, signalements, suspension, audit ; SIRET vérifié | Pas de vérification d'identité ni de téléphone |
-| Aide / notifications / RGPD | Centre d'aide structuré, préférences de notification, export | Centre d'aide (6 rubriques, 22 articles, recherche), préférences famille × canal, export JSON | E-mail enregistré mais non envoyé (différé) |
+| Aide / notifications / RGPD | Centre d'aide structuré, préférences de notification, export | Centre d'aide (6 rubriques, 22 articles, recherche), préférences famille × canal, export JSON | E-mail « mot de passe oublié » via Resend (§15) ; autres e-mails non branchés |
 | Pro | Boutique, formules, stats | Vitrine, formules (monétisation off), import, multi-comptes, stats | Facturation réelle (différé) |
 
 **Familles, champs et filtres — état après ce tour** (12 familles) :
@@ -138,9 +143,10 @@ Un relevé manuel des 6 panneaux manquants prend 15 minutes depuis un navigateur
 | Besoin | Pourquoi | Variables exactes (Render) | Guide |
 |---|---|---|---|
 | ~~Auto-deploy Render~~ | **Fait le 14 septembre** : secret `RENDER_DEPLOY_HOOK` en place, preuve automatique par `/health` (§8) | — | `DEPLOIEMENT.md` §2b |
-| E-mail transactionnel [différé] | Mot de passe oublié autonome | `EMAIL_PROVIDER=resend` + `RESEND_API_KEY` + `EMAIL_FROM` (ou `brevo` + `BREVO_API_KEY`), `SITE_URL` | `DEPLOIEMENT.md` §5 ; l'appel HTTP (≈40 lignes) sera écrit et testé dès réception d'une clé |
-| Stockage des photos [différé] | Disque Render éphémère | `STORAGE_PROVIDER=s3`, `S3_ENDPOINT`, `S3_REGION=auto`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_PUBLIC_URL` (Cloudflare R2, gratuit jusqu'à 10 Go) | `DEPLOIEMENT.md` « Fichiers envoyés » ; code testé contre un S3 simulé |
-| Base en Europe [différé] | RGPD | Nouvelle `DATABASE_URL` Neon Frankfurt | `DEPLOIEMENT.md` §6b — option 3 retenue pour la bêta (risque accepté), migration (option 2) avant ouverture |
+| E-mail transactionnel — **fait le 14 septembre (§15)** | Mot de passe oublié autonome | `EMAIL_PROVIDER=resend` + `RESEND_API_KEY` + `EMAIL_FROM`, `SITE_URL` | `DEPLOIEMENT.md` §5b ; appel HTTP réel implémenté et testé ; domaine à vérifier chez Resend pour écrire à d'autres adresses que celle du compte |
+| Stockage des photos — **fait le 14 septembre (§15)** | Disque Render éphémère | `STORAGE_PROVIDER=s3`, `S3_ENDPOINT`, `S3_REGION=auto`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` (+ `S3_PUBLIC_URL` facultative) | `DEPLOIEMENT.md` « Fichiers envoyés » ; testé contre le bucket R2 réel |
+| Base en Europe — **préparée le 14 septembre (§15)** | RGPD | Nouvelle `DATABASE_URL` Neon Frankfurt | `DEPLOIEMENT.md` §6b — schéma migré, script de copie prouvé ; copie réelle dès réception de l'URL US |
+| Paiement Stripe — **fait le 14 septembre, mode test (§15)** | Paiement sécurisé réel | `PAYMENT_PROVIDER=stripe`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `SITE_URL` | `DEPLOIEMENT.md` §5c ; webhook créé sur le compte Stripe |
 | Redis (plus tard) | Dès la 2ᵉ instance | `REDIS_URL` (Upstash gratuit) | `DEPLOIEMENT.md` §8b ; code testé avec un Redis simulé |
 | Sentry (facultatif) | Erreurs 500 remontées | `SENTRY_DSN` | `DEPLOIEMENT.md` §7 |
 
@@ -151,20 +157,15 @@ Un relevé manuel des 6 panneaux manquants prend 15 minutes depuis un navigateur
 **Décision du 14 septembre 2026 (tests entre proches uniquement) — à traiter avant une vraie
 ouverture publique :**
 
-- **Fournisseur d'e-mail** : le parcours « mot de passe oublié » est complet et testé, mais
-  aucun e-mail ne part (`EMAIL_PROVIDER=none` → 503 explicite). En bêta, l'admin dépanne avec
-  un mot de passe temporaire depuis le back-office. Activation : clé Resend ou Brevo +
-  `EMAIL_FROM` + `SITE_URL`, puis ~40 lignes d'appel HTTP à écrire et tester (§5).
-- **Stockage objet des photos** : le code S3/R2 est en place et testé contre un S3 simulé ;
-  en bêta, les photos restent sur le disque éphémère de Render et disparaissent à chaque
-  déploiement (les testeurs le savent). Activation : bucket R2 + 6 variables (§5).
-- **Région de la base Neon** : `us-east-2` conservée pour la bêta (données de quelques
-  proches, risque accepté et connu) ; migration vers Francfort (`DEPLOIEMENT.md` §6b,
-  option 2) avant toute ouverture publique.
-
-- **Paiement sécurisé réel** (Stripe Connect, PayPal, webhooks signés, réconciliation) :
-  implémenté en mode simulé, désactivé en production (`PAYMENT_PROVIDER=disabled`, 503
-  explicite). Réactivation quand un compte Stripe de test existera.
+- **Fournisseur d'e-mail** : ~~différé~~ **fait le 14 septembre** (§15) : appel Resend réel ;
+  reste à vérifier un domaine chez Resend pour écrire à d'autres adresses que celle du compte.
+- **Stockage objet des photos** : ~~différé~~ **fait le 14 septembre** (§15) : testé contre le
+  bucket R2 réel ; activation par 6 variables dans Render.
+- **Région de la base Neon** : ~~différé~~ **préparé le 14 septembre** (§15) : Frankfurt migrée,
+  copie prouvée à blanc ; copie réelle et bascule dès réception de l'URL de la base US.
+- **Paiement sécurisé réel** : ~~différé~~ **fait le 14 septembre en mode test** (§15) : Stripe
+  Checkout + capture différée + webhook signé, parcours complet exécuté contre Stripe. Restent
+  différés : clés réelles `sk_live` (activation du compte Stripe), PayPal.
 - **Vérification SMS du téléphone à l'inscription** : coupée depuis le passage au mot de
   passe pour ne pas consommer de crédit Vonage pendant les tests. Le badge « téléphone
   vérifié » n'est présenté nulle part ; l'ancien parcours OTP reste disponible sur
@@ -182,9 +183,9 @@ ouverture publique :**
   l'admin dépanne les mots de passe oubliés, les photos sont volatiles en connaissance de cause.
 
 **Non bloquant pour la bêta fermée, à traiter avant l'ouverture publique (différés par choix, §6)**
-1. E-mail transactionnel (clé Resend/Brevo).
-2. Stockage objet des photos (R2).
-3. Base Neon en Europe (migration).
+1. ~~E-mail transactionnel~~ fait (§15) — reste : domaine vérifié chez Resend.
+2. ~~Stockage objet des photos~~ fait (§15) — reste : variables dans Render.
+3. ~~Base Neon en Europe~~ préparée (§15) — reste : URL de la base US, copie, bascule, test de charge.
 4. Vérification du téléphone par SMS (différé §6) ou, à défaut, un e-mail de confirmation
    dès que l'e-mail est branché : aujourd'hui rien ne prouve qu'un contact appartient à l'inscrit.
 5. Textes légaux validés par un juriste ; information sur la collecte du téléphone non vérifié.
@@ -198,7 +199,7 @@ ouverture publique :**
 9. Listes marque → modèle pour les véhicules ; historique des localisations ; arrondissements
     groupés.
 10. Modification de l'e-mail avec confirmation ; double facteur.
-11. Paiement réel, notifications push/e-mail, KYC, DAC7 (différés).
+11. ~~Paiement réel~~ Stripe fait en mode test (§15) ; clés réelles, PayPal, notifications push/e-mail, KYC, DAC7 (différés).
 
 ---
 
@@ -675,3 +676,97 @@ calculées ci-dessus, identiques élément par élément.
 et prix 16 px / 700 foncés, prix « 890 € », cœur 32 × 32 px à 8 px du coin de la photo, lieu
 « Lyon 69003 », date « aujourd'hui à HH:MM » en 12 px gris. 48 scénarios navigateur verts,
 97 tests API inchangés.
+
+---
+
+## 15. Les quatre points différés : implémentés et testés contre les vrais services — 14 septembre 2026, nuit
+
+Ordre demandé : base, photos, e-mail, paiement. Chaque volet a été exécuté réellement depuis cette
+machine (API compilée, fournisseurs réels) ; ce qui dépend du tableau de bord Render est listé en
+fin de section. Aucun secret n'est écrit dans ce dépôt.
+
+### 15.1 Base de données — Neon Frankfurt (eu-central-1)
+
+- **Schéma** [exécuté] : les 8 migrations exécutées sur le nouveau projet (PostgreSQL 18, aller-retour
+  23 ms depuis cette machine). Tables présentes, base vide.
+- **Copie des données** : `scripts/migrer-base.js` (pilote `pg`, aucun outil externe) : vérifie
+  les migrations de la cible, ordonne 23 tables par clés étrangères, vide la cible, copie par lots
+  dans une transaction, remet les séquences, puis compare **comptage et empreinte md5 du contenu**
+  de chaque table. **Répétition à blanc** [exécuté] : source PGlite remplie par l'API (3 comptes,
+  3 annonces avec photos, conversation, transaction complète, avis, signalement, favoris) →
+  Frankfurt : 23 tables « identique », sortie 0 ; cible ensuite vidée.
+- **Copie réelle US → EU : non exécutée [non testé]** — l'URL de l'ancienne base n'existe nulle part
+  ici (ni `.env`, ni secret GitHub `DATABASE_URL_BACKUP` : la sauvegarde hebdomadaire n'a jamais
+  tourné). Dès l'URL fournie : une commande (`DEPLOIEMENT.md` §6b), puis bascule de
+  `DATABASE_URL` dans Render, connexion d'un compte existant, `scripts/charge.js` pour la latence.
+  Les mots de passe (scrypt) et jetons de rafraîchissement sont copiés tels quels : les comptes
+  existants se connectent à l'identique (vérifié sur la répétition par empreinte de la table
+  `users`). L'ancienne base n'est pas touchée (lecture seule).
+
+### 15.2 Photos — Cloudflare R2
+
+- Code : `S3_PUBLIC_URL` devient facultative ; sans elle, `GET /uploads/<uuid>[-min].<ext>` relaie
+  l'objet depuis le bucket avec cache 1 an (`MediaController`, hors quota de requêtes). Bug corrigé :
+  les vignettes `-min` n'étaient jamais supprimées du bucket (motif de clé trop strict).
+- Tests : `phase9` +2 (vignette supprimée avec l'annonce ; mode sans URL publique : URL relatives,
+  relais 200 `image/png` + cache, 404 après suppression).
+- **Réel** [exécuté] sur le bucket `trocoin-photos` via l'API locale : 2 photos envoyées →
+  4 objets (photo + vignette ×2) présents dans R2 ; `GET /uploads/…jpg` → 200 `image/jpeg`,
+  `cache-control: public, max-age=31536000, immutable`, JPEG 1400×1000 ; vignette 480×343 ;
+  `coverUrl` de la carte publique = vignette ; suppression de l'annonce → 0 objet restant, 404.
+
+### 15.3 E-mail — Resend
+
+- Code : `ResendEmailProvider` (`POST https://api.resend.com/emails`, jeton Bearer, délai 10 s,
+  raison du refus journalisée, 503 neutre pour l'utilisateur). Hors production, le dernier lien
+  envoyé reste lisible par `GET /dev/last-reset-link/:email` pour vérifier un envoi réel.
+- Tests : `phase6` +2 (requête exacte vers un faux Resend ; 403 → `EmailDeliveryError`).
+- **Réel** [exécuté] : `POST /auth/password/forgot` avec `EMAIL_PROVIDER=resend` → appel réel
+  authentifié ; Resend répond **403 « You can only send testing emails to your own email address
+  (trocoin2026@gmail.com) »** : la clé est celle du compte Resend `trocoin2026@gmail.com`, et
+  l'expéditeur de test `onboarding@resend.dev` n'autorise que cette adresse. L'envoi vers
+  `ousbaali11@gmail.com` est donc impossible en l'état ; l'envoi vers l'adresse du compte n'a pas
+  été exécuté (action réelle non autorisée par la session). **Pour écrire à tous : vérifier un
+  domaine chez Resend et mettre `EMAIL_FROM` sur ce domaine** (`DEPLOIEMENT.md` §5b).
+
+### 15.4 Paiement — Stripe (mode test)
+
+- Code : Stripe **Checkout hébergé** (aucune clé publiable, aucune donnée de carte chez Trocoin)
+  avec **capture différée** : `POST /transactions` crée la transaction « en_attente » et renvoie
+  `checkoutUrl` ; retour de l'acheteur ou webhook → « sequestre » (vendeur prévenu à ce moment
+  seulement) ; réception → capture ; annulation avant envoi → autorisation annulée. Session limitée
+  à 30 min, transaction abandonnée annulée (retour, webhook ou tâche toutes les 10 min) ; une page de
+  paiement ouverte bloque l'annonce (double vente). Webhook `POST /transactions/webhook/stripe` :
+  corps brut (`rawBody`), signature vérifiée (`constructEvent`), évènements completed / expired /
+  payment_intent.canceled / charge.refunded, idempotent. Front : redirection vers Checkout, page de
+  transaction « Paiement en attente » qui se met à jour seule, retour annulé signalé sur l'annonce.
+- Tests : `test/phase13` (6 tests : flux complet avec fournisseur hébergé simulé, montants
+  40,40 € / part plateforme 5,44 €, URL visible du seul acheteur, double vente refusée, webhook
+  sans/mauvaise signature → 400, completed/expired/refunded/canceled, rejeu idempotent, tâche
+  d'expiration, annulation → libération ; **signature Stripe réelle** vérifiée sans réseau avec la
+  bibliothèque officielle : forgée, altérée, absente, secret manquant → 400).
+- **Réel** [exécuté] contre Stripe en mode test (clé `sk_test`, compte FR) : transaction
+  → page Checkout (capture d'écran) → paiement carte 4242 (case « I am an AI agent » cochée) →
+  retour sur le site → `sequestre` ; Stripe : session `complete`, PaymentIntent
+  `requires_capture`, `capture_method=manual`, 4 040 cts capturables → expédition →
+  confirmation de réception → PaymentIntent `succeeded`, 4 040 cts reçus. Seconde transaction
+  payée puis annulée par le vendeur → PaymentIntent `canceled`, 0 ct reçu. Les **vrais
+  évènements Stripe** de ces paiements (`checkout.session.completed` ×2,
+  `payment_intent.canceled`) rejoués sur le webhook local, signés avec le secret de l'endpoint
+  → 200 traités ; signature fausse → 400.
+- Endpoint webhook **créé sur le compte Stripe** pour la production
+  (`we_1UFhaP5YWLqgMw96qQYHFUhZ`, 6 évènements). Vendeur sans compte Connect : la plateforme
+  encaisse (reversement manuel) ; avec onboarding Express terminé : destination charge automatique
+  (chemin non exécuté ici : l'onboarding Connect exige un parcours KYC dans le navigateur).
+
+### 15.5 Ce qui reste entre vos mains (tableau de bord Render, secrets jamais commités)
+
+Variables à saisir puis redéployer (l'API refuse de démarrer si une variable manque et nomme la
+fautive) : `STORAGE_PROVIDER=s3` + les 5 variables R2 ; `EMAIL_PROVIDER=resend` +
+`RESEND_API_KEY` + `EMAIL_FROM` ; `PAYMENT_PROVIDER=stripe` + `STRIPE_SECRET_KEY` +
+`STRIPE_WEBHOOK_SECRET` ; `SITE_URL=https://trocoin.vercel.app` ; et, après la copie des
+données, `DATABASE_URL` (Frankfurt). Puis : « mot de passe oublié » depuis le site (vers l'adresse
+du compte Resend tant que le domaine n'est pas vérifié), un achat en carte 4242, `/health`,
+`scripts/charge.js`.
+
+**Suites** : 97 → 105 tests API (phase 6 +2, phase 9 +2, phase 13 +6), 48 scénarios navigateur.

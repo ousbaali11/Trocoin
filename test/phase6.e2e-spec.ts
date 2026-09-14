@@ -2,6 +2,9 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { EmailService } from '../src/email/email.service';
 import { createApp, login, makeAdmin, nextPhone } from './utils';
+import { createServer, Server } from 'http';
+import type { AddressInfo } from 'net';
+import { EmailDeliveryError, ResendEmailProvider } from '../src/email/email.service';
 
 /**
  * Phase 6 : mot de passe oublié (e-mail simulé), réinitialisation, réinitialisation
@@ -113,5 +116,47 @@ describe('Phase 6 : mot de passe oublié, réinitialisation, filtres par catégo
     expect(noirs.body.items.map((l: any) => l.id)).toContain(berline.body.id);
     // Valeur hors liste refusée au dépôt
     await request(server).post('/listings').set(user.auth).send({ ...base, title: 'Peugeot 208', attributes: { ...base.attributes, couleur: 'Turquoise pailleté' } }).expect(400);
+  });
+});
+
+describe('Fournisseur e-mail Resend (appel HTTP réel contre un faux serveur)', () => {
+  let srv: Server;
+  let url: string;
+  let received: Array<{ auth?: string; body: any }> = [];
+  let status = 200;
+  beforeAll(async () => {
+    srv = createServer((req, res) => {
+      const chunks: Buffer[] = [];
+      req.on('data', (c) => chunks.push(c));
+      req.on('end', () => {
+        received.push({ auth: req.headers.authorization, body: JSON.parse(Buffer.concat(chunks).toString() || '{}') });
+        res.writeHead(status, { 'content-type': 'application/json' });
+        res.end(status === 200 ? JSON.stringify({ id: 'email_test_1' }) : JSON.stringify({ statusCode: status, name: 'validation_error', message: 'You can only send testing emails to your own email address' }));
+      });
+    });
+    await new Promise<void>((r) => srv.listen(0, '127.0.0.1', r));
+    url = `http://127.0.0.1:${(srv.address() as AddressInfo).port}`;
+  });
+  afterAll(() => new Promise<void>((r) => srv.close(() => r())));
+
+  it('envoie POST /emails avec le jeton, l\'expéditeur, le destinataire et le lien ; conserve l\'identifiant renvoyé', async () => {
+    received = [];
+    status = 200;
+    const provider = new ResendEmailProvider('re_test_key', 'Trocoin <onboarding@resend.dev>', url);
+    await provider.send({ to: 'dest@example.org', subject: 'Sujet', text: 'https://trocoin.vercel.app/reinitialiser?token=abc', html: '<a href="https://trocoin.vercel.app/reinitialiser?token=abc">lien</a>' });
+    expect(received).toHaveLength(1);
+    expect(received[0].auth).toBe('Bearer re_test_key');
+    expect(received[0].body).toMatchObject({ from: 'Trocoin <onboarding@resend.dev>', to: ['dest@example.org'], subject: 'Sujet' });
+    expect(received[0].body.html).toContain('/reinitialiser?token=abc');
+    expect(provider.lastMessageId).toBe('email_test_1');
+  });
+
+  it('une réponse d\'erreur du fournisseur devient une EmailDeliveryError explicite (→ 503 pour l\'utilisateur)', async () => {
+    status = 403;
+    const provider = new ResendEmailProvider('re_test_key', 'Trocoin <onboarding@resend.dev>', url);
+    await expect(provider.send({ to: 'autre@example.org', subject: 's', text: 't', html: 'h' })).rejects.toMatchObject({ provider: 'resend', reason: expect.stringMatching(/HTTP 403 validation_error : You can only send/) });
+    const err = await provider.send({ to: 'autre@example.org', subject: 's', text: 't', html: 'h' }).catch((e) => e);
+    expect(err).toBeInstanceOf(EmailDeliveryError);
+    status = 200;
   });
 });

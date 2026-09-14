@@ -249,6 +249,8 @@ export interface Transaction {
   shippedAt?: string | null;
   confirmedAt?: string | null;
   createdAt: string;
+  /** Paiement hébergé (Stripe Checkout) encore ouvert : URL pour reprendre le paiement (acheteur, statut en_attente). */
+  checkoutUrl?: string;
   role?: "acheteur" | "vendeur";
   other?: SellerSummary | null;
   listing?: { id: string; title: string; price?: number | null; status: ListingStatus } | null;

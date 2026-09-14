@@ -8,6 +8,7 @@ import { createRedisFromEnv, RedisThrottlerStorage } from './common/throttler/re
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AdminModule } from './admin/admin.module';
 import { HealthController } from './health/health.controller';
+import { MediaController } from './common/upload/media.controller';
 import { AuthModule } from './auth/auth.module';
 import { CategoriesModule } from './categories/categories.module';
 import { validateEnv } from './config/env.validation';
@@ -78,7 +79,7 @@ import { UsersModule } from './users/users.module';
     AdminModule,
     DevModule,
   ],
-  controllers: [HealthController],
+  controllers: [HealthController, MediaController],
   providers: [{ provide: APP_GUARD, useClass: AppThrottlerGuard }],
 })
 export class AppModule {}

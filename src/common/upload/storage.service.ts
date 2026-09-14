@@ -1,7 +1,8 @@
-import { DeleteObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { Logger } from '@nestjs/common';
 import { promises as fs } from 'fs';
 import { basename, join, resolve } from 'path';
+import type { Readable } from 'stream';
 
 /**
  * Stockage des fichiers envoyés (photos d'annonces, avatars, logos), derrière
@@ -11,22 +12,36 @@ import { basename, join, resolve } from 'path';
  *     sous /uploads/… — ÉPHÉMÈRE sur Render (perdu à chaque déploiement).
  *   STORAGE_PROVIDER=s3 : bucket S3 ou compatible (Cloudflare R2, Scaleway,
  *     OVH, MinIO…). Variables exactes : S3_ENDPOINT (ex. https://<account>.r2.cloudflarestorage.com),
- *     S3_REGION (« auto » pour R2), S3_BUCKET, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY,
- *     S3_PUBLIC_URL (URL publique du bucket, ex. https://pub-xxxx.r2.dev ou un
- *     domaine personnalisé). Les clés sont stockées sous « uploads/<uuid>.<ext> »
- *     pour que les URL publiques gardent la forme …/uploads/… (motif autorisé
+ *     S3_REGION (« auto » pour R2), S3_BUCKET, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY.
+ *     S3_PUBLIC_URL (facultative) : URL publique du bucket (ex. https://pub-xxxx.r2.dev ou
+ *     un domaine personnalisé) → les URL stockées sont absolues et le navigateur charge
+ *     les images directement depuis le CDN. Sans elle, les URL restent relatives
+ *     (/uploads/<uuid>.<ext>) et l'API relaie l'objet depuis le bucket (MediaController),
+ *     avec un cache long : aucune configuration d'accès public n'est nécessaire côté bucket.
+ *     Les clés sont stockées sous « uploads/<uuid>.<ext> » (et « uploads/<uuid>-min.<ext> »
+ *     pour les vignettes) pour que les URL gardent la forme …/uploads/… (motif autorisé
  *     par next.config.ts).
  *
- * Testé en e2e contre un faux serveur S3 en mémoire (test/phase9) ; l'appel
- * réel vers R2 n'a pas pu être exécuté sans compte (voir AUDIT.md).
+ * Testé en e2e contre un faux serveur S3 en mémoire (test/phase9) et, le 14 septembre 2026,
+ * contre le bucket Cloudflare R2 réel (AUDIT.md §15).
  */
+export interface StoredObject {
+  body: Readable;
+  contentType: string;
+  contentLength?: number;
+}
+
 export interface IStorageProvider {
   readonly name: string;
-  put(key: string, body: Buffer, contentType: string): Promise<string>; // → URL publique
+  put(key: string, body: Buffer, contentType: string): Promise<string>; // → URL (absolue ou relative /uploads/…)
   delete(url: string): Promise<void>;
+  /** Lecture d'un objet par sa clé (relais par l'API) ; absent pour le disque local, servi en statique. */
+  get?(key: string): Promise<StoredObject | null>;
 }
 
 export const UPLOAD_DIR = resolve(process.cwd(), 'uploads');
+/** Clés autorisées : photo ré-encodée ou sa vignette « -min », nommées par UUID. */
+export const UPLOAD_KEY_PATTERN = /^uploads\/[0-9a-f-]{36}(-min)?\.(jpg|png|webp)$/;
 
 export class LocalDiskStorage implements IStorageProvider {
   readonly name = 'local';
@@ -52,7 +67,8 @@ export interface S3StorageOptions {
   bucket: string;
   accessKeyId: string;
   secretAccessKey: string;
-  publicUrl: string;
+  /** URL publique du bucket ; absente → URL relatives relayées par l'API. */
+  publicUrl?: string;
   forcePathStyle?: boolean;
 }
 
@@ -60,6 +76,7 @@ export class S3Storage implements IStorageProvider {
   readonly name = 's3';
   private readonly client: S3Client;
   private readonly logger = new Logger('Storage(s3)');
+  private readonly publicBase: string | null;
   constructor(private readonly opts: S3StorageOptions) {
     this.client = new S3Client({
       endpoint: opts.endpoint,
@@ -67,22 +84,45 @@ export class S3Storage implements IStorageProvider {
       credentials: { accessKeyId: opts.accessKeyId, secretAccessKey: opts.secretAccessKey },
       forcePathStyle: opts.forcePathStyle ?? true,
     });
+    this.publicBase = opts.publicUrl ? opts.publicUrl.replace(/\/$/, '') : null;
   }
+
   async put(key: string, body: Buffer, contentType: string): Promise<string> {
     await this.client.send(
       new PutObjectCommand({ Bucket: this.opts.bucket, Key: key, Body: body, ContentType: contentType, CacheControl: 'public, max-age=31536000, immutable' }),
     );
-    return `${this.opts.publicUrl.replace(/\/$/, '')}/${key}`;
+    return this.publicBase ? `${this.publicBase}/${key}` : `/${key}`;
   }
+
+  /** Clé d'objet correspondant à une URL produite par `put` (absolue ou relative) ; null si elle n'est pas à nous. */
+  keyFor(url: string): string | null {
+    if (!url) return null;
+    let key: string | null = null;
+    if (this.publicBase && url.startsWith(this.publicBase + '/')) key = url.slice(this.publicBase.length + 1);
+    else if (url.startsWith('/uploads/')) key = url.slice(1);
+    return key && UPLOAD_KEY_PATTERN.test(key) ? key : null;
+  }
+
   async delete(url: string): Promise<void> {
-    const base = this.opts.publicUrl.replace(/\/$/, '') + '/';
-    if (!url || !url.startsWith(base)) return; // jamais de suppression hors de notre bucket
-    const key = url.slice(base.length);
-    if (!/^uploads\/[0-9a-f-]{36}\.(jpg|png|webp)$/.test(key)) return;
+    const key = this.keyFor(url);
+    if (!key) return; // jamais de suppression hors de notre bucket
     try {
       await this.client.send(new DeleteObjectCommand({ Bucket: this.opts.bucket, Key: key }));
     } catch (e) {
       this.logger.warn(`Suppression impossible de ${key} : ${(e as Error).message}`);
+    }
+  }
+
+  async get(key: string): Promise<StoredObject | null> {
+    if (!UPLOAD_KEY_PATTERN.test(key)) return null;
+    try {
+      const out = await this.client.send(new GetObjectCommand({ Bucket: this.opts.bucket, Key: key }));
+      if (!out.Body) return null;
+      return { body: out.Body as Readable, contentType: out.ContentType || 'application/octet-stream', contentLength: out.ContentLength };
+    } catch (e) {
+      const name = (e as { name?: string }).name;
+      if (name === 'NoSuchKey' || name === 'NotFound' || (e as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode === 404) return null;
+      throw e;
     }
   }
 }
@@ -94,7 +134,7 @@ export function getStorage(): IStorageProvider {
   if (current) return current;
   const provider = process.env.STORAGE_PROVIDER || 'local';
   if (provider === 's3') {
-    const need = ['S3_ENDPOINT', 'S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY', 'S3_PUBLIC_URL'];
+    const need = ['S3_ENDPOINT', 'S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY'];
     const missing = need.filter((k) => !process.env[k]);
     if (missing.length) throw new Error(`STORAGE_PROVIDER=s3 : variables manquantes ${missing.join(', ')}.`);
     current = new S3Storage({
@@ -103,13 +143,14 @@ export function getStorage(): IStorageProvider {
       bucket: process.env.S3_BUCKET!,
       accessKeyId: process.env.S3_ACCESS_KEY_ID!,
       secretAccessKey: process.env.S3_SECRET_ACCESS_KEY!,
-      publicUrl: process.env.S3_PUBLIC_URL!,
+      publicUrl: process.env.S3_PUBLIC_URL || undefined,
       forcePathStyle: process.env.S3_FORCE_PATH_STYLE !== 'false',
     });
   } else {
     current = new LocalDiskStorage();
   }
-  new Logger('Storage').log(`Stockage des fichiers : ${current.name}${current.name === 'local' ? ' (disque local, éphémère sur Render)' : ''}`);
+  const detail = current.name === 'local' ? ' (disque local, éphémère sur Render)' : process.env.S3_PUBLIC_URL ? ` (bucket ${process.env.S3_BUCKET}, URL publiques ${process.env.S3_PUBLIC_URL})` : ` (bucket ${process.env.S3_BUCKET}, relais /uploads/… par l'API)`;
+  new Logger('Storage').log(`Stockage des fichiers : ${current.name}${detail}`);
   return current;
 }
 

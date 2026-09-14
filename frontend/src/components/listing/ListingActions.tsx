@@ -32,6 +32,14 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
     if (!active) return;
     api<Quote>(`/transactions/quote?listingId=${listing.id}`).then(setQuote).catch(() => setQuote(null));
   }, [listing.id, active]);
+  useEffect(() => {
+    // Retour de la page de paiement Stripe par « Retour » : rien n'a été débité
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("paiement") === "annule") {
+      toast("Paiement annulé : rien n'a été débité, l'annonce reste disponible.", "info");
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const contact = async () => {
     if (!requireAuth(`/annonces/${listing.id}`)) return;
@@ -50,7 +58,12 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
     if (!requireAuth(`/annonces/${listing.id}`)) return;
     setBusy(true);
     try {
-      const res = await api<{ transaction: { id: string } }>("/transactions", { method: "POST", body: { listingId: listing.id, deliveryMethod: delivery } });
+      const res = await api<{ transaction: { id: string }; checkoutUrl?: string }>("/transactions", { method: "POST", body: { listingId: listing.id, deliveryMethod: delivery } });
+      if (res.checkoutUrl) {
+        // Paiement hébergé : la carte est saisie sur la page sécurisée Stripe, puis retour sur la transaction
+        window.location.assign(res.checkoutUrl);
+        return;
+      }
       toast("Paiement sécurisé enregistré : les fonds sont bloqués jusqu'à votre confirmation.", "success");
       router.push(`/compte/transactions/${res.transaction.id}`);
     } catch (e) {

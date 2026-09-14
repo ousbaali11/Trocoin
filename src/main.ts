@@ -14,6 +14,8 @@ async function bootstrap() {
   const corsOrigins = resolveCorsOrigins();
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    // Corps brut conservé (req.rawBody) : indispensable pour vérifier la signature des webhooks Stripe
+    rawBody: true,
     cors: {
       origin: (origin, cb) => {
         // Requêtes sans en-tête Origin (curl, apps natives, même origine) : autorisées.

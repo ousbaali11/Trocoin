@@ -39,6 +39,13 @@ export default function TransactionPage() {
   useEffect(() => {
     load();
   }, [load]);
+  // Paiement hébergé en cours : la page se met à jour seule dès que Stripe a autorisé le montant
+  const pending = tx?.status === "en_attente";
+  useEffect(() => {
+    if (!pending) return;
+    const timer = setInterval(load, 4000);
+    return () => clearInterval(timer);
+  }, [pending, load]);
 
   const run = async (fn: () => Promise<unknown>, ok: string) => {
     setBusy(true);
@@ -112,6 +119,17 @@ export default function TransactionPage() {
 
       <section className="panel">
         <h2 className="h3">Que faire maintenant ?</h2>
+        {tx.status === "en_attente" && (
+          <div className="alert" data-testid="pending-payment" role="status">
+            <strong>Paiement en attente.</strong>{" "}
+            {buyer ? "Terminez le paiement sur la page sécurisée Stripe : cette page se mettra à jour automatiquement, rien n'est débité tant que vous n'avez pas confirmé la réception." : "L'acheteur n'a pas encore finalisé son paiement."}
+            {buyer && tx.checkoutUrl && (
+              <div style={{ marginTop: 10 }}>
+                <a className="btn btn-primary" href={tx.checkoutUrl}>Reprendre le paiement</a>
+              </div>
+            )}
+          </div>
+        )}
         {tx.status === "sequestre" && !buyer && (
           <div className="stack">
             <p className="small muted" style={{ margin: 0 }}>Les fonds de l&apos;acheteur sont bloqués. {tx.deliveryMethod === "main_propre" ? "Convenez d'un rendez-vous par messagerie, puis confirmez que vous êtes prêt." : "Expédiez l'article et renseignez le numéro de suivi."}</p>

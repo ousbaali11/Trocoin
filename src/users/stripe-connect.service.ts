@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, Logger, NotFoundException, ServiceUnav
 import { PAYMENT_DISABLED_MESSAGE } from '../payments/disabled-payment.provider';
 import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
+import { resolveSiteUrl } from '../config/env.validation';
 import { UsersService } from './users.service';
 
 /**
@@ -48,10 +49,8 @@ export class StripeConnectService {
     const user = await this.usersService.findById(userId);
     if (!user) throw new NotFoundException('Utilisateur introuvable.');
 
-    const returnUrl =
-      this.config.get<string>('STRIPE_CONNECT_RETURN_URL') || 'http://localhost:3001/compte/paiements?stripe=retour';
-    const refreshUrl =
-      this.config.get<string>('STRIPE_CONNECT_REFRESH_URL') || 'http://localhost:3001/compte/paiements?stripe=rafraichir';
+    const returnUrl = this.config.get<string>('STRIPE_CONNECT_RETURN_URL') || `${resolveSiteUrl()}/compte/paiements?stripe=retour`;
+    const refreshUrl = this.config.get<string>('STRIPE_CONNECT_REFRESH_URL') || `${resolveSiteUrl()}/compte/paiements?stripe=rafraichir`;
 
     if (this.mode === 'disabled') throw new ServiceUnavailableException(PAYMENT_DISABLED_MESSAGE);
 

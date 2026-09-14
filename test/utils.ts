@@ -28,6 +28,7 @@ export function nextPhone(): string {
 export async function createApp(): Promise<INestApplication> {
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
   const app = moduleRef.createNestApplication<NestExpressApplication>({
+    rawBody: true,
     cors: {
       origin: (origin, cb) => {
         if (!origin || origin === 'http://localhost:3001') return cb(null, true);
