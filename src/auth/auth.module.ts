@@ -11,6 +11,8 @@ import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { JwtStrategy } from './jwt.strategy';
 import { OptionalJwtAuthGuard } from './optional-jwt-auth.guard';
+import { EmailModule } from '../email/email.module';
+import { PasswordResetToken } from './password-reset-token.entity';
 import { RefreshToken } from './refresh-token.entity';
 
 /**
@@ -23,7 +25,8 @@ import { RefreshToken } from './refresh-token.entity';
   imports: [
     OtpModule,
     UsersModule,
-    TypeOrmModule.forFeature([RefreshToken]),
+    EmailModule,
+    TypeOrmModule.forFeature([RefreshToken, PasswordResetToken]),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({
       secret: resolveJwtSecret(),

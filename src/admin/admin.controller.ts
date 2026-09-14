@@ -10,6 +10,7 @@ import {
   Query,
   Req,
   UseGuards,
+  HttpCode,
 } from '@nestjs/common';
 import { AdminGuard } from '../auth/admin.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -62,6 +63,13 @@ export class AdminController {
   @Patch('users/:id')
   updateUser(@Req() req: any, @Param('id', ParseUUIDPipe) id: string, @Body() dto: AdminUpdateUserDto) {
     return this.admin.updateUser(this.ctx(req), id, dto);
+  }
+
+  /** Mot de passe temporaire pour un utilisateur bloqué (affiché une fois, sessions révoquées, journalisé). */
+  @Post('users/:id/reset-password')
+  @HttpCode(200)
+  resetUserPassword(@Req() req: any, @Param('id', ParseUUIDPipe) id: string) {
+    return this.admin.resetUserPassword(this.ctx(req), id);
   }
 
   // Listings

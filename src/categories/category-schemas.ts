@@ -20,6 +20,9 @@ export interface FieldSchema {
   filterable?: boolean; // proposé comme filtre de recherche
 }
 
+const COULEURS = ['Noir', 'Blanc', 'Gris', 'Argent', 'Bleu', 'Rouge', 'Vert', 'Jaune', 'Orange', 'Beige', 'Marron', 'Bordeaux', 'Violet', 'Rose', 'Doré', 'Multicolore', 'Autre'];
+const TYPES_VEHICULE = ['4x4 / SUV / Crossover', 'Berline', 'Break', 'Cabriolet', 'Citadine', 'Coupé', 'Minibus', 'Monospace', 'Pick-up', 'Utilitaire', 'Voiture sans permis'];
+const EXPOSITIONS = ['Nord', 'Sud', 'Est', 'Ouest', 'Nord-Est', 'Nord-Ouest', 'Sud-Est', 'Sud-Ouest'];
 const CARBURANTS = ['Essence', 'Diesel', 'Hybride', 'Hybride rechargeable', 'Électrique', 'GPL', 'Autre'];
 const BOITES = ['Manuelle', 'Automatique'];
 const DPE = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'Non soumis'];
@@ -51,12 +54,14 @@ export const CATEGORY_SCHEMAS: Record<string, FieldSchema[]> = {
   'vehicules': [],
   'voitures': [
     ...VEHICULE_BASE,
+    { key: 'type_vehicule', label: 'Type de véhicule', type: 'select', options: TYPES_VEHICULE, filterable: true },
     { key: 'carburant', label: 'Carburant', type: 'select', required: true, options: CARBURANTS, filterable: true },
     { key: 'boite', label: 'Boîte de vitesse', type: 'select', required: true, options: BOITES, filterable: true },
-    { key: 'puissance_fiscale', label: 'Puissance fiscale', type: 'number', unit: 'CV', min: 1, max: 100 },
-    { key: 'portes', label: 'Nombre de portes', type: 'select', options: ['2', '3', '4', '5'] },
-    { key: 'places', label: 'Nombre de places', type: 'number', min: 1, max: 9 },
-    { key: 'couleur', label: 'Couleur', type: 'text', maxLength: 30 },
+    { key: 'puissance_fiscale', label: 'Puissance fiscale', type: 'number', unit: 'CV', min: 1, max: 100, filterable: true },
+    { key: 'puissance_din', label: 'Puissance DIN', type: 'number', unit: 'ch', min: 1, max: 2000, filterable: true },
+    { key: 'portes', label: 'Nombre de portes', type: 'select', options: ['2', '3', '4', '5'], filterable: true },
+    { key: 'places', label: 'Nombre de places', type: 'number', min: 1, max: 9, filterable: true },
+    { key: 'couleur', label: 'Couleur', type: 'select', options: COULEURS, filterable: true },
     { key: 'critair', label: "Vignette Crit'Air", type: 'select', options: ['0 (électrique)', '1', '2', '3', '4', '5', 'Non classé'] },
     { key: 'controle_technique', label: 'Contrôle technique à jour', type: 'boolean' },
     { key: 'premiere_main', label: 'Première main', type: 'boolean' },
@@ -66,6 +71,8 @@ export const CATEGORY_SCHEMAS: Record<string, FieldSchema[]> = {
     { key: 'cylindree', label: 'Cylindrée', type: 'number', required: true, unit: 'cm³', min: 49, max: 3000, filterable: true },
     { key: 'type_moto', label: 'Type', type: 'select', options: ['Roadster', 'Sportive', 'Trail', 'Custom', 'Routière', 'Scooter', '125', 'Cross / Enduro', 'Autre'] },
     { key: 'permis', label: 'Permis requis', type: 'select', options: ['AM', 'A1', 'A2', 'A', 'B'] },
+    { key: 'puissance_din', label: 'Puissance DIN', type: 'number', unit: 'ch', min: 1, max: 400, filterable: true },
+    { key: 'couleur', label: 'Couleur', type: 'select', options: COULEURS, filterable: true },
   ],
   'utilitaires': [
     ...VEHICULE_BASE,
@@ -97,6 +104,9 @@ export const CATEGORY_SCHEMAS: Record<string, FieldSchema[]> = {
     { key: 'surface_terrain', label: 'Surface du terrain', type: 'number', unit: 'm²', min: 0, max: 10_000_000 },
     { key: 'annee_construction', label: 'Année de construction', type: 'number', min: 1500, max: 2027 },
     { key: 'honoraires', label: 'Honoraires à la charge de l\'acquéreur', type: 'number', unit: '%', min: 0, max: 20 },
+    { key: 'type_vente', label: 'Type de vente', type: 'select', options: ['Ancien', 'Neuf', 'Viager'], filterable: true },
+    { key: 'exposition', label: 'Exposition', type: 'select', options: EXPOSITIONS, filterable: true },
+    { key: 'etat_bien', label: 'État du bien', type: 'select', options: ['À rénover', 'Bon état', 'Neuf / rénové'], filterable: true },
   ],
   'locations': [
     ...IMMO_BASE,
@@ -104,6 +114,7 @@ export const CATEGORY_SCHEMAS: Record<string, FieldSchema[]> = {
     { key: 'charges', label: 'Charges mensuelles', type: 'number', unit: '€', min: 0, max: 10_000 },
     { key: 'depot_garantie', label: 'Dépôt de garantie', type: 'number', unit: '€', min: 0, max: 100_000 },
     { key: 'disponible_le', label: 'Disponible à partir du', type: 'text', maxLength: 20 },
+    { key: 'exposition', label: 'Exposition', type: 'select', options: EXPOSITIONS, filterable: true },
   ],
   'colocations': [
     { key: 'surface', label: 'Surface de la chambre', type: 'number', required: true, unit: 'm²', min: 5, max: 200 },
@@ -132,6 +143,8 @@ export const CATEGORY_SCHEMAS: Record<string, FieldSchema[]> = {
     { key: 'experience', label: 'Expérience requise', type: 'select', options: ['Débutant accepté', '1 à 3 ans', '3 à 5 ans', 'Plus de 5 ans'] },
     { key: 'salaire_min', label: 'Salaire brut annuel minimum', type: 'number', unit: '€', min: 0, max: 1_000_000 },
     { key: 'teletravail', label: 'Télétravail possible', type: 'boolean' },
+    { key: 'fonction', label: 'Fonction', type: 'text', maxLength: 60, filterable: true },
+    { key: 'niveau_etudes', label: "Niveau d'études", type: 'select', options: ['Sans diplôme', 'CAP / BEP', 'Bac', 'Bac +2', 'Bac +3', 'Bac +5 et plus'], filterable: true },
   ],
   'formations': [
     { key: 'type_formation', label: 'Type', type: 'select', required: true, options: ['Diplômante', 'Certifiante', 'Courte', 'En ligne', 'Alternance'] },
@@ -149,14 +162,14 @@ export const CATEGORY_SCHEMAS: Record<string, FieldSchema[]> = {
     { key: 'type_vetement', label: 'Type', type: 'select', options: ['Manteau / Veste', 'Pull / Gilet', 'Chemise / Blouse', 'T-shirt / Top', 'Robe', 'Jupe', 'Pantalon / Jean', 'Short', 'Costume', 'Sportswear', 'Lingerie / Pyjama', 'Maillot de bain', 'Autre'] },
     { key: 'taille', label: 'Taille', type: 'select', required: true, options: TAILLES, filterable: true },
     { key: 'marque', label: 'Marque', type: 'text', maxLength: 40, filterable: true },
-    { key: 'couleur', label: 'Couleur', type: 'text', maxLength: 30 },
+    { key: 'couleur', label: 'Couleur', type: 'select', options: COULEURS, filterable: true },
     { key: 'matiere', label: 'Matière', type: 'text', maxLength: 30 },
   ],
   'chaussures': [
     { key: 'univers', label: 'Univers', type: 'select', required: true, options: UNIVERS, filterable: true },
     { key: 'pointure', label: 'Pointure', type: 'number', required: true, min: 16, max: 52, filterable: true },
     { key: 'marque', label: 'Marque', type: 'text', maxLength: 40, filterable: true },
-    { key: 'couleur', label: 'Couleur', type: 'text', maxLength: 30 },
+    { key: 'couleur', label: 'Couleur', type: 'select', options: COULEURS, filterable: true },
   ],
   'accessoires-bagagerie': [
     { key: 'type_accessoire', label: 'Type', type: 'select', options: ['Sac', 'Valise', 'Ceinture', 'Écharpe / Foulard', 'Chapeau / Bonnet', 'Lunettes', 'Gants', 'Autre'] },
@@ -174,9 +187,11 @@ export const CATEGORY_SCHEMAS: Record<string, FieldSchema[]> = {
     { key: 'couleur', label: 'Couleur', type: 'text', maxLength: 30 },
   ],
   'ameublement': [
+    { key: 'piece', label: 'Pièce', type: 'select', options: ['Salon', 'Chambre', 'Cuisine', 'Salle de bain', 'Bureau', 'Entrée', 'Chambre enfant', 'Extérieur'], filterable: true },
     { key: 'type_meuble', label: 'Type', type: 'select', options: ['Canapé / Fauteuil', 'Table', 'Chaise', 'Lit / Literie', 'Armoire / Rangement', 'Bureau', 'Étagère', 'Meuble TV', 'Autre'], filterable: true },
     { key: 'matiere', label: 'Matière', type: 'text', maxLength: 30 },
-    { key: 'couleur', label: 'Couleur', type: 'text', maxLength: 30 },
+    { key: 'couleur', label: 'Couleur', type: 'select', options: COULEURS, filterable: true },
+    { key: 'marque', label: 'Marque', type: 'text', maxLength: 40 },
   ],
   'electromenager': [
     { key: 'type_appareil', label: 'Type', type: 'select', options: ['Lave-linge', 'Sèche-linge', 'Lave-vaisselle', 'Réfrigérateur / Congélateur', 'Four / Cuisinière', 'Micro-ondes', 'Aspirateur', 'Petit électroménager', 'Autre'], filterable: true },
@@ -196,6 +211,7 @@ export const CATEGORY_SCHEMAS: Record<string, FieldSchema[]> = {
     { key: 'marque', label: 'Marque', type: 'text', maxLength: 40, filterable: true },
   ],
   'telephonie': [
+    { key: 'type_produit', label: 'Produit', type: 'select', options: ['Smartphone', 'Téléphone fixe', 'Montre connectée', 'Accessoire'], filterable: true },
     { key: 'marque', label: 'Marque', type: 'select', required: true, options: ['Apple', 'Samsung', 'Xiaomi', 'Google', 'Huawei', 'OnePlus', 'Oppo', 'Sony', 'Autre'], filterable: true },
     { key: 'modele', label: 'Modèle', type: 'text', required: true, maxLength: 60, filterable: true },
     { key: 'stockage', label: 'Capacité de stockage', type: 'select', options: ['32 Go', '64 Go', '128 Go', '256 Go', '512 Go', '1 To'], filterable: true },
@@ -208,6 +224,7 @@ export const CATEGORY_SCHEMAS: Record<string, FieldSchema[]> = {
     { key: 'processeur', label: 'Processeur', type: 'text', maxLength: 40 },
     { key: 'ram', label: 'Mémoire vive', type: 'select', options: ['4 Go', '8 Go', '16 Go', '32 Go', '64 Go et plus'] },
     { key: 'stockage', label: 'Stockage', type: 'text', maxLength: 30 },
+    { key: 'taille_ecran', label: "Taille d'écran", type: 'number', unit: 'pouces', min: 5, max: 60, filterable: true },
   ],
   'consoles-jeux-video': [
     { key: 'plateforme', label: 'Plateforme', type: 'select', required: true, options: ['PlayStation 5', 'PlayStation 4', 'Xbox Series', 'Xbox One', 'Nintendo Switch', 'PC', 'Rétro', 'Autre'], filterable: true },

@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, UnauthorizedException, ServiceUnavailableException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash, randomBytes, randomUUID } from 'crypto';
@@ -10,10 +10,21 @@ import { RegisterDto } from './dto/register.dto';
 import { hashPassword, verifyPassword } from './password';
 import { User } from '../users/user.entity';
 import { UsersService } from '../users/users.service';
+import { EmailService } from '../email/email.service';
+import { PasswordResetToken } from './password-reset-token.entity';
 import { RefreshToken } from './refresh-token.entity';
 
 /** Hash factice : égalise le temps de réponse quand l'identifiant n'existe pas. */
 const DUMMY_HASH = 'scrypt$32768$8$1$AAAAAAAAAAAAAAAAAAAAAA==$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==';
+
+export const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
+
+/** Mot de passe temporaire lisible (sans caractères ambigus), 12 caractères, entropie ≈ 62 bits. */
+function generateTemporaryPassword(): string {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+  const bytes = randomBytes(12);
+  return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join('');
+}
 
 export const ACCESS_TOKEN_TTL = process.env.JWT_EXPIRES_IN || '15m';
 export const REFRESH_TOKEN_TTL_DAYS = Number(process.env.REFRESH_TOKEN_TTL_DAYS || 30);
@@ -37,6 +48,8 @@ export class AuthService {
     private usersService: UsersService,
     private jwtService: JwtService,
     @InjectRepository(RefreshToken) private refreshRepo: Repository<RefreshToken>,
+    @InjectRepository(PasswordResetToken) private resetRepo: Repository<PasswordResetToken>,
+    private emailService: EmailService,
   ) {}
 
   /**
@@ -122,6 +135,59 @@ export class AuthService {
     if (user.suspendedAt) throw new ForbiddenException('Ce compte est suspendu. Contactez le support.');
     const tokens = await this.openSession(user, randomUUID(), meta);
     return { ...tokens, user: this.sessionUser(user) };
+  }
+
+  /**
+   * « Mot de passe oublié » : répond toujours OK (pas d'énumération des comptes).
+   * Un jeton à usage unique (1 h) est envoyé par e-mail via EmailService.
+   * Si aucun fournisseur d'e-mail n'est disponible (EMAIL_PROVIDER=none), 503 explicite.
+   */
+  async forgotPassword(identifier: string): Promise<{ ok: true }> {
+    if (!this.emailService.available) {
+      throw new ServiceUnavailableException(
+        "La réinitialisation par e-mail n'est pas encore disponible. Contactez le support pour recevoir un mot de passe temporaire.",
+      );
+    }
+    const user = await this.usersService.findForLogin(identifier);
+    if (!user || user.deletedAt || !user.email) return { ok: true };
+    const raw = randomBytes(32).toString('base64url');
+    await this.resetRepo.save(
+      this.resetRepo.create({ userId: user.id, tokenHash: hashToken(raw), expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS) }),
+    );
+    const link = `${this.emailService.siteUrl()}/reinitialiser?token=${raw}`;
+    await this.emailService.sendPasswordReset(user.email, link, user.firstName || user.displayName);
+    this.logger.log(`Lien de réinitialisation émis pour ${user.id}`);
+    return { ok: true };
+  }
+
+  /** Nouveau mot de passe via le jeton reçu : jeton consommé, toutes les sessions révoquées. */
+  async resetPassword(rawToken: string, password: string, confirmation: string): Promise<{ ok: true }> {
+    if (password !== confirmation) throw new BadRequestException('Les deux mots de passe ne correspondent pas.');
+    const stored = await this.resetRepo.findOne({ where: { tokenHash: hashToken(rawToken) } });
+    if (!stored || stored.usedAt || stored.expiresAt.getTime() < Date.now()) {
+      throw new BadRequestException('Ce lien de réinitialisation est invalide ou expiré. Refaites une demande.');
+    }
+    const user = await this.usersService.findById(stored.userId);
+    if (!user || user.deletedAt) throw new BadRequestException('Ce lien de réinitialisation est invalide ou expiré. Refaites une demande.');
+    await this.usersService.setPasswordHash(user.id, await hashPassword(password));
+    await this.resetRepo.update(stored.id, { usedAt: new Date() });
+    await this.revokeAllSessions(user.id);
+    this.logger.log(`Mot de passe réinitialisé pour ${user.id} (sessions révoquées)`);
+    return { ok: true };
+  }
+
+  /**
+   * Réinitialisation par un administrateur (utilisateur bloqué sans e-mail
+   * fonctionnel) : mot de passe temporaire affiché une seule fois à l'admin,
+   * à transmettre par un canal sûr ; toutes les sessions sont révoquées.
+   */
+  async adminResetPassword(userId: string): Promise<{ temporaryPassword: string }> {
+    const user = await this.usersService.findById(userId);
+    if (!user || user.deletedAt) throw new BadRequestException('Utilisateur introuvable ou supprimé.');
+    const temporaryPassword = generateTemporaryPassword();
+    await this.usersService.setPasswordHash(user.id, await hashPassword(temporaryPassword));
+    await this.revokeAllSessions(user.id);
+    return { temporaryPassword };
   }
 
   private sessionUser(user: User) {

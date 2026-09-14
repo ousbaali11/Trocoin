@@ -545,3 +545,158 @@ particulier 2026, paiement sécurisé 2026), lebondeal-bot.fr (photos,
 livraison, alertes), annumoteurs.net (fin des crédits 27/04/2026),
 margeoapp.com (frais 2026), blog-du-gcf.fr (tarifs particuliers 2026),
 trustprotect.fr (remise en main propre 2026), finance-mag.com (paiement).
+
+## 10. Relevé détaillé du 14 septembre 2026 — localisation et filtres par famille (observé sur leboncoin.fr)
+
+Méthode : navigation réelle sur leboncoin.fr (cookies refusés), ouverture du panneau « Tous les
+filtres » pour chaque catégorie listée, lecture des intitulés et, pour la localisation, des
+valeurs exactes du curseur. Les familles non ouvertes ce jour sont marquées « non relevé ».
+
+### 10.1 Localisation (barre de recherche et filtres)
+
+| Élément | leboncoin (observé) | Trocoin après cette phase |
+|---|---|---|
+| Champ | Un seul champ « Ajouter une localisation » | Identique : un seul champ, même libellé |
+| Suggestions à l'ouverture | « Vous avez déjà recherché à … » (historique), puis **Suggestions : Autour de moi, Toute la France** (dans cet ordre) | « Suggestions : Autour de moi, Toute la France » dans le même ordre (pas d'historique) |
+| Autour de moi | Géolocalisation du navigateur | Idem (`navigator.geolocation`), message clair si refusée |
+| Toute la France | Libellé texte, aucune restriction | Idem, libellé texte simple (emoji drapeau retiré) |
+| Saisie d'une commune | Autocomplétion : « Lyon (toute la ville) », puis arrondissements « Lyon (69003) » | Autocomplétion adresse.data.gouv.fr (villages et villes, code postal affiché) ; pas de notion d'arrondissement (les CP de Paris/Lyon/Marseille ressortent comme communes distinctes) |
+| Rayon | Curseur « Dans un rayon de X km », 9 positions : **0, 1, 5, 10, 20, 30, 50, 100, 200 km**, bornes affichées « 0 km / 200 km », **5 km par défaut** après choix d'une commune, mise à jour immédiate du nombre de résultats | Curseur à 9 positions avec **exactement** ces paliers, 5 km par défaut, bornes affichées ; sur l'accueil, liste déroulante des mêmes paliers. 0 km = uniquement la commune (recherche par nom de commune + code postal, sans distance) |
+| Par défaut | Toute la France (titre « … : Toute la France ») | Toute la France (« · Toute la France » dans le sous-titre des résultats) |
+| Carte | Aperçu carte HERE dans le menu de localisation | Vue « Carte » des résultats (Leaflet), pas d'aperçu dans le menu |
+
+### 10.2 Filtres par famille — tableau filtre par filtre
+
+Légende : ✅ présent avec le même esprit · ≈ présent sous une autre forme · ❌ absent · ➕ ajouté dans cette phase.
+
+**Véhicules › Voitures** (relevé complet)
+
+| Filtre leboncoin | Trocoin | Détail |
+|---|---|---|
+| Prix min / max | ✅ | filtre général |
+| Mensualité financement | ❌ | crédit auto partenaire, hors périmètre |
+| Marque → Modèle → Finition (listes dépendantes) | ≈ | marque et modèle en texte libre filtrable ; pas de finition, pas de listes dépendantes |
+| Année-modèle min / max | ✅ | `annee` (bornes) |
+| Type de véhicule | ➕ | `type_vehicule` : 4x4/SUV/Crossover, Berline, Break, Cabriolet, Citadine, Coupé, Minibus, Monospace, Pick-up, Utilitaire, Voiture sans permis |
+| Énergie | ✅ | `carburant` : Essence, Diesel, Hybride, Hybride rechargeable, Électrique, GPL, Autre |
+| Boîte de vitesse | ✅ | `boite` : Manuelle, Automatique |
+| Kilométrage min / max | ✅ | `kilometrage` |
+| Crit'Air | ✅ | `critair` |
+| Puissance DIN min / max | ➕ | `puissance_din` |
+| État du véhicule | ≈ | état général de l'annonce (neuf → pour pièces) |
+| Puissance fiscale min / max | ✅ (désormais filtrable) | `puissance_fiscale` |
+| Nombre de portes | ✅ (désormais filtrable) | `portes` |
+| Nombre de places | ✅ (désormais filtrable) | `places` |
+| Couleur | ➕ liste | `couleur` : texte libre → liste de 17 couleurs filtrable |
+| Permis | ≈ | couvert par « Voiture sans permis » dans le type |
+| Paiement sécurisé uniquement | ❌ | paiement désactivé en production (`PAYMENT_PROVIDER=disabled`) |
+| Tri, Offres/Demandes, Type de vendeurs, Urgentes | ✅ / ❌ / ✅ / ✅ | pas de « demandes » sur Trocoin |
+
+**Véhicules › Motos** (relevé complet)
+
+| Filtre leboncoin | Trocoin |
+|---|---|
+| Cylindrée, Prix, Année, Type, Marque, Modèle, Kilométrage | ✅ (`cylindree`, `annee`, `type_moto`, `marque`, `modele`, `kilometrage`) |
+| Finition | ❌ |
+| Puissance DIN | ➕ `puissance_din` |
+| Couleur | ➕ `couleur` (liste) |
+| Permis | ✅ `permis` |
+| Crit'Air | ❌ (non ajouté : peu discriminant pour les deux-roues) |
+
+**Immobilier › Ventes** (relevé complet)
+
+| Filtre leboncoin | Trocoin |
+|---|---|
+| Type de bien | ✅ `type_bien` |
+| Prix, Surface habitable, Surface du terrain, Pièces, Chambres | ✅ |
+| Type de vente | ➕ `type_vente` : Ancien, Neuf, Viager |
+| Extérieur | ✅ `exterieur` |
+| Étage, Avec ascenseur | ✅ `etage`, `ascenseur` |
+| Exposition | ➕ `exposition` (8 orientations) |
+| Caractéristiques (liste à cocher) | ≈ partiellement (extérieur, ascenseur) ; pas de cave/parking/piscine en cases séparées |
+| État du bien | ➕ `etat_bien` : À rénover, Bon état, Neuf / rénové |
+| Classe énergie | ✅ `dpe` (+ `ges`) |
+
+**Immobilier › Locations** (relevé complet)
+
+| Filtre leboncoin | Trocoin |
+|---|---|
+| Type de bien, Loyer, Pièces, Chambres, Surface habitable, Surface du terrain | ✅ (loyer = prix) |
+| Meublé / Non meublé | ✅ `meuble` |
+| Extérieur, Étage, Ascenseur | ✅ |
+| Exposition | ➕ `exposition` |
+| Caractéristiques | ≈ |
+| Classe énergie | ✅ |
+| — | Trocoin en plus : charges, dépôt de garantie, disponibilité |
+
+**Emploi › Offres** (relevé complet)
+
+| Filtre leboncoin | Trocoin |
+|---|---|
+| Type de contrat | ✅ `contrat` |
+| Secteur d'activité | ✅ `secteur` (texte libre ; liste fermée non reprise) |
+| Fonction | ➕ `fonction` |
+| Expérience | ✅ `experience` |
+| Niveau d'études | ➕ `niveau_etudes` : Sans diplôme, CAP/BEP, Bac, Bac+2, Bac+3, Bac+5 et plus |
+| Temps plein / partiel | ✅ `temps` |
+| — | Trocoin en plus : salaire minimum, télétravail |
+
+**Mode › Vêtements** (relevé complet)
+
+| Filtre leboncoin | Trocoin |
+|---|---|
+| Étendre à la livraison | ≈ « Livraison possible » (général) |
+| Prix | ✅ |
+| Univers | ✅ `univers` |
+| Taille | ✅ `taille` |
+| Type de vêtement | ✅ `type_vetement` |
+| Marque | ✅ `marque` (texte) |
+| Couleur | ➕ liste filtrable (`couleur`) |
+| État | ✅ (général) |
+| Statut de l'annonce | ❌ (annonces vendues masquées par défaut) |
+
+**Électronique › Téléphones et objets connectés** (relevé complet)
+
+| Filtre leboncoin | Trocoin |
+|---|---|
+| Marque, Modèle | ✅ |
+| Produit | ➕ `type_produit` : Smartphone, Téléphone fixe, Montre connectée, Accessoire |
+| Capacité de stockage | ✅ `stockage` |
+| Couleur | ✅ (texte) |
+| État | ✅ |
+| Protection Panne (assurance) | ❌ hors périmètre |
+
+**Électronique › Ordinateurs** (relevé complet)
+
+| Filtre leboncoin | Trocoin |
+|---|---|
+| Marque, Type | ✅ `marque`, `type_produit` |
+| Taille d'écran | ➕ `taille_ecran` (pouces) |
+| État | ✅ |
+| Protection Panne | ❌ |
+| — | Trocoin en plus : processeur, RAM, stockage |
+
+**Maison & Jardin › Ameublement** (relevé complet)
+
+| Filtre leboncoin | Trocoin |
+|---|---|
+| Pièce | ➕ `piece` : Salon, Chambre, Cuisine, Salle de bain, Bureau, Entrée, Chambre enfant, Extérieur |
+| Produit (type de meuble) | ✅ `type_meuble` |
+| Matière | ✅ `matiere` |
+| Couleur | ➕ liste filtrable |
+| Marque | ➕ `marque` |
+| État | ✅ |
+
+**Non relevés ce jour** (à faire lors d'un prochain passage) : Matériel pro, Famille, Loisirs,
+Autres, Locations de vacances, Services, Animaux. Les schémas Trocoin existants pour ces
+familles (voir §2.2) restent ceux de l'analyse initiale.
+
+### 10.3 Écarts volontairement non traités
+
+- Listes dépendantes marque → modèle → finition (véhicules) : nécessitent un référentiel
+  constructeur ; texte libre conservé.
+- « Type d'annonces : Offres / Demandes » : Trocoin ne gère que des offres.
+- « Paiement sécurisé uniquement », « Mensualité financement », « Protection Panne » :
+  liés à des services partenaires absents.
+- « Statut de l'annonce » (vendue / disponible) : les annonces vendues ne sont pas listées.
+- Historique des localisations recherchées : non stocké (pas de traçage côté client).

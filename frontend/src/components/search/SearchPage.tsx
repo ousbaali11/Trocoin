@@ -7,9 +7,8 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast-context";
 import { CONDITION_LABELS } from "@/lib/format";
-import { getBrowserPosition } from "@/lib/geo";
 import type { CategoryNode, FieldSchema, SearchResult } from "@/lib/types";
-import { CityInput, type CityValue } from "@/components/ui/CityInput";
+import { LocationPicker, type LocationValue } from "@/components/ui/LocationPicker";
 import { ListingsMapDynamic } from "@/components/ui/DynamicMap";
 import { ListingCard } from "@/components/ui/ListingCard";
 import { Modal } from "@/components/ui/Modal";
@@ -44,7 +43,7 @@ export function SearchPage() {
   const category = get("category");
   const lat = get("lat");
   const lng = get("lng");
-  const radius = get("radius") || "30";
+  const radius = get("radius") || "5";
   const page = Number(get("page") || 1);
 
   const setParams = useCallback(
@@ -100,30 +99,24 @@ export function SearchPage() {
     return null;
   }, [tree, category]);
 
-  const cityValue: CityValue = useMemo(
-    () => ({
-      city: get("city_label") || get("city") || undefined,
-      postalCode: get("postal_code") || undefined,
-      latitude: lat ? Number(lat) : undefined,
-      longitude: lng ? Number(lng) : undefined,
-    }),
-    [get, lat, lng],
-  );
+  // Localisation (modèle leboncoin) : « Toute la France » | « Autour de moi » | commune + rayon (0 km = la commune seule)
+  const locValue: LocationValue = useMemo(() => {
+    if (lat && lng && get("city_label") === "Autour de moi") return { mode: "around", latitude: Number(lat), longitude: Number(lng), radius: Number(radius) };
+    if (lat && lng) return { mode: "city", city: get("city_label") || "Commune choisie", latitude: Number(lat), longitude: Number(lng), radius: Number(radius) };
+    if (get("city") || get("postal_code")) return { mode: "city", city: get("city") || get("postal_code"), postalCode: get("postal_code") || undefined, radius: 0 };
+    return { mode: "all" };
+  }, [get, lat, lng, radius]);
 
-  const onCity = (v: CityValue) => {
-    if (v.latitude !== undefined && v.longitude !== undefined) {
-      setParams({ lat: String(v.latitude), lng: String(v.longitude), radius, city_label: v.city, city: undefined, postal_code: undefined });
-    } else if (v.postalCode) {
-      setParams({ postal_code: v.postalCode, lat: undefined, lng: undefined, city_label: undefined, city: undefined });
-    } else if (!v.city && !v.postalCode) {
-      setParams({ lat: undefined, lng: undefined, city_label: undefined, city: undefined, postal_code: undefined });
+  const onLocation = (v: LocationValue) => {
+    if (v.mode === "all") {
+      setParams({ lat: undefined, lng: undefined, radius: undefined, city_label: undefined, city: undefined, postal_code: undefined });
+    } else if (v.mode === "around") {
+      setParams({ lat: String(v.latitude), lng: String(v.longitude), radius: String(v.radius), city_label: "Autour de moi", city: undefined, postal_code: undefined, sort: "distance" });
+    } else if (v.radius > 0 && v.latitude !== undefined && v.longitude !== undefined) {
+      setParams({ lat: String(v.latitude), lng: String(v.longitude), radius: String(v.radius), city_label: v.city, city: undefined, postal_code: undefined });
+    } else {
+      setParams({ city: v.city, postal_code: v.postalCode, lat: undefined, lng: undefined, radius: undefined, city_label: undefined });
     }
-  };
-
-  const aroundMe = async () => {
-    const pos = await getBrowserPosition();
-    if (!pos) return toast("Géolocalisation indisponible : autorisez-la dans votre navigateur ou saisissez une ville.", "error");
-    setParams({ lat: String(pos.latitude), lng: String(pos.longitude), radius, city_label: "Autour de moi", postal_code: undefined, city: undefined, sort: "distance" });
   };
 
   const conditions = get("condition") ? get("condition").split(",") : [];
@@ -182,7 +175,8 @@ export function SearchPage() {
           <p className="muted" style={{ margin: 0 }}>
             {loading ? "Recherche…" : `${result?.total ?? 0} annonce${(result?.total ?? 0) > 1 ? "s" : ""}`}
             {get("city_label") && ` · ${get("city_label")} (${radius} km)`}
-            {!get("city_label") && !get("postal_code") && " · Toute la France"}
+            {!get("city_label") && (get("city") || get("postal_code")) && ` · ${get("city") || get("postal_code")}`}
+            {!get("city_label") && !get("city") && !get("postal_code") && " · Toute la France"}
           </p>
           <div className="row" style={{ marginTop: 8, gap: 6, flexWrap: "wrap" }} aria-label="Filtres rapides">
             <button type="button" className={`btn btn-sm ${get("price_type") === "gratuit" ? "btn-primary" : "btn-outline"}`} aria-pressed={get("price_type") === "gratuit"} onClick={() => setParams({ price_type: get("price_type") === "gratuit" ? undefined : "gratuit" })}>🎁 Dons uniquement</button>
@@ -229,14 +223,7 @@ export function SearchPage() {
 
           <div className="field">
             <label htmlFor="f-city">Localisation</label>
-            <CityInput id="f-city" value={cityValue} onChange={onCity} allowAll />
-            <button type="button" className="btn btn-ghost btn-sm" onClick={aroundMe} style={{ alignSelf: "flex-start" }}>📍 Autour de moi</button>
-            {lat && lng && (
-              <label className="hint">
-                Rayon : <strong>{radius} km</strong>
-                <input type="range" min={5} max={200} step={5} value={Number(radius)} onChange={(e) => setParams({ radius: e.target.value })} style={{ width: "100%" }} aria-label="Rayon en kilomètres" />
-              </label>
-            )}
+            <LocationPicker id="f-city" value={locValue} onChange={onLocation} />
           </div>
 
           <div className="field">

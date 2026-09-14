@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 
 type AccountType = "particulier" | "professionnel";
 
@@ -139,12 +140,12 @@ export function RegisterForm() {
         <div className="form-row">
           <div className="field">
             <label htmlFor="password">Mot de passe</label>
-            <input id="password" className="input" type="password" value={f.password} onChange={(e) => set("password", e.target.value)} minLength={8} maxLength={128} required autoComplete="new-password" />
+            <PasswordInput id="password" value={f.password} onChange={(v) => set("password", v)} minLength={8} autoComplete="new-password" />
             <span className="hint">8 caractères minimum.</span>
           </div>
           <div className="field">
             <label htmlFor="passwordConfirmation">Confirmer le mot de passe</label>
-            <input id="passwordConfirmation" className="input" type="password" value={f.passwordConfirmation} onChange={(e) => set("passwordConfirmation", e.target.value)} maxLength={128} required autoComplete="new-password" aria-invalid={pwMismatch} />
+            <PasswordInput id="passwordConfirmation" value={f.passwordConfirmation} onChange={(v) => set("passwordConfirmation", v)} autoComplete="new-password" invalid={pwMismatch} />
             {pwMismatch && <span className="hint" style={{ color: "var(--brick)" }}>Les deux mots de passe ne correspondent pas.</span>}
           </div>
         </div>

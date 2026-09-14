@@ -131,6 +131,10 @@ export class UsersService {
     return saved;
   }
 
+  async setPasswordHash(id: string, passwordHash: string): Promise<void> {
+    await this.usersRepo.update(id, { passwordHash });
+  }
+
   async createFromPhone(phoneNumber: string): Promise<User> {
     const user = this.usersRepo.create({
       phoneNumber,

@@ -1,4 +1,4 @@
-# AUDIT.md — Trocoin (audit final, 12 septembre 2026 · phases 2, 3 et mise en ligne, 13 septembre 2026)
+# AUDIT.md — Trocoin (audit final, 12 septembre 2026 · phases 2 à 6 et mise en ligne, 13–14 septembre 2026)
 
 Chaque affirmation de ce document est étiquetée :
 **[exécuté]** = vérifié par exécution réelle (tests e2e `npm test` 54/54 après la phase 3, sur SQLite et sur PostgreSQL, appels HTTP,
@@ -578,6 +578,83 @@ Exigence initiale du projet : **un compte = un numéro de mobile français véri
 5. Le mot de passe devient un facteur d'accès à part entière : pas de réinitialisation par e-mail (aucun fournisseur) — un utilisateur qui l'oublie doit passer par l'admin, et un compte OTP historique n'a pas de mot de passe.
 
 **Réactivation (≈ 20 lignes)** : dans `AuthService.register`, après la validation du DTO, appeler `await this.otpService.requestOtp(normalized)` et renvoyer `{ phoneNumber }` au lieu d'ouvrir la session ; ajouter `POST /auth/register/confirm` qui appelle `this.otpService.verifyOtp(normalized, code)`, puis `createWithCredentials({ …, phoneVerified: true })` et `openSession`. Le front enchaîne l'étape « code reçu » de `OtpLoginForm` après le formulaire. Les données du formulaire peuvent être conservées côté client jusqu'à la confirmation (pas de compte fantôme en base).
+
+## 12. Phase 6 (14 septembre 2026) — mot de passe oublié, œil, localisation leboncoin, filtres par famille
+
+### 12.1 Mot de passe oublié
+
+| Élément | Détail |
+|---|---|
+| Fournisseur d'e-mail | `IEmailProvider` (`src/email/email.service.ts`) sur le modèle de `ISmsProvider` : `mock` (journalise et expose le lien en dev via `GET /dev/last-reset-link/:email`, 404 en production), `none` (aucun envoi : la demande répond **503** avec un message clair, autorisé en production), `resend` / `brevo` (clés vérifiées au démarrage). **Aucune clé fournie → l'appel HTTP Resend/Brevo n'est pas écrit**, comme pour Vonage avant réception des clés. Variables exactes attendues : `EMAIL_PROVIDER=resend` + `RESEND_API_KEY` + `EMAIL_FROM`, ou `EMAIL_PROVIDER=brevo` + `BREVO_API_KEY` + `EMAIL_FROM`. Resend (3 000 e-mails/mois gratuits) exige un domaine vérifié pour `EMAIL_FROM` ; sans domaine, seul l'e-mail du propriétaire du compte peut recevoir des tests. Brevo (300/jour) accepte un expéditeur validé par e-mail. |
+| Parcours | `POST /auth/password/forgot` { identifier } : **toujours 200** (pas d'énumération), 5 demandes / 15 min / IP ; jeton aléatoire 32 octets, seul le SHA-256 est stocké (`password_reset_tokens`), valable **1 h**, usage unique. `POST /auth/password/reset` { token, password, passwordConfirmation } : jeton inconnu / consommé / expiré → 400 même message ; succès → hash scrypt remplacé, jeton marqué utilisé, **toutes les sessions révoquées**. Front : `/mot-de-passe-oublie` (lien « Mot de passe oublié ? » sur `/connexion`), `/reinitialiser?token=…`. |
+| Back-office | `POST /admin/users/:id/reset-password` (admin uniquement) → mot de passe temporaire de 12 caractères affiché **une seule fois** dans la fiche utilisateur, sessions révoquées, entrée `user.reset_password` dans le journal d'audit. C'est le moyen de débloquer un utilisateur tant qu'aucun e-mail ne part. |
+| Migration | `1789343724219-PasswordResetTokens` (table + index), générée et exécutée sur PGlite, `migration:generate` relancé → « No changes ». |
+
+### 12.2 Afficher / masquer le mot de passe
+
+`PasswordInput` : bouton œil de 44 × 44 px (cible tactile), `aria-pressed`, libellé « Afficher / Masquer le mot de passe », utilisé sur `/inscription` (2 champs), `/connexion` et `/reinitialiser` (2 champs). Vérifié dans le navigateur en 1280 px et en 375 px (mobile) : le type passe de `password` à `text` et inversement, le bouton mesure 44 px.
+
+### 12.3 Localisation (relevé leboncoin du 14 septembre 2026)
+
+Observé sur leboncoin.fr : un champ « Ajouter une localisation » ; suggestions « Autour de moi » puis « Toute la France » ; autocomplétion des communes (« Lyon (toute la ville) » puis arrondissements) ; après choix, curseur « Dans un rayon de X km » à **9 positions : 0, 1, 5, 10, 20, 30, 50, 100, 200 km**, bornes « 0 km / 200 km », **5 km par défaut**. Trocoin reproduit exactement ces paliers et cet ordre (`LocationPicker`), l'emoji drapeau est retiré, « Autour de moi » utilise la géolocalisation du navigateur, les villages ressortent (test : « Saint-Martin-Belle-Roche (71118) »), 0 km = recherche sur la commune seule (nom + code postal), le curseur met à jour l'URL (`radius=10`) et le sous-titre des résultats. Détail complet : `analyse-concurrentielle.md` §10.1.
+
+### 12.4 Filtres par famille
+
+Relevé filtre par filtre de 9 catégories leboncoin (Voitures, Motos, Ventes immobilières, Locations, Offres d'emploi, Vêtements, Téléphonie, Ordinateurs, Ameublement) : `analyse-concurrentielle.md` §10.2. Écarts traités : type de véhicule (11 valeurs), puissance DIN (voitures, motos), couleur en liste de 17 valeurs filtrable (voitures, motos, vêtements, chaussures, ameublement), puissance fiscale / portes / places désormais filtrables, type de vente, exposition, état du bien (ventes), exposition (locations), fonction et niveau d'études (emploi), produit (téléphonie), taille d'écran (informatique), pièce et marque (ameublement). Non traités, avec raison : listes dépendantes marque → modèle → finition, offres/demandes, filtres liés à des services partenaires. Familles non relevées ce jour : Matériel pro, Famille, Loisirs, Autres, Vacances, Services, Animaux.
+
+### 12.5 Preuves d'exécution
+
+- `test/phase6.e2e-spec.ts` (3 tests) : mot de passe oublié (réponse identique pour un compte inconnu, lien mock, confirmation différente et jeton inconnu refusés, réinitialisation, réutilisation refusée, ancien mot de passe refusé, session antérieure révoquée) ; réinitialisation admin (format du mot de passe temporaire, connexion avec, journal d'audit, refus pour un simple membre) ; nouveaux filtres (schémas, filtre `attr.type_vehicule` et `attr.couleur` en recherche, valeur hors liste refusée au dépôt). Le test « fiche complète » de la phase 4 a été mis à jour (nouveaux champs voitures).
+- Suite complète : **74/74** sur SQLite et **74/74** sur PostgreSQL (PGlite, migrations seules).
+- Navigateur (local) : `/mot-de-passe-oublie` → message neutre + lien de dev → `/reinitialiser` → œil (type `text`, « Masquer le mot de passe ») → succès → redirection `/connexion` → connexion API avec le nouveau mot de passe OK ; back-office : bouton → mot de passe temporaire affiché ; `/recherche` : suggestions dans l'ordre leboncoin, village choisi, rayon 5 km par défaut, flèche → 10 km dans l'URL, position 0 → `?city=…` ; mobile 375 px : œil 44 px, menu de localisation lisible.
+- `tsc` API + front : 0 erreur ; `next build` (URL de production) : succès, routes `/mot-de-passe-oublie` et `/reinitialiser` présentes.
+
+### 12.6 Ce qu'il manque de votre côté pour l'e-mail réel
+
+1. Un compte **Resend** (recommandé : API simple, 3 000 e-mails/mois) ou **Brevo** ; les variables `EMAIL_PROVIDER`, `RESEND_API_KEY` ou `BREVO_API_KEY`, `EMAIL_FROM`, `SITE_URL` sur Render.
+2. Un domaine vérifié chez le fournisseur pour l'expéditeur (sinon Resend ne délivre qu'au propriétaire du compte).
+3. Dès réception d'une clé, ~40 lignes d'appel HTTP à écrire dans `src/email/email.service.ts` (même démarche que Vonage), puis un test sur une vraie adresse.
+En attendant : `EMAIL_PROVIDER=none` sur Render, et le bouton du back-office pour dépanner.
+
+## 13. État des lieux global (14 septembre 2026) et priorités avant ouverture publique
+
+### 13.1 Ce qui est fait, toutes phases confondues
+
+| Domaine | État | Références |
+|---|---|---|
+| Socle | NestJS 12 + TypeORM, SQLite en dev / PostgreSQL en prod, 3 migrations, validation d'environnement stricte en production, Docker multi-étapes, CI GitHub Actions (tsc, 74 tests SQLite + PostgreSQL 16, build, audit, next build, image Docker, garde `dist/main.js`) | §2, §3, §8, §10 |
+| Comptes | Inscription particulier / professionnel (SIRET Luhn), connexion e-mail ou username + mot de passe scrypt, refresh tokens rotatifs révocables, déconnexion réelle, mot de passe oublié (e-mail à brancher) et réinitialisation admin, ancien parcours OTP conservé | §8.4, §11, §12 |
+| Annonces | Dépôt par étapes avec champs dynamiques par catégorie (12 familles, schémas alignés sur leboncoin), photos (recadrage, tri), brouillons, renouvellement, duplication, import CSV/XML, boost/urgent, badge « Fiche complète », prix moyen constaté | §3, §7, §10, §12.4 |
+| Recherche | Mots-clés, catégories, localisation à la leboncoin (Autour de moi / Toute la France / commune + rayon 0–200 km), filtres généraux et spécifiques, dons/échanges, tri, carte, suggestions, recherches sauvegardées | §7, §10, §12.3 |
+| Échanges | Messagerie temps réel (WebSocket), offres de prix, photos, blocage, signalement, avis, notifications in-app | §3, §7 |
+| Paiement | Séquestre implémenté (mock / Stripe / PayPal simulé) mais **désactivé en production** (`PAYMENT_PROVIDER=disabled`) | §5, §8.2 |
+| Back-office | Statistiques, utilisateurs (suspension, rôle, badge, réinitialisation de mot de passe), annonces, signalements, litiges, journal d'audit, monétisation (off par défaut), CMS des pages légales | §3, §7 |
+| Production | API sur Render (Docker, Neon PostgreSQL, Vonage SMS validé par 3 SMS réels), front sur Vercel (`https://trocoin.vercel.app`), CORS restreint, HSTS/CSP | §9 |
+
+### 13.2 Ce qui reste avant une vraie ouverture publique (priorisé)
+
+**P0 — bloquant, à faire avant d'inviter des inconnus**
+1. **Réactiver la vérification du téléphone par SMS** à l'inscription (procédure §11.3, ~20 lignes) : aujourd'hui le numéro n'est pas prouvé, la règle « un humain = un compte » ne tient plus, et un inscrit peut bloquer le numéro d'un tiers.
+2. **E-mail transactionnel** : clé Resend ou Brevo + domaine vérifié, appel HTTP à écrire, test réel. Sans cela, pas de réinitialisation autonome ni de futures notifications par e-mail.
+3. **Auto-deploy Render** : toujours aucun webhook GitHub (déploiements manuels à chaque commit, un oubli = production en retard sur le code). Lier le compte GitHub dans Render ou brancher un Deploy Hook depuis la CI (§9.4, guide fourni).
+4. **Photos persistantes** : disque Render éphémère (offre gratuite) → disque persistant ou stockage objet ; sinon les photos disparaissent à chaque déploiement.
+5. **Base Neon en région UE** : le projet actuel est en `us-east-2` (États-Unis) ; recréer à Francfort et migrer (`pg_dump`/`pg_restore`, procédure `DEPLOIEMENT.md` §6) avant de traiter des données de résidents français à grande échelle.
+6. **Textes légaux** validés par un juriste (CGU, confidentialité, mentions : éditeur, hébergeur, médiateur), et information claire sur la collecte du téléphone non vérifié.
+
+**P1 — avant montée en charge**
+7. Redimensionnement et purge EXIF des images (`sharp`), limite d'envoi par compte.
+8. Redis pour le rate limiting dès la deuxième instance ; instance Render payante pour éviter la mise en veille (cold start de 30 s à 1 min observé).
+9. Sauvegarde automatisée hebdomadaire hors Neon et test de restauration ; Sentry alimenté (DSN) avec alertes.
+10. Paiement sécurisé : clés Stripe de test, webhook signé, réconciliation, puis `PAYMENT_PROVIDER=stripe` ; jusque-là, laisser `disabled`.
+11. Changement de mot de passe depuis « Paramètres », modification de l'e-mail avec confirmation, suppression de compte revue pour les comptes à mot de passe.
+12. Index full-text pour la recherche, listes marque → modèle pour les véhicules.
+
+**P2 — confort**
+13. Historique des localisations recherchées, aperçu carte dans le menu de localisation, arrondissements de Paris/Lyon/Marseille regroupés « toute la ville ».
+14. Relevé leboncoin des familles non couvertes (Matériel pro, Famille, Loisirs, Vacances, Services, Animaux) et alignement des schémas.
+15. Notifications push / e-mail (fournisseur à brancher), vérification d'identité, DAC7.
+
+**Temporairement moins sécurisé, en clair** : téléphone non vérifié (§11.3) ; pas de réinitialisation de mot de passe autonome tant que l'e-mail n'est pas branché ; pas de double facteur ; sessions de 15 min non révocables avant expiration en cas de vol du jeton d'accès (compromis documenté §8.4).
 
 ## Annexe — journal des vérifications exécutées le 12 septembre 2026
 

@@ -56,6 +56,8 @@ automatiquement) ou Fly.io. Les étapes ci-dessous restent les mêmes, seule l'i
    | `SMS_PROVIDER` | `vonage` ou `twilio` + les clés correspondantes (§5) |
    | `PAYMENT_PROVIDER` | `disabled` (paiement sécurisé indisponible, endpoints en 503) tant que Stripe n'est pas configuré |
    | `NOTIFICATION_PROVIDER` | `none` (notifications in-app seulement) |
+   | `EMAIL_PROVIDER` | `none` tant qu'aucune clé Resend/Brevo n'est fournie (le lien « mot de passe oublié » répond alors 503 ; l'admin peut réinitialiser depuis le back-office) |
+   | `SITE_URL` | `https://trocoin.vercel.app` (liens des e-mails) |
    | `SENTRY_DSN` | facultatif (§7) |
    | `APP_VERSION` | facultatif, ex. `1.0.0` (affiché par `/health`) |
 

@@ -89,7 +89,7 @@ describe('Phase 4 : filtre dons/échanges, estimation de prix, fiche complète',
       description: 'Clio V de 2021, première main, carnet d\'entretien complet chez Renault, pneus neufs, distribution faite, aucun frais à prévoir. Visible sur Lyon en semaine et le week-end.',
       categorySlug: 'voitures',
       price: 13900,
-      attributes: { marque: 'Renault', modele: 'Clio V', annee: 2021, kilometrage: 38000, carburant: 'Essence', boite: 'Manuelle', puissance_fiscale: 5, portes: '5', places: 5, couleur: 'Gris', critair: '1', controle_technique: true, premiere_main: true },
+      attributes: { marque: 'Renault', modele: 'Clio V', annee: 2021, kilometrage: 38000, type_vehicule: 'Citadine', carburant: 'Essence', boite: 'Manuelle', puissance_fiscale: 5, puissance_din: 100, portes: '5', places: 5, couleur: 'Gris', critair: '1', controle_technique: true, premiere_main: true },
     });
     for (let i = 0; i < 3; i++) {
       await request(server).post(`/listings/${full.id}/photos`).set(user.auth).attach('files', PNG_1x1, { filename: `p${i}.png`, contentType: 'image/png' }).expect(201);

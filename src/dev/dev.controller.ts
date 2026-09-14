@@ -2,6 +2,7 @@ import { Controller, Get, NotFoundException, Param } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { normalizeFrenchMobile } from '../common/validators/french-phone';
 import { isProduction } from '../config/env.validation';
+import { EmailService } from '../email/email.service';
 import { SmsService } from '../sms/sms.service';
 
 /**
@@ -19,7 +20,17 @@ export class DevController {
   constructor(
     private config: ConfigService,
     private smsService: SmsService,
+    private emailService: EmailService,
   ) {}
+
+  @Get('last-reset-link/:email')
+  getLastResetLink(@Param('email') email: string) {
+    if (isProduction()) throw new NotFoundException();
+    if ((this.config.get<string>('EMAIL_PROVIDER') || 'mock') !== 'mock') throw new NotFoundException();
+    const link = this.emailService.getLastResetLinkForDev(email);
+    if (!link) throw new NotFoundException('Aucun lien récent pour cette adresse.');
+    return { email: email.toLowerCase(), link };
+  }
 
   @Get('last-otp/:phone')
   getLastOtp(@Param('phone') phone: string) {

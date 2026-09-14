@@ -41,6 +41,7 @@ export default function AdminUserPage() {
   const [u, setU] = useState<AdminUserDetail | null>(null);
   const [form, setForm] = useState({ displayName: "", city: "", postalCode: "", accountType: "particulier", identityVerified: false, shopName: "", siret: "" });
   const [reason, setReason] = useState("");
+  const [temp, setTemp] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(
@@ -95,6 +96,27 @@ export default function AdminUserPage() {
               <textarea className="a-textarea" placeholder="Motif de suspension (transmis à l'utilisateur)" value={reason} onChange={(e) => setReason(e.target.value)} />
               <button className="a-btn danger" style={{ marginTop: 8 }} disabled={busy || u.deleted || reason.trim().length < 3} onClick={() => confirm("Suspendre ce compte ? Ses annonces seront mises en pause.") && patch({ suspended: true, suspensionReason: reason.trim() }, "Compte suspendu.")}>Suspendre le compte</button>
             </>
+          )}
+          <h3>Mot de passe</h3>
+          {temp ? (
+            <div className="a-alert">
+              Mot de passe temporaire (affiché une seule fois) : <code className="mono" style={{ fontSize: "1.05rem", userSelect: "all" }}>{temp}</code>
+              <br /><span className="small">Transmettez-le par un canal sûr ; l&apos;utilisateur devra le changer. Ses sessions ont été déconnectées.</span>
+            </div>
+          ) : (
+            <button className="a-btn" disabled={busy || u.deleted} onClick={async () => {
+              if (!confirm("Générer un mot de passe temporaire et déconnecter toutes les sessions de cet utilisateur ?")) return;
+              setBusy(true);
+              try {
+                const r = await api<{ temporaryPassword: string }>(`/admin/users/${u.id}/reset-password`, { method: "POST" });
+                setTemp(r.temporaryPassword);
+                toast("Mot de passe temporaire généré.", "success");
+              } catch (e) {
+                toast((e as Error).message, "error");
+              } finally {
+                setBusy(false);
+              }
+            }}>Réinitialiser le mot de passe</button>
           )}
           <h3>Vérifications</h3>
           <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: ".88rem" }}>

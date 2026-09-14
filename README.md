@@ -36,7 +36,7 @@ cd frontend && npm install && cp .env.example .env.local && npm run dev -- -p 30
 ## Tests
 
 ```bash
-npm test                 # 71 tests e2e (Jest + supertest, SQLite en mémoire)
+npm test                 # 74 tests e2e (Jest + supertest, SQLite en mémoire)
 # Les mêmes tests sur PostgreSQL (schéma créé par les migrations) :
 E2E_DB=postgres DB_TYPE=postgres DATABASE_URL=postgresql://... DB_SYNCHRONIZE=false npm test
 node test/ws-smoke.js    # messagerie temps réel contre un serveur lancé
@@ -83,6 +83,13 @@ libération), journal d'audit.
 - `POST /auth/login` : e-mail ou username + mot de passe (hash scrypt, `src/auth/password.ts`). Session identique au parcours OTP (access 15 min + refresh révocable).
 - **Aucun SMS à l'inscription** : le compte est créé avec `phoneVerified=false` (relaxation temporaire documentée dans `AUDIT.md` §11). L'ancien parcours OTP (`/auth/register/phone`, `/auth/otp/verify`, page `/connexion/sms`) reste disponible pour les comptes créés par SMS.
 - Migration `UserCredentials` : colonnes nullable `firstName`, `lastName`, `username` (unique), `passwordHash` (jamais sélectionné par défaut), `companyName` ; les comptes existants ne sont pas modifiés.
+
+## Phase 6 (mot de passe oublié, œil, localisation leboncoin, filtres)
+
+- **Mot de passe oublié** : `POST /auth/password/forgot` (toujours 200) → e-mail avec lien à usage unique (1 h) → `POST /auth/password/reset` (sessions révoquées). Fournisseur d'e-mail interchangeable (`IEmailProvider`, `src/email/email.service.ts`) : `mock` en dev (lien via `/dev/last-reset-link/:email`), `none` en prod sans clé (503 explicite), `resend` / `brevo` attendent `RESEND_API_KEY` ou `BREVO_API_KEY` + `EMAIL_FROM` (appel HTTP non implémenté sans clé). Back-office : bouton « Réinitialiser le mot de passe » (mot de passe temporaire affiché une fois, journalisé).
+- **Afficher / masquer** le mot de passe (`PasswordInput`) sur inscription, connexion et réinitialisation.
+- **Localisation** calquée sur leboncoin (`LocationPicker`) : un champ « Ajouter une localisation », suggestions « Autour de moi » puis « Toute la France », communes via adresse.data.gouv.fr, rayon 0 / 1 / 5 / 10 / 20 / 30 / 50 / 100 / 200 km (5 km par défaut, 0 km = la commune seule).
+- **Filtres par catégorie** alignés sur le relevé leboncoin (`analyse-concurrentielle.md` §10) : type de véhicule, puissance DIN, couleurs en liste, type de vente, exposition, état du bien, fonction, niveau d'études, produit (téléphonie), taille d'écran, pièce (ameublement).
 
 ## Configuration
 
@@ -132,7 +139,7 @@ npm run migration:run
 ## Principales routes API
 
 ```
-POST /auth/register · POST /auth/login · POST /auth/register/phone · POST /auth/otp/verify · POST /auth/refresh · POST /auth/logout · /auth/sessions
+POST /auth/register · POST /auth/login · POST /auth/password/forgot · POST /auth/password/reset · POST /auth/register/phone · POST /auth/otp/verify · POST /auth/refresh · POST /auth/logout · /auth/sessions
 GET  /health
 GET  /users/me · PATCH /users/me · POST /users/me/become-pro · GET /users/:id/profile
 GET  /users/me/export · DELETE /users/me · /users/me/blocks · /users/me/saved-searches

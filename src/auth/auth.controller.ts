@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, HttpCode, Post, Req, UseGuards } from '@
 import { Throttle } from '@nestjs/throttler';
 import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { AuthService } from './auth.service';
-import { LoginDto, RegisterDto } from './dto/register.dto';
+import { ForgotPasswordDto, LoginDto, RegisterDto, ResetPasswordDto } from './dto/register.dto';
 import { RegisterPhoneDto } from './dto/register-phone.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
@@ -54,6 +54,22 @@ export class AuthController {
   @Throttle({ default: { limit: 10, ttl: 600_000 } })
   login(@Req() req: any, @Body() dto: LoginDto) {
     return this.authService.loginWithPassword(dto.identifier, dto.password, this.meta(req));
+  }
+
+  /** Mot de passe oublié : toujours 200 (pas d'énumération), 5 demandes / 15 min / IP. */
+  @Post('password/forgot')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 900_000 } })
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto.identifier);
+  }
+
+  /** Nouveau mot de passe avec le jeton reçu par e-mail. */
+  @Post('password/reset')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 900_000 } })
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto.token, dto.password, dto.passwordConfirmation);
   }
 
   /** Rotation du refresh token. */

@@ -55,3 +55,22 @@ export class LoginDto {
   @IsString() @MinLength(1) @MaxLength(128)
   password: string;
 }
+
+export class ForgotPasswordDto {
+  /** E-mail ou nom d'utilisateur. */
+  @IsString() @MinLength(3) @MaxLength(120)
+  identifier: string;
+}
+
+export class ResetPasswordDto {
+  @IsString() @MinLength(32) @MaxLength(200)
+  token: string;
+
+  @IsString()
+  @MinLength(8, { message: 'Le mot de passe doit faire au moins 8 caractères.' })
+  @MaxLength(128)
+  password: string;
+
+  @IsString() @MaxLength(128)
+  passwordConfirmation: string;
+}

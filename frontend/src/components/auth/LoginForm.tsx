@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 
 function safeNext(raw: string | null): string {
   // Uniquement des chemins internes (pas d'open redirect)
@@ -61,8 +62,11 @@ export function LoginForm() {
           <input id="identifier" className="input" value={identifier} onChange={(e) => setIdentifier(e.target.value)} autoComplete="username" required autoFocus />
         </div>
         <div className="field">
-          <label htmlFor="password">Mot de passe</label>
-          <input id="password" className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
+          <div className="row spread" style={{ alignItems: "baseline" }}>
+            <label htmlFor="password">Mot de passe</label>
+            <Link href="/mot-de-passe-oublie" className="small">Mot de passe oublié ?</Link>
+          </div>
+          <PasswordInput id="password" value={password} onChange={setPassword} autoComplete="current-password" />
         </div>
         <button className="btn btn-primary btn-block btn-lg" disabled={busy || identifier.trim().length < 3 || password.length === 0}>
           {busy ? "Connexion…" : "Me connecter"}

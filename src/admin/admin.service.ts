@@ -209,6 +209,15 @@ export class AdminService {
     return { ...this.userView(user), listings, reportsAgainst, reportsByCount: reportsBy, transactions, reviews };
   }
 
+  async resetUserPassword(ctx: AdminContext, id: string) {
+    const user = await this.usersRepo.findOne({ where: { id } });
+    if (!user) throw new NotFoundException('Utilisateur introuvable.');
+    if (user.deletedAt) throw new BadRequestException('Compte supprimé : non modifiable.');
+    const result = await this.auth.adminResetPassword(id);
+    await this.audit(ctx, 'user.reset_password', 'user', id, { hasEmail: !!user.email });
+    return result;
+  }
+
   async updateUser(ctx: AdminContext, id: string, dto: AdminUpdateUserDto) {
     const user = await this.usersRepo.findOne({ where: { id } });
     if (!user) throw new NotFoundException('Utilisateur introuvable.');

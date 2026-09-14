@@ -94,7 +94,7 @@ export function CityInput({ value, onChange, placeholder = "Ville ou code postal
           {allowAll && (
             <li role="option" aria-selected={!hasLocation}>
               <button type="button" onMouseDown={pickAll} className="btn btn-ghost btn-sm" style={{ width: "100%", justifyContent: "flex-start", fontWeight: 600 }}>
-                🇫🇷 {ALL_FRANCE_LABEL}
+                {ALL_FRANCE_LABEL}
               </button>
             </li>
           )}

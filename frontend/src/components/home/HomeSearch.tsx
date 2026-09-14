@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { CityInput, type CityValue } from "@/components/ui/CityInput";
+import { LocationPicker, RADIUS_STEPS, type LocationValue } from "@/components/ui/LocationPicker";
 import styles from "./HomeSearch.module.css";
 
 /**
@@ -13,17 +13,29 @@ import styles from "./HomeSearch.module.css";
 export function HomeSearch({ total }: { total: number }) {
   const router = useRouter();
   const [q, setQ] = useState("");
-  const [city, setCity] = useState<CityValue>({});
+  const [loc, setLoc] = useState<LocationValue>({ mode: "all" });
 
   const buildParams = () => {
     const p = new URLSearchParams();
     if (q.trim()) p.set("q", q.trim());
-    if (city.latitude !== undefined && city.longitude !== undefined) {
-      p.set("lat", String(city.latitude));
-      p.set("lng", String(city.longitude));
-      p.set("radius", "30");
-      if (city.city) p.set("city_label", city.city);
-    } else if (city.postalCode) p.set("postal_code", city.postalCode);
+    if (loc.mode === "around") {
+      p.set("lat", String(loc.latitude));
+      p.set("lng", String(loc.longitude));
+      p.set("radius", String(loc.radius));
+      p.set("city_label", "Autour de moi");
+      p.set("sort", "distance");
+    } else if (loc.mode === "city") {
+      if (loc.radius > 0 && loc.latitude !== undefined && loc.longitude !== undefined) {
+        p.set("lat", String(loc.latitude));
+        p.set("lng", String(loc.longitude));
+        p.set("radius", String(loc.radius));
+        p.set("city_label", loc.city);
+      } else {
+        // 0 km : uniquement la commune choisie
+        p.set("city", loc.city);
+        if (loc.postalCode) p.set("postal_code", loc.postalCode);
+      }
+    }
     return p;
   };
 
@@ -47,7 +59,7 @@ export function HomeSearch({ total }: { total: number }) {
         </div>
         <div className={`${styles.field} ${styles.where}`}>
           <label htmlFor="home-city" className={styles.label}>Où ?</label>
-          <CityInput id="home-city" value={city} onChange={setCity} allowAll />
+          <LocationPicker id="home-city" value={loc} onChange={setLoc} compact />
         </div>
         <button className={`btn btn-primary ${styles.submit}`} type="submit">
           <SearchIcon /> Rechercher
@@ -55,6 +67,11 @@ export function HomeSearch({ total }: { total: number }) {
       </form>
       <div className={styles.quick} aria-label="Raccourcis">
         <span className={styles.quickLabel}>{total > 0 ? `${total.toLocaleString("fr-FR")} annonces en ligne` : "Raccourcis"}</span>
+        {loc.mode !== "all" && (
+          <select className="select" aria-label="Rayon de recherche" value={loc.radius} onChange={(e) => setLoc({ ...loc, radius: Number(e.target.value) })} style={{ width: "auto", padding: "5px 30px 5px 10px", fontSize: "0.84rem" }}>
+            {RADIUS_STEPS.map((r) => <option key={r} value={r}>{r === 0 ? "Uniquement la commune" : `Dans un rayon de ${r} km`}</option>)}
+          </select>
+        )}
         <Link href={quick({ price_type: "gratuit" })} className={`${styles.chip} ${styles.chipGift}`}>🎁 Dons uniquement</Link>
         <Link href={quick({ price_type: "echange" })} className={styles.chip}>🔁 Échanges</Link>
         <Link href={quick({ since_days: "1" })} className={styles.chip}>Publiées aujourd&apos;hui</Link>

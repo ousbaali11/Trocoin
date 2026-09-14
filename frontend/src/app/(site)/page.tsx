@@ -31,7 +31,7 @@ export default async function HomePage() {
           <div className={styles.heroHead}>
             <h1 className={styles.heroTitle}>Rechercher une annonce</h1>
             <p className={styles.heroText}>
-              Dans toute la France ou près de chez vous. Membres vérifiés par SMS{free ? ", dépôt gratuit" : ""}.
+              Dans toute la France ou près de chez vous. Un compte par numéro de mobile français{free ? ", dépôt gratuit" : ""}.
             </p>
           </div>
           <HomeSearch total={total} />
@@ -88,7 +88,7 @@ export default async function HomePage() {
             <h2>Trois étapes, zéro paperasse</h2>
           </div>
           <ol className={styles.stepList}>
-            <li><strong>Un numéro, un compte.</strong> Inscription par SMS avec votre mobile français. Pas de mot de passe à retenir.</li>
+            <li><strong>Un numéro, un compte.</strong> Inscription en deux minutes avec votre mobile français, votre e-mail et un mot de passe.</li>
             <li><strong>Publiez en deux minutes.</strong> Photos, prix, localisation approximative : votre annonce est en ligne aussitôt, ou vérifiée par notre équipe si besoin.</li>
             <li><strong>Échangez sereinement.</strong> Messagerie intégrée, paiement sécurisé avec fonds bloqués jusqu&apos;à la réception, avis après chaque vente.</li>
           </ol>
