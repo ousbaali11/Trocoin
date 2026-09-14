@@ -186,9 +186,13 @@ describe('Annonces : dépôt, validation, recherche, photos, contrôle d\'accès
     const ok = await request(server).post(`/listings/${listing.id}/photos`).set(owner.auth)
       .attach('files', PNG_1x1, { filename: '../../evil.html', contentType: 'image/png' }).expect(201);
     expect(ok.body[0].url).toMatch(/^\/uploads\/[0-9a-f-]{36}\.png$/);
-    expect((await fs.readdir(UPLOAD_DIR)).length).toBe(before + 1);
+    // Deux fichiers par photo : l'original et sa vignette (-min)
+    expect(ok.body[0].thumbUrl).toMatch(/^\/uploads\/[0-9a-f-]{36}-min\.png$/);
+    expect((await fs.readdir(UPLOAD_DIR)).length).toBe(before + 2);
     const stored = join(UPLOAD_DIR, ok.body[0].url.replace('/uploads/', ''));
+    const storedThumb = join(UPLOAD_DIR, ok.body[0].thumbUrl.replace('/uploads/', ''));
     await fs.access(stored);
+    await fs.access(storedThumb);
 
     // Réordonnancement et suppression (le fichier disparaît du disque)
     const second = await request(server).post(`/listings/${listing.id}/photos`).set(owner.auth)
@@ -200,6 +204,7 @@ describe('Annonces : dépôt, validation, recherche, photos, contrôle d\'accès
     await request(server).delete(`/listings/${listing.id}/photos/${ok.body[0].id}`).set(other.auth).expect(403);
     await request(server).delete(`/listings/${listing.id}/photos/${ok.body[0].id}`).set(owner.auth).expect(204);
     await expect(fs.access(stored)).rejects.toBeDefined();
+    await expect(fs.access(storedThumb)).rejects.toBeDefined();
     const detail = await request(server).get(`/listings/${listing.id}`).expect(200);
     expect(detail.body.photos.length).toBe(1);
     // nettoyage
