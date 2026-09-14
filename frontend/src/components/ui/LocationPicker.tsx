@@ -42,6 +42,9 @@ export function LocationPicker({
 }) {
   const panelId = useId();
   const [text, setText] = useState(value.mode === "all" ? "" : locationLabel(value, true));
+  // « Toute la France » choisi explicitement : affiché dans le champ comme le serait une commune
+  // (la valeur reste { mode: "all" } ; sans choix explicite, le champ garde son texte d'invite).
+  const [chosenAll, setChosenAll] = useState(false);
   const [items, setItems] = useState<GeoSuggestion[]>([]);
   const [open, setOpen] = useState(false);
   const [locating, setLocating] = useState(false);
@@ -50,13 +53,14 @@ export function LocationPicker({
   const root = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setText(value.mode === "all" ? "" : locationLabel(value, true));
-  }, [value]);
+    setText(value.mode === "all" ? (chosenAll ? ALL_FRANCE : "") : locationLabel(value, true));
+  }, [value, chosenAll]);
 
   /** Ferme le panneau en remettant le libellé du lieu choisi dans le champ (le panneau garde le focus dans le champ pendant les clics). */
   const close = () => {
     setOpen(false);
     if (value.mode !== "all") setText(locationLabel(value, true));
+    else if (chosenAll) setText(ALL_FRANCE);
     (root.current?.querySelector("input") as HTMLInputElement | null)?.blur();
   };
 
@@ -93,7 +97,10 @@ export function LocationPicker({
   const pickAll = () => {
     setItems([]);
     setOpen(false);
+    setChosenAll(true);
+    setText(ALL_FRANCE);
     onChange({ mode: "all" });
+    (root.current?.querySelector("input") as HTMLInputElement | null)?.blur();
   };
 
   const pickAround = async () => {
@@ -106,12 +113,14 @@ export function LocationPicker({
       return;
     }
     setItems([]);
+    setChosenAll(false);
     onChange({ mode: "around", latitude: pos.latitude, longitude: pos.longitude, radius: value.mode !== "all" ? value.radius : DEFAULT_RADIUS });
     setOpen(true);
   };
 
   const pickCity = (s: GeoSuggestion) => {
     setItems([]);
+    setChosenAll(false);
     onChange({ mode: "city", city: s.city, postalCode: s.postcode, latitude: s.latitude, longitude: s.longitude, radius: DEFAULT_RADIUS });
     setOpen(true); // reste ouvert pour proposer le rayon
   };
@@ -119,10 +128,14 @@ export function LocationPicker({
   const clear = () => {
     setText("");
     setItems([]);
+    setChosenAll(false);
     onChange({ mode: "all" });
   };
 
   const hasPlace = value.mode !== "all";
+  /** Un lieu ou « Toute la France » est affiché dans le champ (effaçable, remis après le focus). */
+  const hasLabel = hasPlace || chosenAll;
+  const currentLabel = () => (hasPlace ? locationLabel(value, true) : ALL_FRANCE);
   const stepIndex = hasPlace ? Math.max(0, RADIUS_STEPS.indexOf(value.radius as (typeof RADIUS_STEPS)[number])) : 2;
 
   return (
@@ -135,11 +148,11 @@ export function LocationPicker({
           placeholder={placeholder}
           onChange={(e) => onInput(e.target.value)}
           onFocus={() => {
-            if (hasPlace) setText("");
+            if (hasLabel) setText("");
             setOpen(true);
           }}
           onBlur={() => {
-            if (hasPlace && !text.trim()) setText(locationLabel(value, true));
+            if (hasLabel && !text.trim()) setText(currentLabel());
           }}
           autoComplete="off"
           role="combobox"
@@ -148,9 +161,9 @@ export function LocationPicker({
           aria-haspopup="dialog"
           aria-controls={panelId}
           aria-label="Localisation"
-          style={{ paddingRight: hasPlace ? 40 : undefined }}
+          style={{ paddingRight: hasLabel ? 40 : undefined }}
         />
-        {hasPlace && (
+        {hasLabel && (
           <button type="button" onClick={clear} aria-label="Effacer la localisation" style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", width: 32, height: 32, border: 0, background: "transparent", color: "var(--ink-muted)", cursor: "pointer", fontSize: "1.1rem" }}>
             ×
           </button>

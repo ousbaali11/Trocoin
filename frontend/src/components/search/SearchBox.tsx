@@ -65,7 +65,7 @@ export function SearchBox({ compact = false, initial = "", onNavigate }: { compa
       <div style={{ display: "flex", border: "1px solid var(--line)", borderRadius: "var(--radius-sm)", overflow: "hidden", background: "var(--white)" }}>
         <input
           className="input"
-          style={{ border: 0, minHeight: compact ? 40 : 48, borderRadius: 0, flex: 1, minWidth: 0, width: "100%" }}
+          style={{ border: 0, minHeight: compact ? 36 : 48, borderRadius: 0, flex: 1, minWidth: 0, width: "100%", fontSize: compact ? "0.92rem" : undefined }}
           type="search"
           placeholder={compact ? "Rechercher sur Trocoin" : "Que recherchez-vous ? (canapé, vélo, appartement…)"}
           value={q}
@@ -79,7 +79,7 @@ export function SearchBox({ compact = false, initial = "", onNavigate }: { compa
           role="combobox"
           autoComplete="off"
         />
-        <button type="submit" className="btn btn-primary" style={{ borderRadius: 0, minHeight: "auto", padding: "0 16px" }} aria-label="Lancer la recherche">
+        <button type="submit" className="btn btn-primary" style={{ borderRadius: 0, minHeight: "auto", padding: compact ? "0 12px" : "0 16px" }} aria-label="Lancer la recherche">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
             <circle cx="11" cy="11" r="7" />
             <path d="M20 20l-3.5-3.5" />

@@ -26,7 +26,7 @@
   min-height: var(--header-h);
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 .logo {
@@ -45,14 +45,14 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 40px;
-  padding: 8px 10px;
+  min-height: 36px;
+  padding: 6px 10px;
   white-space: nowrap;
   border-radius: var(--radius-sm);
   border: 1px solid var(--line);
   background: var(--white);
   font-weight: 600;
-  font-size: 0.92rem;
+  font-size: 0.9rem;
   cursor: pointer;
 }
 .catsBtn:hover {
@@ -103,8 +103,10 @@
 .megaChild:hover {
   color: var(--accent);
 }
+/* Bureau : tout tient sur UNE ligne (logo, Catégories, recherche, liens, compte, dépôt) ; la
+   recherche prend la place restante, avec un minimum qui garde son texte d'invite lisible. */
 .search {
-  flex: 1 1 260px;
+  flex: 1 1 200px;
   min-width: 0;
   order: 0;
 }
@@ -112,19 +114,20 @@
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   flex-shrink: 0;
 }
 .navLink {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-height: 40px;
-  padding: 8px 10px;
+  gap: 5px;
+  min-height: 36px;
+  padding: 6px 8px;
   border-radius: var(--radius-sm);
   color: var(--ink-soft);
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 0.86rem;
+  white-space: nowrap;
   position: relative;
 }
 .navLink:hover {
@@ -132,11 +135,18 @@
   color: var(--accent-dark);
   text-decoration: none;
 }
+.loginBtn,
+.deposit {
+  min-height: 36px;
+  padding: 0 12px;
+  font-size: 0.88rem;
+  white-space: nowrap;
+}
 .loginBtn {
   margin-left: 4px;
 }
 .deposit {
-  margin-left: 6px;
+  margin-left: 4px;
 }
 .userMenu {
   position: relative;
@@ -145,12 +155,12 @@
 .userBtn {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   background: var(--white);
   border: 1px solid var(--line);
   color: var(--ink);
-  min-height: 40px;
-  padding: 4px 12px 4px 4px;
+  min-height: 36px;
+  padding: 3px 10px 3px 3px;
   border-radius: 999px;
   cursor: pointer;
 }
@@ -158,8 +168,8 @@
   border-color: var(--accent);
 }
 .avatar {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   background: var(--accent);
   color: #fff;
@@ -169,9 +179,9 @@
   font-size: 0.85rem;
 }
 .userName {
-  font-size: 0.9rem;
+  font-size: 0.86rem;
   font-weight: 600;
-  max-width: 110px;
+  max-width: 96px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -254,12 +264,13 @@
 .mobileMenu {
   display: none;
 }
-@media (max-width: 1400px) {
+@media (max-width: 1199px) {
+  /* Entre 1100 et 1200 px : libellés remplacés par les icônes seules, toujours sur une ligne */
   .navLink span:not([class]) {
     display: none;
   }
   .navLink {
-    padding: 8px 8px;
+    padding: 6px 8px;
   }
   .userName {
     display: none;

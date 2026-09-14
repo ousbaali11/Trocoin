@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { mediaUrl } from "@/lib/api";
 import { CONDITION_LABELS, formatPrice, LISTING_STATUS_LABELS, postedAt } from "@/lib/format";
 import type { ListingCard as ListingCardType } from "@/lib/types";
@@ -14,7 +15,9 @@ import styles from "./ListingCard.module.css";
  * secondaires en 12 px, puis localisation et date de dépôt en 12 px gris, alignées en bas.
  */
 export function ListingCard({ listing, showStatus = false }: { listing: ListingCardType; showStatus?: boolean }) {
-  const cover = mediaUrl(listing.coverUrl);
+  // Image introuvable (photo supprimée du stockage, lien périmé) : on revient au visuel « Pas de photo »
+  const [broken, setBroken] = useState(false);
+  const cover = broken ? undefined : mediaUrl(listing.coverUrl);
   const isPro = listing.seller?.accountType === "professionnel";
   const negotiable = listing.priceType === "negociable";
   const priceLabel = formatPrice(listing.price, negotiable ? "fixe" : listing.priceType);
@@ -25,7 +28,7 @@ export function ListingCard({ listing, showStatus = false }: { listing: ListingC
       <Link href={`/annonces/${listing.id}`} className={styles.media} aria-label={listing.title}>
         {cover ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={cover} alt={listing.title} loading="lazy" decoding="async" />
+          <img src={cover} alt={listing.title} loading="lazy" decoding="async" onError={() => setBroken(true)} />
         ) : (
           <div className={styles.placeholder} aria-hidden="true">
             <CameraIcon size={28} />

@@ -36,12 +36,24 @@ test('filtre catégorie : la catégorie Vélos ne montre que le VTT et le fil d\
   await expectNoHorizontalOverflow(page);
 });
 
-test('« Toute la France » : sans localisation, les annonces de toutes les villes sont listées', async ({ page }) => {
-  await page.goto('/recherche');
+test('« Toute la France » : choisi depuis l\'accueil, affiché dans le champ « OÙ ? », et les annonces de toutes les villes sont listées', async ({ page }) => {
+  await page.goto('/');
+  const where = page.getByPlaceholder('OÙ ?');
+  await where.click();
+  await page.getByRole('dialog', { name: 'Menu des localisations' }).getByRole('button', { name: 'Toute la France' }).click();
+  await expect(where).toHaveValue('Toute la France');
+  await expect(page.getByRole('button', { name: 'Effacer la localisation' })).toBeVisible();
+  await page.getByRole('button', { name: 'Rechercher' }).click();
+  await expect(page).toHaveURL(/\/recherche(\?.*)?$/);
+  expect(page.url()).not.toMatch(/city|lat=|radius=/);
   await expect(page.getByText('· Toute la France')).toBeVisible();
   for (const key of ['vtt', 'ps5', 'poussette', 'canape', 'tondeuse']) {
     await expect(page.getByRole('link', { name: L[key].title, exact: true }).first()).toBeVisible();
   }
+  // Sans choix explicite, la recherche nationale reste le défaut
+  await page.goto('/recherche');
+  await expect(page.getByText('· Toute la France')).toBeVisible();
+  await expect(page.getByRole('link', { name: L.canape.title, exact: true }).first()).toBeVisible();
 });
 
 test('rayon en kilomètres autour de Lyon : 5 km inclut Villeurbanne, 1 km ne garde que le 3e, tri par distance', async ({ page }) => {
@@ -126,4 +138,56 @@ test("carte d'annonce : hiérarchie leboncoin (titre 16 px gras, prix 16 px gras
   await expect(foot.locator('[class*="date"]')).toHaveText(/^aujourd'hui à \d{2}:\d{2}$/);
   const muted = await style('[class*="date"]');
   expect(muted).toEqual({ size: '12px', weight: '400', color: 'rgb(97, 110, 124)' });
+});
+
+test("en-tête bureau sur une seule ligne à 1280, 1440 et 1920 px, libellés visibles ; barre d'accueil réduite", async ({ page, isMobile }) => {
+  test.skip(!!isMobile, 'bureau uniquement');
+  for (const width of [1280, 1440, 1920]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/');
+    const header = page.locator('header');
+    const box = (await header.boundingBox())!;
+    expect(box.height, `hauteur de l'en-tête à ${width}px`).toBeLessThan(80);
+    // Tous les éléments alignés sur la même ligne : même ordonnée de centre (± 4 px)
+    const items = [header.getByRole('link', { name: 'Accueil' }).first(), header.getByRole('button', { name: 'Catégories' }), header.getByRole('combobox', { name: 'Rechercher une annonce' }), header.getByRole('link', { name: 'Mes recherches' }), header.getByRole('link', { name: 'Favoris' }), header.getByRole('link', { name: 'Messages' }), header.getByRole('link', { name: 'Se connecter' }), header.getByRole('link', { name: 'Déposer une annonce' })];
+    const centers: number[] = [];
+    for (const it of items) {
+      await expect(it).toBeVisible();
+      const b = (await it.boundingBox())!;
+      centers.push(b.y + b.height / 2);
+    }
+    expect(Math.max(...centers) - Math.min(...centers), `alignement à ${width}px`).toBeLessThan(4);
+    for (const label of ['Mes recherches', 'Favoris', 'Messages', 'Catégories']) await expect(header.getByText(label, { exact: true })).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+  }
+  // Barre « QUOI ? / OÙ ? » : ≤ 720 px de large et ≤ 52 px de haut, textes d'invite lisibles
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/');
+  const form = page.getByRole('search', { name: 'Rechercher une annonce' });
+  const fb = (await form.boundingBox())!;
+  expect(fb.width).toBeLessThanOrEqual(720);
+  expect(fb.height).toBeLessThanOrEqual(52);
+  for (const ph of ['QUOI ?', 'OÙ ?']) {
+    const input = page.getByPlaceholder(ph);
+    expect(await input.evaluate((el: HTMLInputElement) => el.clientWidth > 80 && getComputedStyle(el).fontSize >= '14px')).toBe(true);
+  }
+});
+
+test('cartes réduites : au plus 200 px de large, 4 colonnes ou plus sur bureau, 2 sur mobile, texte sans débordement', async ({ page, isMobile }) => {
+  await page.goto('/recherche');
+  const card = page.locator('article').first();
+  await expect(card).toBeVisible();
+  const b = (await card.boundingBox())!;
+  const cols = await page.locator('.grid-cards').first().evaluate((g) => getComputedStyle(g).gridTemplateColumns.split(' ').length);
+  if (isMobile) {
+    expect(cols).toBe(2);
+  } else {
+    expect(b.width).toBeLessThanOrEqual(215);
+    expect(b.height).toBeLessThanOrEqual(340);
+    expect(cols).toBeGreaterThanOrEqual(4);
+  }
+  expect(await card.evaluate((el) => getComputedStyle(el).borderRadius)).toBe('10px');
+  // Aucun texte ne déborde de sa carte
+  const overflow = await card.evaluate((el) => [...el.querySelectorAll('a, span, div')].some((n) => n.scrollWidth > n.clientWidth + 1 && getComputedStyle(n).overflow === 'visible' && getComputedStyle(n).display !== '-webkit-box'));
+  expect(overflow).toBe(false);
 });
