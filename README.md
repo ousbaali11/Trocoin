@@ -36,7 +36,7 @@ cd frontend && npm install && cp .env.example .env.local && npm run dev -- -p 30
 ## Tests
 
 ```bash
-npm test                 # 79 tests e2e (Jest + supertest, SQLite en mémoire)
+npm test                 # 85 tests e2e (Jest + supertest, SQLite en mémoire)
 # Les mêmes tests sur PostgreSQL (schéma créé par les migrations) :
 E2E_DB=postgres DB_TYPE=postgres DATABASE_URL=postgresql://... DB_SYNCHRONIZE=false npm test
 node test/ws-smoke.js    # messagerie temps réel contre un serveur lancé
@@ -104,6 +104,14 @@ libération), journal d'audit.
 - **Panneau de localisation** : après le choix d'une commune ou d'« Autour de moi », le panneau reste ouvert et propose le rayon (0 / 1 / 5 / 10 / 20 / 30 / 50 / 100 / 200 km, 5 km par défaut, curseur + paliers cliquables, Effacer / Valider), comme sur leboncoin.
 - **Recherche plein texte** sur PostgreSQL (migration `ListingsFullText`, index GIN, accents retirés, stemming français, préfixe par mot) ; repli `LIKE` sur SQLite.
 - **Plafond de photos** par compte et par 24 h (`MAX_PHOTOS_PER_DAY`, défaut 150).
+
+## Phase 9 (infrastructure : stockage objet, SIRET au registre, Redis, deploy hook)
+
+- **Stockage des photos** interchangeable (`IStorageProvider`, `src/common/upload/storage.service.ts`) : `local` (défaut, disque éphémère sur Render) ou `s3` (S3 / Cloudflare R2 : `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_PUBLIC_URL`), testé contre un faux S3 en mémoire.
+- **SIRET vérifié au registre public** (`recherche-entreprises.api.gouv.fr`, sans clé) à l'inscription pro et au passage pro : inconnu/fermé refusé, registre en panne → « non vérifié » visible dans l'admin (`SIRENE_PROVIDER=api|mock|none`).
+- **Rate limiting partagé** via `REDIS_URL` (`RedisThrottlerStorage`, script Lua atomique), sinon mémoire.
+- **CI → Render** : job `deploy-render` déclenché par le secret `RENDER_DEPLOY_HOOK` après une CI verte, avec preuve par `/health` (`DEPLOIEMENT.md` §2b).
+- Documents : `AUDIT.md` (état consolidé), `AUDIT-HISTORIQUE.md` (journal des phases).
 
 ## Configuration
 

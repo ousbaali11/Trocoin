@@ -65,6 +65,17 @@ export function validateEnv(env: Record<string, unknown>): Record<string, unknow
     }
   }
 
+  // Stockage objet : clés vérifiées au démarrage. Noms exacts attendus :
+  if (env.STORAGE_PROVIDER === 's3') {
+    const missing = ['S3_ENDPOINT', 'S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY', 'S3_PUBLIC_URL'].filter((k) => !env[k]);
+    if (missing.length) errors.push(`STORAGE_PROVIDER=s3 : variables manquantes ${missing.join(', ')}.`);
+  } else if (env.STORAGE_PROVIDER && env.STORAGE_PROVIDER !== 'local') {
+    errors.push(`STORAGE_PROVIDER="${env.STORAGE_PROVIDER}" inconnu (valeurs : local, s3).`);
+  }
+  if (env.REDIS_URL && !/^rediss?:\/\//.test(String(env.REDIS_URL))) errors.push('REDIS_URL doit commencer par redis:// ou rediss://.');
+  if (env.SIRENE_PROVIDER && !['api', 'mock', 'none'].includes(String(env.SIRENE_PROVIDER))) errors.push('SIRENE_PROVIDER : valeurs api, mock ou none.');
+  if (prod && env.SIRENE_PROVIDER === 'mock') errors.push('SIRENE_PROVIDER=mock est interdit en production.');
+
   if (env.PAYMENT_PROVIDER === 'stripe' && !env.STRIPE_SECRET_KEY) {
     errors.push('STRIPE_SECRET_KEY est requis quand PAYMENT_PROVIDER=stripe.');
   }

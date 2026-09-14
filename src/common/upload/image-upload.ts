@@ -2,20 +2,21 @@ import { BadRequestException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import { diskStorage } from 'multer';
-import { basename, join, resolve } from 'path';
+import { basename, resolve } from 'path';
 import sharp from 'sharp';
+import { getStorage, publicUploadPath, UPLOAD_DIR } from './storage.service';
 
-export const UPLOAD_DIR = resolve(process.cwd(), 'uploads');
+export { UPLOAD_DIR } from './storage.service';
 export const MAX_IMAGE_BYTES = 8 * 1024 * 1024; // 8 Mo
 /** Plus grand côté conservé après redimensionnement (les originaux ne sont jamais servis). */
 export const MAX_IMAGE_SIDE = 1600;
 const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp'];
+const CONTENT_TYPES = { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp' } as const;
 
 /**
- * Stockage multer commun : le nom de fichier est toujours un UUID généré
- * côté serveur, SANS extension pour l'instant. L'extension définitive est
- * déterminée après écriture, à partir du contenu réel (signature binaire),
- * jamais à partir du nom ou du type MIME envoyés par le client.
+ * Réception multer : le fichier brut est écrit temporairement dans UPLOAD_DIR
+ * sous un UUID + « .tmp », puis analysé, ré-encodé et envoyé au stockage
+ * (disque local ou S3/R2). Le fichier temporaire est toujours supprimé.
  */
 export const imageDiskStorage = diskStorage({
   destination: UPLOAD_DIR,
@@ -50,15 +51,35 @@ export function sniffImageExtension(head: Buffer): 'jpg' | 'png' | 'webp' | null
 }
 
 /**
- * Vérifie la signature binaire de chaque fichier reçu, le renomme avec
- * l'extension correspondant à son contenu réel, et renvoie les URLs publiques.
- * Tout fichier non conforme est supprimé et la requête rejetée.
+ * Redimensionne (≤ 1600 px, jamais agrandi), applique l'orientation EXIF puis
+ * renvoie une image SANS métadonnées, dans le format d'origine (JPEG 82 %,
+ * PNG compressé, WEBP 82 %). Une image illisible (fichier corrompu, bombe de
+ * décompression) est rejetée.
+ */
+export async function processImage(src: string | Buffer, ext: 'jpg' | 'png' | 'webp'): Promise<Buffer> {
+  let pipeline = sharp(src, { failOn: 'error', limitInputPixels: 50_000_000 })
+    .rotate() // applique l'orientation EXIF avant de la supprimer
+    .resize({ width: MAX_IMAGE_SIDE, height: MAX_IMAGE_SIDE, fit: 'inside', withoutEnlargement: true });
+  if (ext === 'jpg') pipeline = pipeline.jpeg({ quality: 82, mozjpeg: true });
+  else if (ext === 'png') pipeline = pipeline.png({ compressionLevel: 9, palette: false });
+  else pipeline = pipeline.webp({ quality: 82 });
+  try {
+    return await pipeline.toBuffer(); // pas de .withMetadata() : EXIF/GPS/ICC/XMP purgés
+  } catch {
+    throw new BadRequestException("Image illisible ou corrompue : réessayez avec un autre fichier.");
+  }
+}
+
+/**
+ * Vérifie la signature binaire de chaque fichier reçu, le ré-encode, l'envoie
+ * au stockage courant et renvoie les URL publiques. Tout fichier non conforme
+ * entraîne le rejet de la requête et la suppression de ce qui a déjà été stocké.
  */
 export async function finalizeUploadedImages(
   files: Array<{ path: string; filename: string }>,
 ): Promise<string[]> {
+  const storage = getStorage();
   const urls: string[] = [];
-  const kept: string[] = [];
   try {
     for (const file of files) {
       // Défense en profondeur : le chemin doit rester dans UPLOAD_DIR
@@ -73,53 +94,23 @@ export async function finalizeUploadedImages(
         await handle.close();
       }
       const ext = sniffImageExtension(head);
-      if (!ext) throw new BadRequestException('Le fichier envoyé n\'est pas une image JPEG, PNG ou WEBP valide.');
+      if (!ext) throw new BadRequestException("Le fichier envoyé n'est pas une image JPEG, PNG ou WEBP valide.");
 
-      const finalName = `${basename(file.filename, '.tmp')}.${ext}`;
-      const finalPath = join(UPLOAD_DIR, finalName);
-      // Ré-encodage systématique : orientation appliquée puis TOUTES les métadonnées
-      // supprimées (EXIF, GPS, profils, commentaires), côté max 1600 px, poids maîtrisé.
-      // Le fichier envoyé par l'utilisateur n'est jamais servi tel quel.
-      await processImage(safePath, finalPath, ext);
-      await fs.unlink(safePath).catch(() => undefined);
-      kept.push(finalName);
-      urls.push(`/uploads/${finalName}`);
+      const processed = await processImage(safePath, ext);
+      const key = publicUploadPath(`${basename(file.filename, '.tmp')}.${ext}`);
+      urls.push(await storage.put(key, processed, CONTENT_TYPES[ext]));
     }
     return urls;
   } catch (err) {
-    await Promise.all([
-      ...files.map((f) => fs.unlink(f.path).catch(() => undefined)),
-      ...kept.map((n) => fs.unlink(join(UPLOAD_DIR, n)).catch(() => undefined)),
-    ]);
+    await Promise.all(urls.map((u) => storage.delete(u).catch(() => undefined)));
     throw err;
+  } finally {
+    await Promise.all(files.map((f) => fs.unlink(f.path).catch(() => undefined)));
   }
 }
 
-/**
- * Redimensionne (≤ 1600 px, jamais agrandi), applique l'orientation EXIF puis
- * écrit une image SANS métadonnées, dans le format d'origine (JPEG 82 %,
- * PNG compressé, WEBP 82 %). Une image illisible (fichier corrompu, bombe de
- * décompression) est rejetée.
- */
-export async function processImage(src: string, dest: string, ext: 'jpg' | 'png' | 'webp'): Promise<void> {
-  let pipeline = sharp(src, { failOn: 'error', limitInputPixels: 50_000_000 })
-    .rotate() // applique l'orientation EXIF avant de la supprimer
-    .resize({ width: MAX_IMAGE_SIDE, height: MAX_IMAGE_SIDE, fit: 'inside', withoutEnlargement: true });
-  if (ext === 'jpg') pipeline = pipeline.jpeg({ quality: 82, mozjpeg: true });
-  else if (ext === 'png') pipeline = pipeline.png({ compressionLevel: 9, palette: false });
-  else pipeline = pipeline.webp({ quality: 82 });
-  try {
-    await pipeline.toFile(dest); // pas de .withMetadata() : EXIF/GPS/ICC/XMP purgés
-  } catch {
-    throw new BadRequestException("Image illisible ou corrompue : réessayez avec un autre fichier.");
-  }
-}
-
-/** Supprime physiquement un fichier uploadé à partir de son URL publique (/uploads/xxx.jpg). */
+/** Supprime un fichier stocké à partir de son URL publique (/uploads/… ou URL S3 de notre bucket). */
 export async function deleteUploadedFile(url: string | undefined | null): Promise<void> {
-  if (!url || !url.startsWith('/uploads/')) return;
-  const name = basename(url);
-  const target = resolve(UPLOAD_DIR, name);
-  if (!target.startsWith(UPLOAD_DIR)) return;
-  await fs.unlink(target).catch(() => undefined);
+  if (!url) return;
+  await getStorage().delete(url).catch(() => undefined);
 }

@@ -10,6 +10,8 @@ import type { ListingCard, Report, Review, Transaction } from "@/lib/types";
 import { statusPill } from "@/components/admin/AdminPager";
 
 interface AdminUserDetail {
+  siretVerified?: boolean;
+  siretVerifiedAt?: string | null;
   id: string;
   phoneNumber: string;
   displayName: string;
@@ -81,6 +83,7 @@ export default function AdminUserPage() {
         <div>
           <h1>{u.displayName} <span className={`a-pill ${t.cls}`}>{t.label}</span> {u.deleted && <span className="a-pill">Supprimé</span>} {u.suspended && <span className="a-pill danger">Suspendu</span>}</h1>
           <p className="mono">{u.id} · {u.phoneNumber} · inscrit le {formatDate(u.createdAt)}</p>
+          {u.siret && <p className="small">SIRET {u.siret} · {u.siretVerified ? <span className="a-pill ok">vérifié au registre des entreprises{u.siretVerifiedAt ? ` le ${formatDate(u.siretVerifiedAt)}` : ""}</span> : <span className="a-pill danger">non vérifié au registre (registre indisponible à l'inscription ou compte antérieur)</span>}</p>}
         </div>
         <Link href={`/vendeurs/${u.id}`} className="a-btn" target="_blank">Profil public ↗</Link>
       </div>

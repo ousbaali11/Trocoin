@@ -118,6 +118,8 @@ export interface Me {
   lastName?: string | null;
   username?: string | null;
   companyName?: string | null;
+  siretVerified?: boolean;
+  siretVerifiedAt?: string | null;
   displayName: string;
   avatarUrl?: string | null;
   accountType: AccountType;

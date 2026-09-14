@@ -69,12 +69,49 @@ automatiquement) ou Fly.io. Les étapes ci-dessous restent les mêmes, seule l'i
 6. Notez l'URL : `https://trocoin-api.onrender.com` (à adapter). Vérifiez
    `https://trocoin-api.onrender.com/health` → `{"status":"ok","database":"postgres",…}`.
 
-### Fichiers envoyés (photos)
+### 2b. Déploiement automatique à chaque push (à faire une fois)
 
-Les photos sont écrites dans `/app/uploads`. Sur l'offre gratuite de Render le disque est
-**éphémère** : les photos disparaissent à chaque redéploiement. Pour les testeurs c'est
-acceptable ; avant l'ouverture publique, ajouter un *Persistent Disk* Render monté sur
-`/app/uploads` (payant) ou basculer sur un stockage objet (S3/R2 — non implémenté).
+Le service Render n'a jamais été relié au dépôt GitHub (aucun webhook côté GitHub), d'où
+les *Manual Deploy* à répétition. Deux solutions, la première suffit :
+
+**A. Deploy Hook + CI (recommandé, 2 minutes)** — la CI GitHub déclenche Render seulement
+quand tout est vert, puis vérifie que `/health` sert la version poussée.
+1. Render → service `trocoin` → *Settings* → *Deploy Hook* → *Create* → copier l'URL
+   (elle contient un secret : ne la collez nulle part d'autre).
+2. GitHub → dépôt → *Settings* → *Secrets and variables* → *Actions* → *New repository secret* :
+   nom `RENDER_DEPLOY_HOOK`, valeur = l'URL copiée. (Équivalent en ligne de commande, depuis
+   votre poste : `gh secret set RENDER_DEPLOY_HOOK` puis coller l'URL.)
+3. C'est tout : le job « Déploiement Render (deploy hook) + preuve /health » de
+   `.github/workflows/ci.yml` s'active au prochain push sur `main`. Tant que le secret est
+   absent, le job affiche un avertissement et ne fait rien.
+
+**B. Lier le compte GitHub dans Render** (auto-deploy natif) — Account Settings → Git
+Providers → GitHub → installer l'app Render avec accès au dépôt ; puis Settings → Build &
+Deploy du service : si la ligne *Repository* n'offre pas *Edit/Reconnect*, recréer le service
+depuis *New → Web Service → Connect a repository* (variables à recopier, voir §2).
+
+### Fichiers envoyés (photos) — stockage objet
+
+Par défaut (`STORAGE_PROVIDER=local`) les photos sont écrites dans `/app/uploads`, disque
+**éphémère** sur l'offre gratuite de Render : perdues à chaque déploiement (plafond
+`MAX_PHOTOS_PER_DAY` en plus). Le code supporte un bucket S3 compatible ; **Cloudflare R2**
+est recommandé (10 Go et 10 M de lectures/mois gratuits, pas de frais de sortie) :
+
+1. dash.cloudflare.com → *R2 Object Storage* → *Create bucket* → nom `trocoin`, région
+   automatique (choisir *EU* dans *Location hint* pour des données en Europe).
+2. Bucket → *Settings* → *Public access* → *Allow Access* (r2.dev) → noter l'URL
+   `https://pub-xxxxxxxx.r2.dev` (ou rattacher un domaine, ex. `media.trocoin.fr`).
+3. R2 → *Manage R2 API Tokens* → *Create API token* → permission *Object Read & Write* limitée
+   au bucket → noter *Access Key ID*, *Secret Access Key* et l'endpoint
+   `https://<account_id>.r2.cloudflarestorage.com`.
+4. Render → Environment : `STORAGE_PROVIDER=s3`, `S3_ENDPOINT`, `S3_REGION=auto`,
+   `S3_BUCKET=trocoin`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_PUBLIC_URL`.
+   Le démarrage refuse une configuration incomplète (variable manquante nommée).
+5. Les photos déjà envoyées sur le disque Render ne sont pas migrées (elles auront de toute
+   façon disparu au redéploiement suivant).
+
+Le chemin S3 est testé en e2e contre un faux serveur S3 en mémoire (`test/phase9`) ; l'appel
+réel vers R2 n'a pas pu être exécuté sans compte.
 
 ## 3. Front (Vercel, 4 min)
 
@@ -150,6 +187,37 @@ rejouées). La migration initiale recrée les 23 tables à partir de zéro ; un 
 dépend d'aucune extension autre que `pgcrypto` (fournie par Neon).
 
 **Photos** (`/app/uploads`) : non couvertes par la sauvegarde base — voir §2.
+
+### 6b. Base Neon : passer de la région US à l'Europe (RGPD)
+
+Le projet Neon actuel est en `us-east-2` (Ohio). Pour des données de résidents français,
+recréer le projet à **Francfort (eu-central-1)** avant l'ouverture publique. Deux options,
+**à choisir par vous** (je ne le fais pas sans validation : la base actuelle est la base de démo) :
+
+- **Option 1 — nouvelle base vide** (5 min) : Neon → *New project* → région Frankfurt → copier
+  la nouvelle `DATABASE_URL` dans Render → redéployer : les migrations recréent le schéma,
+  les comptes de test actuels sont perdus (1 compte à ce jour).
+- **Option 2 — migration des données** (15 min) : `pg_dump "$DATABASE_URL_US" --format=custom
+  --no-owner --file=trocoin.dump` puis `pg_restore --dbname="$DATABASE_URL_EU" --no-owner
+  --clean --if-exists trocoin.dump` (postgres 16+ via Docker `postgres:16-alpine` si
+  `pg_dump` n'est pas installé), puis changer `DATABASE_URL` dans Render. Vérifier
+  `SELECT count(*) FROM users` des deux côtés avant de supprimer le projet US.
+- **Option 3 — risque accepté pour la bêta fermée** : garder la base US le temps des tests,
+  en le notant dans la politique de confidentialité, et migrer (option 2) avant l'ouverture.
+
+### 8b. Redis pour le rate limiting (quand la deuxième instance arrive)
+
+Le code accepte `REDIS_URL` (`rediss://…`, Upstash gratuit 10 000 commandes/jour ou Render
+Key Value) : les compteurs de rate limiting deviennent partagés entre instances ; sans
+variable, ils restent en mémoire (correct avec une seule instance). Testé avec un Redis
+simulé (`ioredis-mock`) ; pas de compte Redis créé à ce jour.
+
+### 9b. Vérification SIRET
+
+Les comptes professionnels sont vérifiés auprès du registre public
+`recherche-entreprises.api.gouv.fr` (sans clé) : SIRET inconnu ou établissement fermé →
+inscription refusée ; registre injoignable → compte accepté marqué « SIRET non vérifié »
+(visible dans le back-office). `SIRENE_PROVIDER=none` désactive l'appel.
 
 ## 7. Monitoring (Sentry, facultatif)
 

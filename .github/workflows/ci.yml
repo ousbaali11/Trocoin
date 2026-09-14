@@ -114,3 +114,39 @@ jobs:
           cache-to: type=gha,mode=max
       - name: Vérifier l'image (sharp/libvips chargeable, dist/main.js présent)
         run: docker run --rm trocoin-api:ci node -e "const s=require('sharp'); require('fs').accessSync('dist/main.js'); console.log('sharp', s.versions.sharp, 'vips', s.versions.vips)"
+
+  # Déploiement Render déclenché par la CI (remplace l'auto-deploy GitHub→Render jamais relié) :
+  # ne s'exécute que si le secret RENDER_DEPLOY_HOOK existe (Render → Settings → Deploy Hook),
+  # uniquement sur main, et seulement quand tout est vert. Puis attend que /health renvoie la
+  # version du package.json poussé : preuve que le commit est bien en ligne.
+  deploy-render:
+    name: Déploiement Render (deploy hook) + preuve /health
+    needs: [api, api-postgres, frontend, docker]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+      HEALTH_URL: ${{ vars.RENDER_HEALTH_URL || 'https://trocoin.onrender.com/health' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Secret présent ?
+        id: hook
+        run: |
+          if [ -z "$RENDER_DEPLOY_HOOK" ]; then echo "present=false" >> "$GITHUB_OUTPUT"; echo "::warning::RENDER_DEPLOY_HOOK absent : pas de déploiement automatique (voir DEPLOIEMENT.md §2b)"; else echo "present=true" >> "$GITHUB_OUTPUT"; fi
+      - name: Déclencher le déploiement
+        if: steps.hook.outputs.present == 'true'
+        run: curl -fsS -X POST "$RENDER_DEPLOY_HOOK" -o /dev/null -w "hook Render : HTTP %{http_code}
+"
+      - name: Attendre la mise en ligne de cette version
+        if: steps.hook.outputs.present == 'true'
+        run: |
+          EXPECTED=$(node -p "require('./package.json').version")
+          echo "Version attendue : $EXPECTED"
+          for i in $(seq 1 60); do
+            LIVE=$(curl -s -m 30 "$HEALTH_URL" | node -pe "try{JSON.parse(require('fs').readFileSync(0)).version}catch{''}")
+            echo "[$i] version en ligne : $LIVE"
+            if [ "$LIVE" = "$EXPECTED" ]; then echo "Déployé et vérifié : $HEALTH_URL sert la version $EXPECTED"; exit 0; fi
+            sleep 15
+          done
+          echo "::error::La version $EXPECTED n'est pas en ligne après 15 min (dernière vue : $LIVE)"; exit 1

@@ -246,10 +246,12 @@ export const CATEGORY_SCHEMAS: Record<string, FieldSchema[]> = {
   'musique-instruments': [
     { key: 'type_instrument', label: 'Type', type: 'select', options: ['Guitare', 'Piano / Clavier', 'Batterie / Percussions', 'Vent', 'Cordes', 'DJ / Studio', 'Vinyles / CD', 'Autre'] },
     { key: 'marque', label: 'Marque', type: 'text', maxLength: 40 },
+    { key: 'niveau', label: 'Niveau', type: 'select', options: ['Débutant', 'Intermédiaire', 'Confirmé', 'Professionnel'], filterable: true },
   ],
   'sports-hobbies': [
     { key: 'sport', label: 'Discipline', type: 'text', maxLength: 40, filterable: true },
     { key: 'marque', label: 'Marque', type: 'text', maxLength: 40 },
+    { key: 'type_produit', label: 'Produit', type: 'select', options: ['Matériel', 'Vêtement', 'Chaussures', 'Accessoire', 'Nutrition'], filterable: true },
   ],
   'velos': [
     { key: 'type_velo', label: 'Type', type: 'select', required: true, options: ['VTT', 'Route', 'Ville', 'Électrique', 'Enfant', 'Gravel', 'BMX', 'Pliant', 'Autre'], filterable: true },
@@ -343,6 +345,9 @@ export const CATEGORY_SCHEMAS: Record<string, FieldSchema[]> = {
     { key: 'piscine', label: 'Piscine', type: 'boolean', filterable: true },
     { key: 'jardin', label: 'Jardin', type: 'boolean', filterable: true },
     { key: 'animaux_acceptes', label: 'Animaux acceptés', type: 'boolean', filterable: true },
+    { key: 'wifi', label: 'Wifi', type: 'boolean' },
+    { key: 'climatisation', label: 'Climatisation', type: 'boolean' },
+    { key: 'parking', label: 'Parking', type: 'boolean' },
     { key: 'chambres', label: 'Chambres', type: 'number', min: 0, max: 30 },
   ],
 

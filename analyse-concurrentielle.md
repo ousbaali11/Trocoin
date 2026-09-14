@@ -728,3 +728,25 @@ Une annonce par famille ; catégorie Services non atteinte (identifiant inconnu)
 accessible sans compte) ; les titres réels observés sont descriptifs et concrets (marque +
 modèle + caractéristique clé). Trocoin fournit désormais un exemple par catégorie rédigé sur ce
 modèle (`frontend/src/lib/title-examples.ts`, 60 catégories).
+
+### 10.5 Bilan des 12 familles (14 septembre 2026, soir)
+
+| Famille | Filtres leboncoin relevés | Champs de dépôt relevés (annonces) | Écarts corrigés dans ce tour | Non repris (raison) |
+|---|---|---|---|---|
+| Immobilier | oui (ventes, locations) | oui | type de vente, exposition, état du bien, salles d'eau | caractéristiques à cocher, étages de l'immeuble (granularité) |
+| Véhicules | oui (voitures, motos) | oui | type de véhicule, puissance DIN, couleur en liste, sellerie | finition/version (référentiel constructeur), LOA/LLD, permis (couvert par « sans permis ») |
+| Matériel pro | **non** (accès restreint) | oui (agricole : année, type de matériel) | — (schémas déjà cohérents) | à relever manuellement |
+| Emploi | oui | oui | fonction, niveau d'études | secteur en liste fermée |
+| Mode | oui (vêtements) | oui | couleur en liste | statut de l'annonce |
+| Maison & Jardin | oui (ameublement) | oui | pièce, marque, couleur en liste | type de canapé, démontable, quantité |
+| Famille | **non** | oui (puériculture) | couleur | univers/produit à deux niveaux |
+| Électronique | oui (téléphonie, ordinateurs) | oui | produit (téléphonie), taille d'écran | usage, protection panne (service partenaire) |
+| Loisirs | **non** | oui (sport, instruments) | produit (sport), niveau (instruments) | univers/activité à deux niveaux |
+| Locations de vacances | **non** | oui | wifi, climatisation, parking | étoiles, nature du logement |
+| Services | **non** | **non** (identifiant de catégorie non atteint) | — | à relever manuellement |
+| Animaux | **non** | oui | — (schéma déjà équivalent) | à relever manuellement |
+
+Les panneaux marqués **non** n'ont pas pu être ouverts : après une quarantaine de pages
+chargées automatiquement, leboncoin a affiché « Accès temporairement restreint » (protection
+anti-robot). Aucun contournement n'a été tenté ; ces relevés restent à faire depuis un
+navigateur ordinaire (≈ 15 minutes) et ne sont pas devinés ici.

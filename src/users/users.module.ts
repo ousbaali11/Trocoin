@@ -10,6 +10,7 @@ import { StripeConnectService } from './stripe-connect.service';
 import { UserBlock } from './user-block.entity';
 import { User } from './user.entity';
 import { UsersController } from './users.controller';
+import { SiretVerificationService } from './siret-verification.service';
 import { UsersService } from './users.service';
 
 @Module({
@@ -17,7 +18,7 @@ import { UsersService } from './users.service';
     TypeOrmModule.forFeature([User, UserBlock, Listing, Conversation, Message, Review, Transaction, Favorite]),
   ],
   controllers: [UsersController],
-  providers: [UsersService, StripeConnectService],
-  exports: [UsersService, StripeConnectService],
+  providers: [UsersService, SiretVerificationService, StripeConnectService],
+  exports: [UsersService, StripeConnectService, SiretVerificationService],
 })
 export class UsersModule {}

@@ -4,6 +4,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { AppThrottlerGuard } from './common/guards/app-throttler.guard';
+import { createRedisFromEnv, RedisThrottlerStorage } from './common/throttler/redis-throttler.storage';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AdminModule } from './admin/admin.module';
 import { HealthController } from './health/health.controller';
@@ -32,14 +33,21 @@ import { UsersModule } from './users/users.module';
     ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => [
-        {
-          name: 'default',
-          ttl: 60_000,
-          // Surchargeable (tests) ; 100 req/min/IP par défaut
-          limit: Number(config.get('THROTTLE_LIMIT') || 100),
-        },
-      ],
+      useFactory: (config: ConfigService) => {
+        // REDIS_URL présent : compteurs partagés entre instances ; sinon mémoire (1 instance)
+        const redis = createRedisFromEnv();
+        return {
+          throttlers: [
+            {
+              name: 'default',
+              ttl: 60_000,
+              // Surchargeable (tests) ; 100 req/min/IP par défaut
+              limit: Number(config.get('THROTTLE_LIMIT') || 100),
+            },
+          ],
+          ...(redis ? { storage: new RedisThrottlerStorage(redis) } : {}),
+        };
+      },
     }),
     ScheduleModule.forRoot(),
     TypeOrmModule.forRootAsync({

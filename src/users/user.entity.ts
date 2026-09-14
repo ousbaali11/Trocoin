@@ -88,6 +88,13 @@ export class User {
   @Column({ nullable: true })
   siret?: string;
 
+  /** SIRET confirmé actif au registre public des entreprises (recherche-entreprises.api.gouv.fr). */
+  @Column({ default: false })
+  siretVerified: boolean;
+
+  @Column({ type: DATE_TYPE, nullable: true })
+  siretVerifiedAt?: Date;
+
   // ----- Paiement (Stripe Connect Express) -----
   @Column({ nullable: true })
   stripeAccountId?: string;

@@ -9,6 +9,7 @@ import { Transaction } from '../payments/transaction.entity';
 import { Favorite } from '../favorites/favorite.entity';
 import { deleteUploadedFile } from '../common/upload/image-upload';
 import { UserBlock } from './user-block.entity';
+import { SiretVerificationService } from './siret-verification.service';
 import { User } from './user.entity';
 
 /** Validation de la clé de contrôle d'un SIRET (algorithme de Luhn). */
@@ -58,7 +59,24 @@ export class UsersService {
     @InjectRepository(Review) private reviewsRepo: Repository<Review>,
     @InjectRepository(Transaction) private transactionsRepo: Repository<Transaction>,
     @InjectRepository(Favorite) private favoritesRepo: Repository<Favorite>,
+    private sirene: SiretVerificationService,
   ) {}
+
+  /**
+   * Contrôle complet d'un SIRET : clé de Luhn, unicité, puis registre public.
+   * Renvoie les champs à enregistrer (siretVerified, raison sociale officielle).
+   * Registre indisponible → accepté non vérifié (jamais bloquer sur une panne tierce).
+   */
+  async assertSiretUsable(siret: string, excludeUserId?: string): Promise<{ siretVerified: boolean; siretVerifiedAt?: Date; officialName?: string }> {
+    if (!isValidSiret(siret)) throw new BadRequestException('SIRET invalide (clé de contrôle incorrecte).');
+    const other = await this.usersRepo.findOne({ where: { siret } });
+    if (other && other.id !== excludeUserId) throw new ConflictException('Ce SIRET est déjà rattaché à un compte.');
+    const check = await this.sirene.check(siret);
+    if (check.status === 'unknown') throw new BadRequestException("SIRET introuvable dans le registre des entreprises (Sirene). Vérifiez les 14 chiffres.");
+    if (check.status === 'closed') throw new BadRequestException(`Cet établissement (${check.companyName}) est fermé au registre des entreprises.`);
+    if (check.status === 'verified') return { siretVerified: true, siretVerifiedAt: new Date(), officialName: check.companyName };
+    return { siretVerified: false };
+  }
 
   findByPhone(phoneNumber: string) {
     return this.usersRepo.findOne({ where: { phoneNumber } });
@@ -107,9 +125,10 @@ export class UsersService {
     if (await this.findByPhone(input.phoneNumber)) throw new ConflictException('Ce numéro de téléphone est déjà associé à un compte.');
     if (await this.findByEmail(email)) throw new ConflictException('Cette adresse e-mail est déjà utilisée.');
     if (await this.findByUsername(username)) throw new ConflictException("Ce nom d'utilisateur est déjà pris.");
+    let siretInfo: { siretVerified: boolean; siretVerifiedAt?: Date; officialName?: string } = { siretVerified: false };
     if (input.accountType === 'professionnel') {
-      if (!input.siret || !isValidSiret(input.siret)) throw new BadRequestException('SIRET invalide (clé de contrôle incorrecte).');
-      if (await this.usersRepo.findOne({ where: { siret: input.siret } })) throw new ConflictException('Ce SIRET est déjà rattaché à un compte.');
+      if (!input.siret) throw new BadRequestException('SIRET invalide (clé de contrôle incorrecte).');
+      siretInfo = await this.assertSiretUsable(input.siret);
     }
     const firstName = input.firstName.trim();
     const lastName = input.lastName.trim();
@@ -123,7 +142,9 @@ export class UsersService {
       passwordHash: input.passwordHash,
       accountType: input.accountType,
       displayName: input.accountType === 'professionnel' ? input.companyName!.trim() : `${firstName} ${lastName.charAt(0).toUpperCase()}.`,
-      ...(input.accountType === 'professionnel' ? { companyName: input.companyName!.trim(), shopName: input.companyName!.trim(), siret: input.siret } : {}),
+      ...(input.accountType === 'professionnel'
+        ? { companyName: input.companyName!.trim(), shopName: input.companyName!.trim(), siret: input.siret, siretVerified: siretInfo.siretVerified, siretVerifiedAt: siretInfo.siretVerifiedAt }
+        : {}),
     });
     const saved = await this.usersRepo.save(user);
     // Ne jamais renvoyer le hash à l'appelant
@@ -171,19 +192,13 @@ export class UsersService {
   }
 
   async becomePro(id: string, siret: string, shopName: string): Promise<User> {
-    if (!isValidSiret(siret)) {
-      throw new BadRequestException('SIRET invalide (clé de contrôle incorrecte).');
-    }
-    const other = await this.usersRepo.findOne({ where: { siret } });
-    if (other && other.id !== id) {
-      throw new BadRequestException('Ce SIRET est déjà rattaché à un autre compte.');
-    }
     const user = await this.findById(id);
     if (!user) throw new NotFoundException('Utilisateur introuvable.');
     if (user.accountType === 'admin') {
       throw new BadRequestException('Un compte administrateur ne peut pas devenir professionnel.');
     }
-    await this.usersRepo.update(id, { accountType: 'professionnel', siret, shopName });
+    const info = await this.assertSiretUsable(siret, id);
+    await this.usersRepo.update(id, { accountType: 'professionnel', siret, shopName, companyName: info.officialName || shopName, siretVerified: info.siretVerified, siretVerifiedAt: info.siretVerifiedAt });
     return this.findById(id) as Promise<User>;
   }
 

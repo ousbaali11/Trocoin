@@ -6,6 +6,7 @@ if (process.env.E2E_DB !== 'postgres') {
 }
 // E2E_DB=postgres : utilise DB_HOST/DB_PORT/DB_USERNAME/DB_PASSWORD/DB_NAME (ou DATABASE_URL) de l'environnement
 process.env.JWT_SECRET = 'secret-de-test-suffisamment-long-pour-les-tests-automatises';
+process.env.SIRENE_PROVIDER = process.env.SIRENE_PROVIDER || 'mock';
 process.env.SMS_PROVIDER = 'mock';
 process.env.PAYMENT_PROVIDER = 'mock';
 process.env.NOTIFICATION_PROVIDER = 'mock';
