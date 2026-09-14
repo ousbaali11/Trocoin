@@ -620,3 +620,58 @@ et jamais renvoyée à soi-même, refus hors room et pour un tiers) ; scénario 
 `05-achat` étendu avec deux navigateurs (« Envoyé » → « Vu à », indicateur de frappe qui
 apparaît puis disparaît seul, carte en gras puis normale, clic hors texte, absence de soulignement).
 46 scénarios navigateur et 97 tests API verts.
+
+---
+
+## 14. Cartes d'annonce : hiérarchie visuelle alignée sur leboncoin — 14 septembre 2026, soir
+
+**Problème signalé** : le prix des cartes (« 8 000 € à débattre ») était affiché en grand
+(1,15 rem, police de titre) et en vert, alors que leboncoin le montre foncé, gras et compact.
+
+**Relevé sur leboncoin.fr** (styles calculés dans le DOM, session non connectée ; l'utilisateur
+confirme que l'affichage connecté est identique) :
+
+| Élément | leboncoin (cartes en grille, page annonce / carrousels) | leboncoin (liste de résultats, bureau) |
+|---|---|---|
+| Carte / photo | 130 × 346 px, photo 130 × 163 px (portrait 4/5) | 750 × 192 px, photo 240 × 192 px à gauche |
+| Titre | `p` 16 px / 700, foncé rgb(21 34 51), interligne 24 px, 2 lignes max | 16 px / 700 |
+| Prix | `span` 16 px / 700, **même foncé que le titre** ; vert + icône flèche uniquement en cas de « Baisse de prix » ; « Don (gratuit) » 14 px / 700 | 16 px / 700 foncé |
+| « à débattre » | **n'existe pas** (ni sur carte ni sur fiche : leboncoin propose « Faire une offre ») | — |
+| Cœur favori | bouton 32 × 32 px blanc rond, icône 16 px gris rgb(58 71 87), à 8 px du haut et de la droite de la photo | idem |
+| Nombre de photos | **absent** des cartes (seulement « 1/2 » sur la fiche) | absent |
+| Badge Pro | — | 12 px / 700, angles 4 px, dans le corps de la carte |
+| Livraison | icône colis 16 px seule, en bas de carte | ligne 12 px « Livraison à 15 € » avec icône |
+| État / description | **absents** des cartes (l'état est sur la fiche, « Les informations clés ») | ligne catégorie 12 px / 400 |
+| Bas de carte | « Lyon 69008 » puis date de dépôt, 12 px / 400 gris rgb(58 71 87), chacune sur sa ligne, calées en bas | « Lyon 69002 » 12 px / 400 |
+| Date de dépôt | « aujourd'hui à 17:41 », « samedi dernier à 19:11 », puis « 01/09/2026 » | — |
+| Urgent / À la une | 12 px / 700, angles 4 px, à 8 px du coin haut gauche de la photo | idem |
+
+**Ce qui a changé** (`ListingCard.tsx` / `.module.css`, `FavoriteButton` compact, `format.ts`),
+palette Trocoin conservée :
+
+- Photo en portrait 4/5 (au lieu de 4/3), cœur 32 px blanc rond sans bordure à 8 px du coin,
+  étiquettes Urgent / À la une 12 px à angles 4 px, compteur de photos réduit à une icône + nombre
+  (12 px, angles 4 px) — conservé car utile, bien qu'absent chez leboncoin.
+- Titre 16 px / 700 foncé, 2 lignes max, sans soulignement au survol ; prix 16 px / 700 dans la
+  couleur du texte (`--ink`), police de corps, juste sous le titre ; « à débattre » relégué en
+  mention 12 px grise à côté du prix (absent chez leboncoin, mais c'est une information de la fiche).
+- Ligne secondaire 12 px : badge « Pro » (angles 4 px, bordure), état, « Fiche complète » (coche).
+- Bas de carte calé en bas : « Livraison possible » avec icône colis, puis « Ville code postal
+  · distance », puis date de dépôt `postedAt()` au format leboncoin (« aujourd'hui à 17:31 »,
+  « hier à … », « mardi dernier à … », puis « 01/09/2026 »), toujours en heure de Paris pour un rendu
+  identique entre serveur et navigateur.
+- Squelette de la page recherche ajusté à la nouvelle proportion.
+
+**Vérification** : le composant étant partagé, mesures relevées par script sur 20 pages × 2 tailles
+(accueil, recherche, recherche avec rayon, annonces similaires et annonces du vendeur sur la fiche,
+vitrine pro, favoris, historique — connecté et non connecté, 375 px et 1 280 px) : titre 16 px / 700
+rgb(31 41 51), prix 16 px / 700 même couleur, mentions 12 px, lieu et date 12 px / 400 gris, cœur
+32 × 32 px à 8 px du coin, aucun débordement horizontal. « Mes annonces » garde sa liste dédiée
+(pas de carte). La capture d'écran de leboncoin n'a pas pu être prise depuis le navigateur intégré
+(page non dessinée tant que la fenêtre est masquée) ; la comparaison repose sur les valeurs
+calculées ci-dessus, identiques élément par élément.
+
+**Preuves** : scénario Playwright ajouté dans `01-recherche` (joué en mobile et en bureau) : titre
+et prix 16 px / 700 foncés, prix « 890 € », cœur 32 × 32 px à 8 px du coin de la photo, lieu
+« Lyon 69003 », date « aujourd'hui à HH:MM » en 12 px gris. 47 scénarios navigateur verts,
+97 tests API inchangés.

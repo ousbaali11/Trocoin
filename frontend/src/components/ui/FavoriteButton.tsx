@@ -78,21 +78,21 @@ export function FavoriteButton({ listingId, compact = false }: { listingId: stri
       style={
         compact
           ? {
-              width: 34,
-              height: 34,
+              width: 32,
+              height: 32,
               borderRadius: "50%",
-              border: "1px solid var(--line-soft)",
+              border: 0,
               background: "var(--white)",
               display: "grid",
               placeItems: "center",
               cursor: "pointer",
               color: active ? "var(--brick)" : "var(--ink-soft)",
-              boxShadow: "var(--shadow)",
+              boxShadow: "0 1px 3px rgba(31, 41, 51, 0.25)",
             }
           : { color: active ? "var(--brick)" : undefined }
       }
     >
-      <svg width="18" height="18" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <svg width={compact ? 16 : 18} height={compact ? 16 : 18} viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" aria-hidden="true">
         <path d="M12 20.5s-7.5-4.6-9.3-9.2C1.4 8 3.3 4.5 6.8 4.5c2 0 3.4 1.1 4.2 2.3.8-1.2 2.2-2.3 4.2-2.3 3.5 0 5.4 3.5 4.1 6.8C19.5 15.9 12 20.5 12 20.5z" />
       </svg>
       {!compact && (active ? "Dans vos favoris" : "Ajouter aux favoris")}

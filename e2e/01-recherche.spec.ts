@@ -101,3 +101,29 @@ test('tri par prix croissant puis décroissant : toute la liste est ordonnée', 
   await expect(page.locator('article').first()).toContainText(L.vtt.title);
   await expect.poll(async () => sorted(await prices(), -1), { message: 'prix décroissants' }).toBe(true);
 });
+
+test("carte d'annonce : hiérarchie leboncoin (titre 16 px gras, prix 16 px gras foncé, cœur 32 px à 8 px du coin, lieu + date de dépôt)", async ({ page }) => {
+  await page.goto('/recherche');
+  const card = page.locator('article').filter({ hasText: L.vtt.title }).first();
+  await expect(card).toBeVisible();
+  const style = (sel: string) => card.locator(sel).first().evaluate((el) => {
+    const cs = getComputedStyle(el);
+    return { size: cs.fontSize, weight: cs.fontWeight, color: cs.color };
+  });
+  const ink = 'rgb(31, 41, 51)';
+  expect(await style('a[class*="title"]')).toEqual({ size: '16px', weight: '700', color: ink });
+  // Le prix n'est plus ni vert ni surdimensionné : même corps que le titre, foncé, gras
+  expect(await style('[class*="price"]')).toEqual({ size: '16px', weight: '700', color: ink });
+  await expect(card.locator('[class*="price"]')).toHaveText('890 €');
+  const fav = card.getByRole('button', { name: 'Ajouter aux favoris' });
+  const heart = (await fav.boundingBox())!;
+  const media = (await card.locator('a[class*="media"]').boundingBox())!;
+  expect([Math.round(heart.width), Math.round(heart.height)]).toEqual([32, 32]);
+  expect(Math.round(media.x + media.width - (heart.x + heart.width))).toBe(8);
+  expect(Math.round(heart.y - media.y)).toBe(8);
+  const foot = card.locator('[class*="foot"]');
+  await expect(foot.locator('[class*="place"]:not([class*="placeholder"])')).toHaveText('Lyon 69003');
+  await expect(foot.locator('[class*="date"]')).toHaveText(/^aujourd'hui à \d{2}:\d{2}$/);
+  const muted = await style('[class*="date"]');
+  expect(muted).toEqual({ size: '12px', weight: '400', color: 'rgb(97, 110, 124)' });
+});

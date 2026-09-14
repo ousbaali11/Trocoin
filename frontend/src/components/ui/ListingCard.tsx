@@ -2,14 +2,24 @@
 
 import Link from "next/link";
 import { mediaUrl } from "@/lib/api";
-import { CONDITION_LABELS, formatPrice, LISTING_STATUS_LABELS, timeAgo } from "@/lib/format";
+import { CONDITION_LABELS, formatPrice, LISTING_STATUS_LABELS, postedAt } from "@/lib/format";
 import type { ListingCard as ListingCardType } from "@/lib/types";
 import { FavoriteButton } from "./FavoriteButton";
 import styles from "./ListingCard.module.css";
 
+/**
+ * Carte d'annonce partagée (accueil, recherche, favoris, historique, vitrine vendeur, annonces
+ * similaires). Hiérarchie calquée sur les cartes leboncoin : photo portrait avec cœur en haut à
+ * droite, titre 16 px gras sur deux lignes max, prix 16 px gras foncé et compact, mentions
+ * secondaires en 12 px, puis localisation et date de dépôt en 12 px gris, alignées en bas.
+ */
 export function ListingCard({ listing, showStatus = false }: { listing: ListingCardType; showStatus?: boolean }) {
   const cover = mediaUrl(listing.coverUrl);
   const isPro = listing.seller?.accountType === "professionnel";
+  const negotiable = listing.priceType === "negociable";
+  const priceLabel = formatPrice(listing.price, negotiable ? "fixe" : listing.priceType);
+  const place = [listing.city || "France", listing.postalCode].filter(Boolean).join(" ");
+  const hasMeta = isPro || !!listing.condition || !!listing.isComplete;
   return (
     <article className={`card card-hover ${styles.card} ${listing.isBoosted ? styles.boosted : ""}`}>
       <Link href={`/annonces/${listing.id}`} className={styles.media} aria-label={listing.title}>
@@ -18,17 +28,23 @@ export function ListingCard({ listing, showStatus = false }: { listing: ListingC
           <img src={cover} alt={listing.title} loading="lazy" decoding="async" />
         ) : (
           <div className={styles.placeholder} aria-hidden="true">
-            <CameraIcon />
+            <CameraIcon size={28} />
             <span>Pas de photo</span>
           </div>
         )}
-        {listing.photosCount > 1 && <span className={styles.count}>{listing.photosCount} photos</span>}
-        <div className={styles.tags}>
-          {listing.isUrgent && <span className="pill pill-brick">Urgent</span>}
-          {listing.isBoosted && <span className="pill pill-ochre">À la une</span>}
-          {isPro && <span className="pill pill-dark">Pro</span>}
-          {listing.isComplete && <span className="pill pill-green" title="Photos, description et tous les critères renseignés">Fiche complète</span>}
-        </div>
+        {(listing.isUrgent || listing.isBoosted) && (
+          <div className={styles.tags}>
+            {listing.isUrgent && <span className={`${styles.tag} ${styles.tagUrgent}`}>Urgent</span>}
+            {listing.isBoosted && <span className={`${styles.tag} ${styles.tagBoosted}`}>À la une</span>}
+          </div>
+        )}
+        {listing.photosCount > 1 && (
+          <span className={styles.count}>
+            <CameraIcon size={12} />
+            {listing.photosCount}
+            <span className="sr-only"> photos</span>
+          </span>
+        )}
       </Link>
       <div className={styles.fav}>
         <FavoriteButton listingId={listing.id} compact />
@@ -37,29 +53,65 @@ export function ListingCard({ listing, showStatus = false }: { listing: ListingC
         <Link href={`/annonces/${listing.id}`} className={styles.title}>
           {listing.title}
         </Link>
-        <div className={styles.price}>{formatPrice(listing.price, listing.priceType)}</div>
-        <div className={styles.meta}>
-          {listing.condition && <span>{CONDITION_LABELS[listing.condition]}</span>}
-          {listing.deliveryAvailable && <span className={styles.delivery}>Livraison possible</span>}
+        <div className={styles.price}>
+          {priceLabel}
+          {negotiable && <span className={styles.negotiable}>à débattre</span>}
         </div>
+        {hasMeta && (
+          <div className={styles.meta}>
+            {isPro && <span className={styles.pro}>Pro</span>}
+            {listing.condition && <span>{CONDITION_LABELS[listing.condition]}</span>}
+            {listing.isComplete && (
+              <span className={styles.complete} title="Photos, description et tous les critères renseignés">
+                <CheckIcon />
+                Fiche complète
+              </span>
+            )}
+          </div>
+        )}
         <div className={styles.foot}>
-          <span>
-            {listing.city || "France"}
+          {listing.deliveryAvailable && (
+            <span className={styles.delivery}>
+              <ParcelIcon />
+              Livraison possible
+            </span>
+          )}
+          <span className={styles.place}>
+            {place}
             {listing.distanceKm !== undefined && ` · ${listing.distanceKm} km`}
           </span>
-          <span suppressHydrationWarning>{timeAgo(listing.publishedAt || listing.createdAt)}</span>
+          <span className={styles.date} suppressHydrationWarning>
+            {postedAt(listing.publishedAt || listing.createdAt)}
+          </span>
+          {showStatus && <span className={`${LISTING_STATUS_LABELS[listing.status].pill} ${styles.status}`}>{LISTING_STATUS_LABELS[listing.status].label}</span>}
         </div>
-        {showStatus && <span className={`${LISTING_STATUS_LABELS[listing.status].pill} ${styles.status}`}>{LISTING_STATUS_LABELS[listing.status].label}</span>}
       </div>
     </article>
   );
 }
 
-function CameraIcon() {
+function CameraIcon({ size }: { size: number }) {
   return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
       <path d="M4 8h3l2-2h6l2 2h3v11H4z" />
       <circle cx="12" cy="13" r="3.5" />
+    </svg>
+  );
+}
+
+function ParcelIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 3 3 7.5v9L12 21l9-4.5v-9z" />
+      <path d="M3 7.5 12 12l9-4.5M12 12v9" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="m5 12 5 5L20 7" />
     </svg>
   );
 }

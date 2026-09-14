@@ -337,7 +337,7 @@ export function SearchPage() {
           {view === "map" ? (
             <ListingsMapDynamic listings={result?.items ?? []} center={lat && lng ? [Number(lat), Number(lng)] : undefined} radiusKm={lat && lng ? Number(radius) : undefined} />
           ) : loading && !result ? (
-            <div className="grid-cards" aria-hidden="true">{Array.from({ length: 8 }).map((_, i) => <div key={i} className="skeleton" style={{ aspectRatio: "4 / 5.2" }} />)}</div>
+            <div className="grid-cards" aria-hidden="true">{Array.from({ length: 8 }).map((_, i) => <div key={i} className="skeleton" style={{ aspectRatio: "4 / 7.4" }} />)}</div>
           ) : result && result.items.length === 0 ? (
             <div className="panel" style={{ textAlign: "center" }}>
               <h2 className="h3">Aucune annonce ne correspond</h2>

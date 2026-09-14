@@ -33,6 +33,31 @@ export function timeAgo(iso?: string | null): string {
   return formatDate(iso);
 }
 
+const PARIS_TZ = "Europe/Paris";
+function parisParts(d: Date) {
+  const parts = new Intl.DateTimeFormat("fr-FR", { timeZone: PARIS_TZ, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", weekday: "long", hourCycle: "h23" }).formatToParts(d);
+  const get = (t: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === t)?.value ?? "";
+  return { y: Number(get("year")), m: Number(get("month")), d: Number(get("day")), hm: `${get("hour")}:${get("minute")}`, weekday: get("weekday"), date: `${get("day")}/${get("month")}/${get("year")}` };
+}
+
+/**
+ * Date de dépôt d'une annonce, à la manière de leboncoin : « aujourd'hui à 17:31 », « hier à 09:12 »,
+ * « mardi dernier à 17:35 » (moins de sept jours), sinon « 01/09/2026 ».
+ * Toujours en heure de Paris, quel que soit le fuseau du serveur : rendu identique en SSR et côté client.
+ */
+export function postedAt(iso?: string | null, now: Date = new Date()): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const a = parisParts(d);
+  const b = parisParts(now);
+  const days = Math.round((Date.UTC(b.y, b.m - 1, b.d) - Date.UTC(a.y, a.m - 1, a.d)) / 86_400_000);
+  if (days <= 0) return `aujourd'hui à ${a.hm}`;
+  if (days === 1) return `hier à ${a.hm}`;
+  if (days < 7) return `${a.weekday} dernier à ${a.hm}`;
+  return a.date;
+}
+
 export function memberSince(iso?: string | null): string {
   if (!iso) return "";
   return new Intl.DateTimeFormat("fr-FR", { month: "long", year: "numeric" }).format(new Date(iso));
