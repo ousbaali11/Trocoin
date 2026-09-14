@@ -696,7 +696,8 @@ Points P0 restants (§13.2) qui dépendent de vous : vérification SMS (vous ave
 - Suite complète : **77/77** sur SQLite et **77/77** sur PostgreSQL (PGlite, migrations seules, aucune dérive de schéma).
 - Navigateur : mesures du bandeau ci-dessus ; dépôt : placeholder par catégorie, zone de description ; Paramètres : changement de mot de passe → déconnexion → `/connexion`, puis connexion API avec le nouveau mot de passe OK.
 - CI : étape ajoutée qui charge `sharp`/libvips **dans l'image Docker** construite (`docker run … require('sharp')`) pour garantir que le binaire Linux est présent dans l'image déployée sur Render.
-- `tsc` API + front : 0 erreur ; `next build` : succès. CI / Vercel / Render : voir la ligne ajoutée après le push.
+- `tsc` API + front : 0 erreur ; `next build` : succès.
+- Push `bd166f1` → CI **rouge** sur l'étape `npm audit` : `sharp` 0.34 porte un avis de sécurité haute (CVE libvips) → passage à `sharp` 0.35.4 (`9b37532`), audit à 0 vulnérabilité, CI **verte** (run 34793619060, 77 tests SQLite + PostgreSQL, front, image Docker avec vérification du chargement de sharp/libvips dans l'image). Vercel : déployé, `Rechercher sur Trocoin` visible sur l'accueil, `/deposer` et `/compte/parametres` → 200. **Render : pas de déploiement automatique** (toujours aucun webhook) ; le service exécute encore `5b101fb` (phase 6) : `POST /auth/password/change` → 404 tant que `9b37532` n'est pas déployé à la main. Tant que ce déploiement n'est pas fait, les photos envoyées en production ne sont pas retraitées (EXIF conservé) et le changement de mot de passe échoue.
 
 ## Annexe — journal des vérifications exécutées le 12 septembre 2026
 
