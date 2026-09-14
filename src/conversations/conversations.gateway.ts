@@ -48,6 +48,11 @@ export class ConversationsGateway implements OnGatewayInit, OnGatewayConnection,
   ) {}
 
   afterInit(server: Server) {
+    // Accusés de lecture : qu'ils viennent du HTTP (ouverture de la page) ou du WebSocket, la
+    // conversation est prévenue en temps réel (« Vu » côté expéditeur).
+    this.conversationsService.onMessagesRead((e) => {
+      server.to(roomName(e.conversationId)).emit('read', { conversationId: e.conversationId, readerId: e.readerId, readAt: e.readAt.toISOString() });
+    });
     server.use(async (socket, next) => {
       try {
         const token =
@@ -99,6 +104,31 @@ export class ConversationsGateway implements OnGatewayInit, OnGatewayConnection,
   @SubscribeMessage('leave')
   onLeave(@ConnectedSocket() client: Socket, @MessageBody() data: { conversationId: string }) {
     if (typeof data?.conversationId === 'string') client.leave(roomName(data.conversationId));
+    return { ok: true };
+  }
+
+  /** Le destinataire signale qu'il a affiché la conversation (messages reçus marqués lus). */
+  @SubscribeMessage('read')
+  async onRead(@ConnectedSocket() client: Socket, @MessageBody() data: { conversationId: string }) {
+    if (!client.data.userId || typeof data?.conversationId !== 'string') return { ok: false, message: 'Requête invalide.' };
+    try {
+      await this.conversationsService.assertMember(data.conversationId, client.data.userId);
+      const readAt = await this.conversationsService.markRead(data.conversationId, client.data.userId);
+      return { ok: true, readAt: readAt?.toISOString() ?? null };
+    } catch (err) {
+      return { ok: false, message: (err as Error).message };
+    }
+  }
+
+  /**
+   * Indicateur de frappe : relayé tel quel aux autres membres de la room (jamais stocké).
+   * Le client doit avoir rejoint la room (donc être membre vérifié) ; aucun accès base par frappe.
+   */
+  @SubscribeMessage('typing')
+  onTyping(@ConnectedSocket() client: Socket, @MessageBody() data: { conversationId: string; typing: boolean }) {
+    if (!client.data.userId || typeof data?.conversationId !== 'string') return { ok: false, message: 'Requête invalide.' };
+    if (!client.rooms.has(roomName(data.conversationId))) return { ok: false, message: 'Conversation non rejointe.' };
+    client.to(roomName(data.conversationId)).emit('typing', { conversationId: data.conversationId, userId: client.data.userId, typing: data.typing === true });
     return { ok: true };
   }
 

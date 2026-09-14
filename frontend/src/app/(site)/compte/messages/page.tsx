@@ -32,7 +32,7 @@ export default function MessagesPage() {
       ) : (
         <div className="stack">
           {visible.map((c) => (
-            <Link key={c.id} href={`/compte/messages/${c.id}`} className="card card-hover" style={{ display: "grid", gridTemplateColumns: "64px 1fr auto", gap: 14, alignItems: "center", background: c.unreadCount > 0 ? "var(--ochre-tint)" : undefined }}>
+            <Link key={c.id} href={`/compte/messages/${c.id}`} className={`card card-hover conv-card ${c.unreadCount > 0 ? "unread" : ""}`} aria-label={`${c.unreadCount > 0 ? `${c.unreadCount} non lu${c.unreadCount > 1 ? "s" : ""}, ` : ""}conversation avec ${c.other?.displayName ?? "un membre"}${c.listing ? ` à propos de ${c.listing.title}` : ""}`} style={{ display: "grid", gridTemplateColumns: "64px 1fr auto", gap: 14, alignItems: "center" }}>
               <div style={{ aspectRatio: "1", background: "var(--ivory-warm)", borderRadius: 6, overflow: "hidden" }}>
                 {c.listing?.coverUrl && (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -41,18 +41,18 @@ export default function MessagesPage() {
               </div>
               <div style={{ minWidth: 0 }}>
                 <div className="row" style={{ gap: 8 }}>
-                  <strong>{c.other?.displayName ?? "Membre"}</strong>
+                  <span style={{ fontWeight: c.unreadCount > 0 ? 700 : 600 }}>{c.other?.displayName ?? "Membre"}</span>
                   <span className="pill">{c.role === "acheteur" ? "Achat" : "Vente"}</span>
                   {c.listing && c.listing.status !== "en_ligne" && <span className="pill pill-dark">{c.listing.status === "vendue" ? "Vendue" : "Annonce retirée"}</span>}
                 </div>
-                <div className="small muted">{c.listing?.title} · {c.listing ? formatPrice(c.listing.price, c.listing.priceType) : ""}</div>
-                <div className="small" style={{ marginTop: 4, fontWeight: c.unreadCount > 0 ? 600 : 400 }}>
-                  {c.lastMessage ? truncate(c.lastMessage.content ?? "", 90) : "Aucun message"}
+                <div className="small" style={{ color: c.unreadCount > 0 ? "var(--ink)" : "var(--ink-muted)", fontWeight: c.unreadCount > 0 ? 600 : 400 }}>{c.listing?.title} · {c.listing ? formatPrice(c.listing.price, c.listing.priceType) : ""}</div>
+                <div className="small" style={{ marginTop: 4, fontWeight: c.unreadCount > 0 ? 700 : 400, color: c.unreadCount > 0 ? "var(--ink)" : "var(--ink-soft)" }}>
+                  {c.lastMessage ? `${c.lastMessage.senderId !== c.other?.id ? "Vous : " : ""}${truncate(c.lastMessage.content ?? "", 90)}` : "Aucun message"}
                 </div>
               </div>
-              <div style={{ textAlign: "right" }}>
-                <div className="small muted">{timeAgo(c.lastMessageAt || c.createdAt)}</div>
-                {c.unreadCount > 0 && <span className="pill pill-brick" style={{ marginTop: 6 }}>{c.unreadCount}</span>}
+              <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+                <div className="small" style={{ fontWeight: c.unreadCount > 0 ? 700 : 400, color: c.unreadCount > 0 ? "var(--accent-dark)" : "var(--ink-muted)" }} suppressHydrationWarning>{timeAgo(c.lastMessageAt || c.createdAt)}</div>
+                {c.unreadCount > 0 && <span className="conv-dot" aria-hidden="true" />}
               </div>
             </Link>
           ))}

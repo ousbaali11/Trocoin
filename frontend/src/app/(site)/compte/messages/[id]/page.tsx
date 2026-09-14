@@ -27,6 +27,10 @@ export default function ConversationPage() {
   const [offerAmount, setOfferAmount] = useState("");
   const [busy, setBusy] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
+  const [otherTyping, setOtherTyping] = useState(false);
+  const typingHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const typingStopTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTypingSent = useRef(0);
   const socketRef = useRef<Socket | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const liveRef = useRef(false);
@@ -64,7 +68,23 @@ export default function ConversationPage() {
     socket.on("message", (m: Message) => {
       if (m.conversationId !== id) return;
       setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
-      if (m.senderId !== user?.id) api(`/conversations/${id}/messages`).then(() => refreshCounters()).catch(() => null);
+      if (m.senderId !== user?.id) {
+        setOtherTyping(false);
+        // Affiché → lu : le serveur prévient l'expéditeur (« Vu ») et le compteur de non-lus se met à jour
+        socket.emit("read", { conversationId: id }, () => refreshCounters());
+      }
+    });
+    // Accusé de lecture du destinataire : mes messages passent « Vu »
+    socket.on("read", (e: { conversationId: string; readerId: string; readAt: string }) => {
+      if (e.conversationId !== id || e.readerId === user?.id) return;
+      setMessages((prev) => prev.map((m) => (m.senderId === user?.id && !m.readAt ? { ...m, readAt: e.readAt } : m)));
+    });
+    // Indicateur de frappe de l'autre membre, effacé après 4 s sans nouvelle frappe
+    socket.on("typing", (e: { conversationId: string; userId: string; typing: boolean }) => {
+      if (e.conversationId !== id || e.userId === user?.id) return;
+      if (typingHideTimer.current) clearTimeout(typingHideTimer.current);
+      setOtherTyping(e.typing);
+      if (e.typing) typingHideTimer.current = setTimeout(() => setOtherTyping(false), 4000);
     });
     // Photos et offres passent par REST : on se resynchronise à chaque réveil "inbox"
     socket.on("inbox", (p: { conversationId: string }) => {
@@ -75,20 +95,41 @@ export default function ConversationPage() {
     }, 15_000);
     return () => {
       clearInterval(poll);
+      if (typingHideTimer.current) clearTimeout(typingHideTimer.current);
+      if (typingStopTimer.current) clearTimeout(typingStopTimer.current);
       socket.emit("leave", { conversationId: id });
       socket.close();
     };
   }, [id, user?.id, load, refreshCounters]);
 
+  /** Frappe : « en train d'écrire » envoyé au plus toutes les 1,5 s, « arrêt » après 2,5 s sans saisie ou à l'envoi. */
+  const signalTyping = (typing: boolean) => {
+    const socket = socketRef.current;
+    if (!socket?.connected || !liveRef.current) return;
+    if (typingStopTimer.current) clearTimeout(typingStopTimer.current);
+    if (!typing) {
+      if (lastTypingSent.current) socket.emit("typing", { conversationId: id, typing: false });
+      lastTypingSent.current = 0;
+      return;
+    }
+    const now = Date.now();
+    if (now - lastTypingSent.current > 1500) {
+      socket.emit("typing", { conversationId: id, typing: true });
+      lastTypingSent.current = now;
+    }
+    typingStopTimer.current = setTimeout(() => signalTyping(false), 2500);
+  };
+
   useEffect(() => {
     const el = listRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages.length]);
+  }, [messages.length, otherTyping]);
 
   const send = async (content?: string) => {
     const body = (content ?? text).trim();
     if (!body) return;
     setText("");
+    signalTyping(false);
     const socket = socketRef.current;
     if (socket?.connected && liveRef.current) {
       socket.emit("message", { conversationId: id, content: body }, (ack: { ok: boolean; message?: string | Message }) => {
@@ -174,11 +215,14 @@ export default function ConversationPage() {
   if (error) return <div className="alert alert-error">{error} <Link href="/compte/messages">Retour aux messages</Link></div>;
   if (!conv || !user) return <div className="skeleton" style={{ height: 400 }} />;
   const isBuyer = conv.role === "acheteur";
+  // « Vu à … » uniquement sous mon dernier message (comme les messageries grand public)
+  let lastMineIndex = -1;
+  messages.forEach((m, i) => { if (m.senderId === user.id) lastMineIndex = i; });
 
   return (
     <div className="panel" style={{ display: "flex", flexDirection: "column", height: "calc(100vh - var(--header-h) - 100px)", minHeight: 520, padding: 0, overflow: "hidden" }}>
       <h1 className="sr-only">Conversation avec {conv.other?.displayName ?? "un membre"}{conv.listing ? ` à propos de ${conv.listing.title}` : ""}</h1>
-      <header style={{ display: "flex", gap: 12, alignItems: "center", padding: "12px 16px", borderBottom: "1px solid var(--line-soft)" }}>
+      <header className="conv-header" style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", padding: "12px 16px", borderBottom: "1px solid var(--line-soft)" }}>
         <Link href="/compte/messages" className="btn btn-ghost btn-sm" aria-label="Retour">←</Link>
         {conv.listing && (
           <Link href={`/annonces/${conv.listing.id}`} aria-label={`Voir l'annonce ${conv.listing.title}`} style={{ width: 44, height: 44, borderRadius: 6, overflow: "hidden", background: "var(--ivory-warm)", flexShrink: 0 }}>
@@ -188,9 +232,9 @@ export default function ConversationPage() {
             )}
           </Link>
         )}
-        <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ minWidth: 160, flex: 1 }}>
           <div className="row" style={{ gap: 8 }}>
-            <strong>{conv.other?.displayName}</strong>
+            <strong style={{ whiteSpace: "nowrap" }}>{conv.other?.displayName}</strong>
             {conv.other && !conv.other.deleted && <Link href={`/vendeurs/${conv.other.id}`} className="small">Profil</Link>}
             <span className="small muted" title={live ? "Connexion temps réel active" : "Mode différé"}><span aria-hidden="true">{live ? "● " : "○ "}</span>{live ? "en direct" : "différé"}</span>
           </div>
@@ -200,7 +244,7 @@ export default function ConversationPage() {
             </Link>
           )}
         </div>
-        <div className="row" style={{ gap: 4 }}>
+        <div className="row conv-actions" style={{ gap: 4, marginLeft: "auto" }}>
           {isBuyer && conv.listing?.status === "en_ligne" && <Link href={`/annonces/${conv.listing.id}`} className="btn btn-dark btn-sm">Acheter</Link>}
           <button className="btn btn-ghost btn-sm" onClick={() => setReportOpen(true)} style={{ color: "var(--brick)" }}>Signaler</button>
           <button className="btn btn-ghost btn-sm" onClick={toggleBlock}>{conv.blocked ? "Débloquer" : "Bloquer"}</button>
@@ -209,7 +253,7 @@ export default function ConversationPage() {
 
       <div ref={listRef} role="log" aria-live="polite" aria-label="Messages de la conversation" style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 8, background: "var(--bg)" }}>
         {messages.length === 0 && <p className="muted small" style={{ textAlign: "center" }}>Début de la conversation. Restez courtois et ne partagez pas vos coordonnées bancaires.</p>}
-        {messages.map((m) => {
+        {messages.map((m, index) => {
           const mine = m.senderId === user.id;
           const bubble: React.CSSProperties = { background: mine ? "var(--accent)" : "var(--white)", color: mine ? "#fff" : "var(--ink)", padding: "9px 13px", borderRadius: 14, borderBottomRightRadius: mine ? 4 : 14, borderBottomLeftRadius: mine ? 14 : 4, whiteSpace: "pre-wrap", wordBreak: "break-word", border: mine ? 0 : "1px solid var(--line-soft)" };
           return (
@@ -244,11 +288,22 @@ export default function ConversationPage() {
                 <div style={bubble}>{m.content}</div>
               )}
               <div className="small muted" style={{ textAlign: mine ? "right" : "left", marginTop: 2, fontSize: ".72rem" }}>
-                {formatDateTime(m.createdAt)}{mine && m.readAt ? " · lu" : ""}
+                <span suppressHydrationWarning>{formatDateTime(m.createdAt)}</span>
+                {mine && index === lastMineIndex && (
+                  <span data-testid="read-status" style={{ marginLeft: 6, fontWeight: 600, color: m.readAt ? "var(--accent-dark)" : undefined }}>
+                    {m.readAt ? `· Vu à ${new Date(m.readAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}` : "· Envoyé"}
+                  </span>
+                )}
               </div>
             </div>
           );
         })}
+        {otherTyping && (
+          <div role="status" aria-live="polite" className="small muted" data-testid="typing-indicator" style={{ alignSelf: "flex-start", display: "flex", alignItems: "center", padding: "6px 10px", background: "var(--white)", border: "1px solid var(--line-soft)", borderRadius: 14 }}>
+            <span className="typing-dots" aria-hidden="true"><span /><span /><span /></span>
+            {conv.other?.displayName ?? "Votre interlocuteur"} est en train d&apos;écrire…
+          </div>
+        )}
       </div>
 
       <footer style={{ padding: 12, borderTop: "1px solid var(--line-soft)", background: "var(--white)" }}>
@@ -269,7 +324,7 @@ export default function ConversationPage() {
               {isBuyer && conv.listing?.status === "en_ligne" && (
                 <button type="button" className="btn btn-outline btn-sm" style={{ flexShrink: 0 }} onClick={() => setOfferOpen(true)} title="Proposer un prix">💶 Proposer un prix</button>
               )}
-              <input className="input" value={text} onChange={(e) => setText(e.target.value)} placeholder="Votre message…" maxLength={2000} aria-label="Message" />
+              <input className="input" value={text} onChange={(e) => { setText(e.target.value); signalTyping(e.target.value.length > 0); }} placeholder="Votre message…" maxLength={2000} aria-label="Message" />
               <button className="btn btn-primary" type="submit" disabled={!text.trim()}>Envoyer</button>
             </form>
           </>

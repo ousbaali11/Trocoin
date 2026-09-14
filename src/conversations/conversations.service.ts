@@ -138,8 +138,33 @@ export class ConversationsService {
 
   async getMessages(conversationId: string, userId: string): Promise<Message[]> {
     await this.assertMember(conversationId, userId);
-    await this.messagesRepo.update({ conversationId, senderId: Not(userId), readAt: IsNull() }, { readAt: new Date() });
+    await this.markRead(conversationId, userId);
     return this.messagesRepo.find({ where: { conversationId }, order: { createdAt: 'ASC' } });
+  }
+
+  /** Abonnés aux accusés de lecture (la passerelle WebSocket les diffuse à la conversation). */
+  private readListeners: Array<(e: { conversationId: string; readerId: string; readAt: Date }) => void> = [];
+  onMessagesRead(fn: (e: { conversationId: string; readerId: string; readAt: Date }) => void) {
+    this.readListeners.push(fn);
+  }
+
+  /**
+   * Marque lus les messages reçus (l'appelant doit être membre). Renvoie l'horodatage si au
+   * moins un message vient d'être lu, sinon null ; les abonnés sont prévenus dans le premier cas.
+   */
+  async markRead(conversationId: string, userId: string): Promise<Date | null> {
+    const pending = await this.messagesRepo.count({ where: { conversationId, senderId: Not(userId), readAt: IsNull() } });
+    if (pending === 0) return null;
+    const readAt = new Date();
+    await this.messagesRepo.update({ conversationId, senderId: Not(userId), readAt: IsNull() }, { readAt });
+    for (const fn of this.readListeners) {
+      try {
+        fn({ conversationId, readerId: userId, readAt });
+      } catch {
+        /* un abonné défaillant ne bloque pas la lecture */
+      }
+    }
+    return readAt;
   }
 
   private async assertCanWrite(conversationId: string, senderId: string): Promise<{ c: Conversation; otherId: string }> {

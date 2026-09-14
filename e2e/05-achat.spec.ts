@@ -26,12 +26,34 @@ test('contact, messagerie temps réel, achat, réception confirmée, avis', asyn
   await expect(buyer.getByText('Bonjour, la console est-elle toujours disponible ?')).toBeVisible();
   const conversationUrl = buyer.url();
 
-  // --- Vendeur : ouvre la conversation, la voit dans sa boîte, en direct
+  // Tant que le vendeur n'a pas ouvert la conversation : « Envoyé », pas « Vu »
+  await expect(buyer.getByTestId('read-status')).toHaveText('· Envoyé');
+
+  // --- Vendeur : dans sa boîte, la conversation non lue est en gras, toute la carte est cliquable, sans soulignement
   await loginAs(seller, seed.seller, '/compte/messages');
-  await seller.getByRole('link', { name: new RegExp(listing.title.slice(0, 20)) }).first().click();
+  const card = seller.getByRole('link', { name: new RegExp(listing.title.slice(0, 20)) }).first();
+  await expect(card).toHaveClass(/unread/);
+  await expect(card).toHaveAccessibleName(/1 non lu, conversation avec/);
+  const nameEl = card.locator('span', { hasText: seed.buyer.displayName }).first();
+  expect(await nameEl.evaluate((el) => getComputedStyle(el).fontWeight)).toBe('700');
+  await card.hover();
+  expect(await card.evaluate((el) => [el, ...el.querySelectorAll('*')].every((n) => getComputedStyle(n).textDecorationLine === 'none')), 'aucun soulignement au survol').toBe(true);
+  // Clic en dehors du texte (coin bas droit de la carte) : la carte entière ouvre la conversation
+  const box = (await card.boundingBox())!;
+  await seller.mouse.click(box.x + box.width - 6, box.y + box.height - 6);
   await expect(seller).toHaveURL(conversationUrl);
   await expect(seller.getByText('Bonjour, la console est-elle toujours disponible ?')).toBeVisible();
   await expect(seller.getByText('● en direct')).toBeVisible();
+
+  // --- « Vu » : le vendeur a affiché la conversation → l'acheteur le voit en temps réel, avec l'heure
+  await expect(buyer.getByTestId('read-status')).toHaveText(/· Vu à \d{2}:\d{2}/, { timeout: 15_000 });
+
+  // --- « En train d'écrire… » : le vendeur tape sans envoyer → l'acheteur voit l'indicateur, qui disparaît seul
+  await seller.getByRole('textbox', { name: 'Message' }).pressSequentially('Je regarde mon agenda', { delay: 40 });
+  const typing = buyer.getByTestId('typing-indicator');
+  await expect(typing).toContainText(`${seed.seller.displayName} est en train d'écrire`, { timeout: 10_000 });
+  await expect(typing).toBeHidden({ timeout: 8_000 });
+  await seller.getByRole('textbox', { name: 'Message' }).clear();
 
   // --- Temps réel : le message de l'acheteur apparaît chez le vendeur sans rechargement, et inversement
   const ping = `Je peux passer ce soir vers 19 h ${Date.now().toString().slice(-4)}`;
@@ -42,6 +64,15 @@ test('contact, messagerie temps réel, achat, réception confirmée, avis', asyn
   await seller.getByRole('textbox', { name: 'Message' }).fill(pong);
   await seller.getByRole('button', { name: 'Envoyer' }).click();
   await expect(buyer.getByText(pong)).toBeVisible({ timeout: 15_000 });
+  // L'acheteur a la conversation ouverte : le vendeur voit son message passer « Vu » sans rechargement
+  await expect(seller.getByTestId('read-status')).toHaveText(/· Vu à \d{2}:\d{2}/, { timeout: 15_000 });
+
+  // --- Une fois lue, la conversation repasse en poids normal dans la boîte
+  await seller.goto('/compte/messages');
+  const readCard = seller.getByRole('link', { name: new RegExp(listing.title.slice(0, 20)) }).first();
+  await expect(readCard).not.toHaveClass(/unread/);
+  expect(await readCard.locator('span', { hasText: seed.buyer.displayName }).first().evaluate((el) => getComputedStyle(el).fontWeight)).toBe('600');
+  await seller.goto(conversationUrl);
 
   // --- Achat par paiement sécurisé (simulé) depuis la conversation
   await buyer.getByRole('link', { name: 'Acheter', exact: true }).click();

@@ -22,7 +22,7 @@ français, SIRET vérifié au registre public), connexion e-mail ou username + m
 passe oublié (parcours complet, **envoi d'e-mail non branché**), changement de mot de passe,
 réinitialisation par l'admin, œil sur les champs mot de passe, sessions révocables, messagerie,
 favoris, alertes, avis, signalements, back-office complet, CMS légal, photos retraitées
-(EXIF/GPS supprimés, ≤ 1600 px, plafond par compte), CI GitHub (94 tests sur SQLite et sur
+(EXIF/GPS supprimés, ≤ 1600 px, plafond par compte), CI GitHub (97 tests sur SQLite et sur
 PostgreSQL 16, image Docker). Depuis le tour « polish » du 14 septembre après-midi (§9) : centre
 d'aide structuré, partage d'annonce, autres annonces du vendeur, reprise des consultations sur
 l'accueil, préférences de notification par famille et canal, navigation compte et console admin
@@ -585,3 +585,38 @@ navigateur, axe, clavier, SEO, charge) couvrent ce qui peut l'être, et ajouter 
 retour d'usage produirait des fonctionnalités inventées. Point d'attention pour plus tard,
 non urgent : les styles en ligne du compte (lisibilité), et l'inline du CSS critique pour le
 LCP desktop (§11.4).
+
+---
+
+## 13. Messagerie : cartes cliquables, « Vu », « en train d'écrire », non-lus en gras — 14 septembre 2026, nuit
+
+- **Soulignement au survol / clic** : la carte de conversation est un lien entier ; le style
+  global `a:hover { text-decoration: underline }` soulignait tout son contenu. Règle dédiée
+  (`a.card` et descendants sans soulignement), survol par fond gris clair, badge conservé.
+  leboncoin fait de même (ligne entière cliquable, aucun soulignement, fond au survol). Vérifié par
+  le scénario : survol puis clic dans un coin vide de la carte → conversation ouverte, aucune
+  décoration de texte sur aucun descendant.
+- **« Vu à HH:MM »** : quand le destinataire affiche la conversation (ouverture de la page ou
+  réception d'un message pendant qu'elle est ouverte), les messages reçus sont marqués lus et le
+  serveur diffuse un évènement `read` (WebSocket, room de la conversation) ; l'expéditeur voit
+  « · Vu à 17:12 » sous son dernier message sans rechargement (« · Envoyé » tant que ce n'est pas
+  lu). Aucune interrogation périodique : l'accusé est émis depuis le service quel que soit le canal
+  de lecture (HTTP ou WebSocket), une seule fois par lot de messages.
+- **« X est en train d'écrire… »** : l'évènement `typing` est relayé aux autres membres de la
+  room (jamais stocké, jamais renvoyé à l'émetteur, refusé sans avoir rejoint la room) ; côté
+  client, envoi au plus toutes les 1,5 s pendant la frappe, arrêt après 2,5 s sans saisie ou à
+  l'envoi ; côté destinataire, l'indicateur (points animés, zone `role="status"`) disparaît après
+  4 s sans nouvel évènement ou dès que le message arrive.
+- **Non-lus en gras** : dans la boîte, une conversation avec messages non lus affiche nom, titre
+  d'annonce, aperçu et heure en gras avec un point vert (modèle Messenger), nom accessible
+  « 1 non lu, conversation avec … » ; retour au poids normal dès qu'elle a été ouverte. L'aperçu
+  précise « Vous : » quand le dernier message est le vôtre.
+- **Mobile** : en-tête de conversation revu (actions sur leur propre ligne sous 600 px, nom sans
+  césure) ; captures 375 px et 1280 px vérifiées, aucun débordement.
+
+**Preuves** : `test/phase12` (3 tests, deux clients socket.io : accusé de lecture déclenché par
+l'ouverture HTTP et par l'évènement WebSocket, pas d'accusé sans nouveau message, frappe relayée
+et jamais renvoyée à soi-même, refus hors room et pour un tiers) ; scénario Playwright
+`05-achat` étendu avec deux navigateurs (« Envoyé » → « Vu à », indicateur de frappe qui
+apparaît puis disparaît seul, carte en gras puis normale, clic hors texte, absence de soulignement).
+46 scénarios navigateur et 97 tests API verts.
