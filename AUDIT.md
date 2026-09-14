@@ -41,9 +41,9 @@ clés Stripe réelles (`sk_live`), vérification SMS du téléphone à l'inscrip
 le passage au mot de passe ; le badge « téléphone vérifié » n'est affiché nulle part), validation
 juridique des textes.
 
-**État de la base :** production encore sur Neon **États-Unis** (`us-east-2`) ; le projet Neon
-**Frankfurt** est prêt (schéma à jour, vide) et la copie est prête à être jouée dès que l'URL de
-l'ancienne base est fournie (§15).
+**État de la base :** production sur Neon **Frankfurt** (`eu-central-1`) depuis le 15 septembre,
+données copiées et vérifiées, fiche d'annonce passée de 557 ms à 56 ms de p50 (§15.1). L'ancienne
+base US est conservée intacte jusqu'à votre suppression.
 
 **Préalable auto-deploy (point 0 du brief) : résolu et prouvé le 14 septembre [exécuté].**
 Le service Render n'a jamais été relié au dépôt (0 webhook GitHub) ; la solution retenue est
@@ -185,7 +185,7 @@ ouverture publique :**
 **Non bloquant pour la bêta fermée, à traiter avant l'ouverture publique (différés par choix, §6)**
 1. ~~E-mail transactionnel~~ fait (§15) — reste : domaine vérifié chez Resend.
 2. ~~Stockage objet des photos~~ fait (§15) — reste : variables dans Render.
-3. ~~Base Neon en Europe~~ préparée (§15) — reste : URL de la base US, copie, bascule, test de charge.
+3. ~~Base Neon en Europe~~ fait (§15.1) : copie, bascule et test de charge exécutés ; reste : supprimer le projet US et activer la sauvegarde avec la nouvelle URL.
 4. Vérification du téléphone par SMS (différé §6) ou, à défaut, un e-mail de confirmation
    dès que l'e-mail est branché : aujourd'hui rien ne prouve qu'un contact appartient à l'inscrit.
 5. Textes légaux validés par un juriste ; information sur la collecte du téléphone non vérifié.
@@ -695,13 +695,35 @@ fin de section. Aucun secret n'est écrit dans ce dépôt.
   de chaque table. **Répétition à blanc** [exécuté] : source PGlite remplie par l'API (3 comptes,
   3 annonces avec photos, conversation, transaction complète, avis, signalement, favoris) →
   Frankfurt : 23 tables « identique », sortie 0 ; cible ensuite vidée.
-- **Copie réelle US → EU : non exécutée [non testé]** — l'URL de l'ancienne base n'existe nulle part
-  ici (ni `.env`, ni secret GitHub `DATABASE_URL_BACKUP` : la sauvegarde hebdomadaire n'a jamais
-  tourné). Dès l'URL fournie : une commande (`DEPLOIEMENT.md` §6b), puis bascule de
-  `DATABASE_URL` dans Render, connexion d'un compte existant, `scripts/charge.js` pour la latence.
-  Les mots de passe (scrypt) et jetons de rafraîchissement sont copiés tels quels : les comptes
-  existants se connectent à l'identique (vérifié sur la répétition par empreinte de la table
-  `users`). L'ancienne base n'est pas touchée (lecture seule).
+- **Copie réelle US → EU** [exécuté] le 14 septembre à 22:43 UTC (URL US fournie par vous) :
+  23 tables, comptages et empreintes md5 identiques (2 comptes, 3 annonces, 9 photos, 1 conversation,
+  5 messages, 7 notifications, 18 jetons de session, 71 catégories…). Deux corrections du script au
+  passage : les valeurs transitent en texte transtypé (le pilote `pg` arrondissait les dates à la
+  milliseconde, `…27.095503` devenait `…27.095`) et les réglages de rendu sont posés dans la
+  transaction de chaque empreinte (un pooler en mode transaction ignore les SET de session).
+  Aucune écriture n'est survenue sur la base US entre la copie et la bascule, hormis des compteurs
+  de vues dus à mes propres tests (non repris : Frankfurt 301 vues sur l'annonce test, US 513).
+- **Bascule** [exécuté] le 15 septembre vers 00:55 UTC (variable `DATABASE_URL` changée par vous
+  dans Render ; le premier enregistrement n'avait pas pris, le redéploiement suivant oui).
+  Preuves : `/health` → `databaseRegion: eu-central-1` (champ ajouté pour cela) ; une
+  consultation d'annonce en production incrémente le compteur de vues dans Frankfurt (300 → 301)
+  et plus dans la base US (513 → 513) ; les 2 comptes sont présents, le chemin de connexion répond
+  401 standard sur un mauvais mot de passe, les 12 catégories sont servies. Vous vous êtes
+  reconnecté avec votre compte habituel. La base US n'a pas été touchée (lecture seule).
+- **Latence après bascule** [exécuté] : `scripts/charge.js` à 3 utilisateurs virtuels pendant
+  3 min (le limiteur de débit, qui voit désormais la vraie IP grâce à `TRUST_PROXY`, bloque à
+  100 req/min/IP une charge de 10 utilisateurs depuis une seule machine — 429 constatés puis test
+  ramené à 3), 524 requêtes, 0 erreur, aucun redémarrage :
+
+  | Point d'entrée | p50 avant (US, §12.4) | p50 après (Frankfurt) | p95 après |
+  |---|---|---|---|
+  | API /listings/:id | 557 ms | **56 ms** | 81 ms |
+  | API /listings/:id/similar | 555 ms | 56 ms | 74 ms |
+  | API /listings (récentes) | 365 ms | 59 ms | 110 ms |
+  | API /listings?q= | 159 ms | 53 ms | 63 ms |
+  | API /listings?category= | 358 ms | 59 ms | 83 ms |
+  | API /categories/tree | 57 ms | 50 ms | 58 ms |
+  | Front /annonces/:id (rendu serveur) | 931 ms | 401 ms | 770 ms |
 
 ### 15.2 Photos — Cloudflare R2
 
