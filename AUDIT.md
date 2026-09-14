@@ -673,5 +673,5 @@ calculées ci-dessus, identiques élément par élément.
 
 **Preuves** : scénario Playwright ajouté dans `01-recherche` (joué en mobile et en bureau) : titre
 et prix 16 px / 700 foncés, prix « 890 € », cœur 32 × 32 px à 8 px du coin de la photo, lieu
-« Lyon 69003 », date « aujourd'hui à HH:MM » en 12 px gris. 47 scénarios navigateur verts,
+« Lyon 69003 », date « aujourd'hui à HH:MM » en 12 px gris. 48 scénarios navigateur verts,
 97 tests API inchangés.
