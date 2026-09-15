@@ -799,6 +799,19 @@ export class ListingsService {
       case 'price_desc':
         qb.orderBy('l.price', 'DESC');
         break;
+      case 'relevance':
+        // Pertinence (mot-clé) : score plein texte PostgreSQL, puis annonces mises en avant, puis fraîcheur.
+        // Sans mot-clé ou sur SQLite, revient au tri par date.
+        if (this.isPostgres() && query.q && toPrefixTsQuery(query.q)) {
+          qb.addSelect(`ts_rank_cd(${FTS_VECTOR_SQL}, to_tsquery('french', :fts))`, 'fts_rank')
+            .addSelect('CASE WHEN l.boostedUntil > :now THEN 1 ELSE 0 END', 'boost_rank')
+            .setParameter('now', now)
+            .orderBy('fts_rank', 'DESC')
+            .addOrderBy('boost_rank', 'DESC')
+            .addOrderBy('l.publishedAt', 'DESC');
+          break;
+        }
+      // eslint-disable-next-line no-fallthrough
       default:
         qb.addSelect('CASE WHEN l.boostedUntil > :now THEN 1 ELSE 0 END', 'boost_rank')
           .setParameter('now', now)

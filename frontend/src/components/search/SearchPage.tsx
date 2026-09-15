@@ -16,6 +16,7 @@ import { Pagination } from "@/components/ui/Pagination";
 import styles from "./SearchPage.module.css";
 
 const SORTS = [
+  { value: "relevance", label: "Pertinence" },
   { value: "recent", label: "Plus récentes" },
   { value: "price_asc", label: "Prix croissant" },
   { value: "price_desc", label: "Prix décroissant" },
