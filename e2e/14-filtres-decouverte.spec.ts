@@ -147,12 +147,28 @@ test('barre des familles (bureau) : chaque famille ouvre un panneau de sous-cat�
   const panel = page.getByRole('region', { name: 'Sous-catégories de Véhicules' });
   await expect(panel).toBeVisible();
   for (const c of ['Voitures', 'Motos', 'Utilitaires', 'Caravaning', 'Nautisme']) await expect(panel.getByRole('link', { name: c })).toBeVisible();
+  // Le panneau est posé sous la famille ouverte (bord gauche aligné avec son onglet), large comme son contenu,
+  // et une famille de 8 sous-catégories ou moins tient dans une seule colonne
+  await panel.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)));
+  const tabBox = (await bar.getByRole('button', { name: 'Véhicules', exact: true }).boundingBox())!;
+  const panelBox = (await panel.boundingBox())!;
+  expect(Math.abs(panelBox.x - tabBox.x)).toBeLessThanOrEqual(2);
+  expect(panelBox.width).toBeLessThan(500);
+  await expect(panel.locator('ul')).toHaveCount(1);
   await expect(panel.getByRole('link', { name: 'Tout Véhicules' })).toHaveAttribute('href', '/recherche?category=vehicules');
   await page.keyboard.press('Escape');
   await expect(panel).toHaveCount(0);
   await bar.getByRole('button', { name: 'Services', exact: true }).hover();
   const services = page.getByRole('region', { name: 'Sous-catégories de Services' });
-  await expect(services.locator('ul')).toHaveCount(2); // 15 sous-catégories → 2 colonnes
+  await expect(services.locator('ul')).toHaveCount(2); // 15 sous-catégories → colonnes de 8 puis 7
+  await expect(services.locator('ul').nth(0).locator('li')).toHaveCount(8);
+  await expect(services.locator('ul').nth(1).locator('li')).toHaveCount(7);
+  // Famille en bout de barre : le panneau reste dans la page (pas de débordement à droite)
+  await services.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)));
+  const servicesBox = (await services.boundingBox())!;
+  expect(servicesBox.x + servicesBox.width).toBeLessThanOrEqual(1280);
+  const servicesTab = (await bar.getByRole('button', { name: 'Services', exact: true }).boundingBox())!;
+  expect(servicesBox.x).toBeLessThanOrEqual(servicesTab.x + 2);
   // Le panneau glisse en place (menu-in) : on attend la fin de l'animation avant de cliquer dedans
   await services.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)));
   await services.getByRole('link', { name: 'Cours particuliers' }).click();

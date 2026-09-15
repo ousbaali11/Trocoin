@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import type { CategoryNode } from "@/lib/types";
 import { CategoryIcon } from "@/components/ui/CategoryIcon";
@@ -22,6 +22,9 @@ export function CategoryBar() {
   const [shown, setShown] = useState<string | null>(null);
   const presence = usePresence(!!open);
   const root = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  // Position horizontale du panneau : sous la famille ouverte, sans dépasser le bord droit de la barre
+  const [panelLeft, setPanelLeft] = useState<number>(0);
   const closeTimer = useRef<number | null>(null);
 
   useEffect(() => {
@@ -60,6 +63,18 @@ export function CategoryBar() {
   useEffect(() => {
     if (open) setShown(open);
   }, [open]);
+  useLayoutEffect(() => {
+    const slug = open || shown;
+    const nav = root.current;
+    const panel = panelRef.current;
+    if (!slug || !nav || !panel) return;
+    const btn = nav.querySelector<HTMLElement>(`[data-family="${slug}"]`);
+    if (!btn) return;
+    const navBox = nav.getBoundingClientRect();
+    const btnBox = btn.getBoundingClientRect();
+    const maxLeft = Math.max(0, navBox.width - panel.offsetWidth - 16);
+    setPanelLeft(Math.round(Math.min(btnBox.left - navBox.left, maxLeft)));
+  }, [open, shown, presence.mounted]);
   if (tree.length === 0) return null;
   const current = presence.mounted ? tree.find((r) => r.slug === (open || shown)) || null : null;
   // Colonnes lisibles : au plus 8 sous-catégories par colonne
@@ -87,8 +102,8 @@ export function CategoryBar() {
         </ul>
       </div>
       {current && (
-        <div className={`${styles.panel} ${presence.leaving ? "menu-leave" : "menu-enter"}`} id={`family-panel-${current.slug}`} role="region" aria-label={`Sous-catégories de ${current.name}`} onMouseEnter={() => enter(current.slug)}>
-          <div className={`container ${styles.panelInner}`}>
+        <div ref={panelRef} style={{ left: panelLeft }} className={`${styles.panel} ${presence.leaving ? "menu-leave" : "menu-enter"}`} id={`family-panel-${current.slug}`} role="region" aria-label={`Sous-catégories de ${current.name}`} onMouseEnter={() => enter(current.slug)}>
+          <div className={styles.panelInner}>
             <div className={styles.panelHead}>
               <CategoryIcon name={current.icon} size={22} />
               <Link href={`/recherche?category=${current.slug}`} className={styles.panelTitle}>Tout {current.name}</Link>

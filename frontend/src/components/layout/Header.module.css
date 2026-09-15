@@ -382,11 +382,16 @@
   .mobileLinks .navLink .badgeSoft {
     position: static;
   }
+  /* Une seule colonne pleine largeur sur petit écran : deux colonnes étroites coupaient les libellés */
   .mobileCats {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
+    grid-template-columns: 1fr;
+    gap: 14px;
     padding: 10px 0;
+  }
+  .mobileCats > div {
+    display: flex;
+    flex-direction: column;
   }
   .mobileCats a {
     font-weight: 400;

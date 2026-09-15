@@ -83,6 +83,11 @@ test('menu mobile : ouverture et fermeture avec transition, contenu complet', as
   expect(await menu.evaluate((el) => getComputedStyle(el).animationName)).toMatch(/slide-down-in$/);
   await expect(menu.getByRole('link', { name: 'Déposer une annonce' })).toBeVisible();
   await expect(menu.getByText('Catégories')).toBeVisible();
+  // Catégories du menu mobile : une seule colonne pleine largeur (familles et sous-catégories alignées à gauche)
+  await menu.locator('summary', { hasText: 'Catégories' }).click();
+  const lefts = await menu.locator('details a').evaluateAll((els) => els.slice(0, 12).map((a) => Math.round(a.getBoundingClientRect().left)));
+  expect(new Set(lefts).size).toBe(1);
+  await expect(menu.getByRole('link', { name: 'Consoles & jeux vidéo' })).toBeVisible();
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await expect(menu).toHaveCount(0);
   await expectNoHorizontalOverflow(page);
