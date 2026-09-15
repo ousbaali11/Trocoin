@@ -1624,3 +1624,24 @@ du registre simulé, axe sans violation avec sections ouvertes et repliées) ; s
   `/recherche?category=velos`, annonce inconnue → 404. Un premier passage CI avait échoué sur le
   scénario 16 : joué après le scénario 05, le vendeur a déjà un avis ; l'assertion porte
   maintenant sur la visibilité du contenu replié, pas sur le texte « Pas encore d'avis ».
+
+## 30. Barre des familles : panneau des sous-catégories aligné et en colonnes — 16 septembre 2026
+
+Constat (capture de l'utilisateur, reproduit en production) : au survol ou au clic d'une famille,
+le panneau des sous-catégories occupait toute la largeur de la page avec la liste collée au bord
+gauche, loin de l'onglet ouvert (par exemple Électronique, quatre sous-catégories perdues dans un
+bandeau vide). Le découpage en colonnes de 8 existait déjà, mais l'espace vide le rendait illisible.
+
+Fait (`CategoryBar.tsx`, `CategoryBar.module.css`) : le panneau est large comme son contenu
+(240 px au moins), **posé sous l'onglet ouvert** (bord gauche aligné, calcul au montage), et
+ramené vers la gauche seulement s'il dépassait le bord droit de la barre (cas de Services, en bout
+de barre) ; sous-catégories en **colonnes de 8 au plus**, sans retour à la ligne (une colonne jusqu'à
+8, deux pour Services : 8 + 7). Menu mobile : les catégories passent d'une grille de deux colonnes
+étroites à une seule colonne pleine largeur. Règle consignée dans `docs/design-system.md` §6.
+
+**Preuves** : scénarios 14 (bord gauche du panneau = bord gauche de l'onglet à 2 px près, largeur
+< 500 px, une colonne pour Véhicules, 8 + 7 pour Services, panneau contenu dans la page) et 15
+(liens des catégories du menu mobile tous au même bord gauche) étendus, 07 vert ; CI run
+35034817807 verte ; production : Électronique → panneau x = 666 = onglet x, largeur 240, 1 colonne ;
+Services → 2 colonnes (8 + 7), bord droit 1264 ≤ 1280, ramené à gauche de l'onglet ; mobile → un
+seul bord gauche (16 px) pour tous les liens. Captures avant / après bureau (deux familles) et mobile.
