@@ -8,6 +8,7 @@ import { Review } from '../reviews/review.entity';
 import { Transaction } from '../payments/transaction.entity';
 import { Favorite } from '../favorites/favorite.entity';
 import { deleteUploadedFile } from '../common/upload/image-upload';
+import { normalizeFrenchMobile } from '../common/validators/french-phone';
 import { UserBlock } from './user-block.entity';
 import { SiretVerificationService } from './siret-verification.service';
 import { effectivePrefs, sanitizePrefs, type NotificationPrefs } from '../notifications/notification-prefs';
@@ -108,14 +109,18 @@ export class UsersService {
     return this.usersRepo.createQueryBuilder('u').where('LOWER(u.username) = :username', { username: username.trim().toLowerCase() }).getOne();
   }
 
-  /** Charge le hash du mot de passe (select:false) pour la connexion par e-mail ou username. */
+  /**
+   * Charge le hash du mot de passe (select:false) pour la connexion. L'identifiant peut être
+   * l'e-mail ou le nom d'utilisateur (insensibles à la casse et aux espaces autour) ou le numéro de
+   * mobile du compte, dans n'importe quelle écriture courante (06 12 34 56 78, +33612345678…).
+   */
   findForLogin(identifier: string): Promise<User | null> {
     const id = identifier.trim().toLowerCase();
-    return this.usersRepo
-      .createQueryBuilder('u')
-      .addSelect('u.passwordHash')
-      .where('LOWER(u.email) = :id OR LOWER(u.username) = :id', { id })
-      .getOne();
+    const phone = normalizeFrenchMobile(identifier);
+    const qb = this.usersRepo.createQueryBuilder('u').addSelect('u.passwordHash');
+    if (phone) qb.where('LOWER(u.email) = :id OR LOWER(u.username) = :id OR u.phoneNumber = :phone', { id, phone });
+    else qb.where('LOWER(u.email) = :id OR LOWER(u.username) = :id', { id });
+    return qb.getOne();
   }
 
   /**

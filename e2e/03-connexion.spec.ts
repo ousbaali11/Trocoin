@@ -6,7 +6,7 @@ const seed = readSeed();
 
 test('connexion par e-mail puis par nom d\'utilisateur ; mauvais mot de passe refusé', async ({ page }) => {
   await page.goto('/connexion');
-  await page.getByLabel("E-mail ou nom d'utilisateur").fill(seed.seller.email);
+  await page.getByLabel("E-mail, nom d'utilisateur ou mobile").fill(seed.seller.email);
   await page.getByLabel('Mot de passe', { exact: true }).fill('faux-mot-de-passe');
   await page.getByRole('button', { name: 'Me connecter' }).click();
   await expect(errorAlert(page)).toBeVisible();
@@ -18,6 +18,20 @@ test('connexion par e-mail puis par nom d\'utilisateur ; mauvais mot de passe re
 
   await loginAs(page, { email: seed.seller.username, password: seed.seller.password });
   await expect(page.getByRole('heading', { name: `Bonjour ${seed.seller.displayName}` })).toBeVisible();
+  await logout(page);
+
+  // Par numéro de mobile, écrit comme on le dicte
+  const national = seed.seller.phone.startsWith('+33') ? '0' + seed.seller.phone.slice(3) : seed.seller.phone;
+  await loginAs(page, { email: national.replace(/(\d{2})(?=\d)/g, '$1 '), password: seed.seller.password });
+  await expect(page.getByRole('heading', { name: `Bonjour ${seed.seller.displayName}` })).toBeVisible();
+  await logout(page);
+
+  // Format d'e-mail incomplet : message explicite avant tout appel au serveur
+  await page.goto('/connexion');
+  await page.getByLabel("E-mail, nom d'utilisateur ou mobile").fill('camille@exemple');
+  await page.getByLabel('Mot de passe', { exact: true }).fill(seed.seller.password);
+  await page.getByRole('button', { name: 'Me connecter' }).click();
+  await expect(errorAlert(page)).toContainText("Cette adresse e-mail n'est pas complète");
 });
 
 test('après déconnexion, l\'espace compte redirige vers la connexion et le jeton local est effacé', async ({ page }) => {

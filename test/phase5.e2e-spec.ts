@@ -54,6 +54,14 @@ describe('Phase 5 : inscription par formulaire et connexion par mot de passe', (
     const byEmail = await request(server).post('/auth/login').send({ identifier: dto.email.toUpperCase(), password: dto.password }).expect(200);
     expect(byEmail.body.user.id).toBe(res.body.user.id);
     await request(server).post('/auth/login').send({ identifier: dto.username, password: dto.password }).expect(200);
+    // … et par numéro de mobile, quelle que soit l'écriture (espaces, 0 initial, +33), avec espaces autour de l'e-mail tolérés
+    const national = '0' + res.body.user.phoneNumber.slice(3);
+    const spaced = national.replace(/(\d{2})(?=\d)/g, '$1 ');
+    for (const identifier of [res.body.user.phoneNumber, national, spaced, `  ${dto.email}  `]) {
+      const r = await request(server).post('/auth/login').send({ identifier, password: dto.password }).expect(200);
+      expect(r.body.user.id).toBe(res.body.user.id);
+    }
+    await request(server).post('/auth/login').send({ identifier: national, password: 'faux-mot-de-passe' }).expect(401);
     const bad = await request(server).post('/auth/login').send({ identifier: dto.email, password: 'faux-mot-de-passe' }).expect(401);
     expect(bad.body.message).toBe('Identifiant ou mot de passe incorrect.');
     const unknown = await request(server).post('/auth/login').send({ identifier: 'inconnu@example.org', password: dto.password }).expect(401);

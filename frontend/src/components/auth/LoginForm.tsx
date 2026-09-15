@@ -13,7 +13,18 @@ function safeNext(raw: string | null): string {
   return raw;
 }
 
-/** Connexion par e-mail ou nom d'utilisateur + mot de passe. */
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const MOBILE_PATTERN = /^(\+33|0033|33|0)\s*[67](\s*\d){8}$/;
+
+/** Message d'aide avant l'envoi : format d'e-mail ou de mobile manifestement faux, sinon null. */
+export function identifierProblem(raw: string): string | null {
+  const v = raw.trim();
+  if (v.includes("@") && !EMAIL_PATTERN.test(v)) return "Cette adresse e-mail n'est pas complète (exemple : prenom@exemple.fr).";
+  if (/^[+\d\s.()-]+$/.test(v) && v.replace(/\D/g, "").length >= 6 && !MOBILE_PATTERN.test(v.replace(/[.()-]/g, ""))) return "Ce numéro n'est pas un mobile français (exemple : 06 12 34 56 78).";
+  return null;
+}
+
+/** Connexion par e-mail, nom d'utilisateur ou numéro de mobile + mot de passe. */
 export function LoginForm() {
   const { login, user, loading } = useAuth();
   const router = useRouter();
@@ -32,6 +43,11 @@ export function LoginForm() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    const problem = identifierProblem(identifier);
+    if (problem) {
+      setError(problem);
+      return;
+    }
     setBusy(true);
     try {
       const res = await api<{ accessToken: string; refreshToken: string }>("/auth/login", { method: "POST", body: { identifier: identifier.trim(), password }, token: null });
@@ -58,8 +74,9 @@ export function LoginForm() {
 
       <form onSubmit={submit}>
         <div className="field">
-          <label htmlFor="identifier">E-mail ou nom d&apos;utilisateur</label>
-          <input id="identifier" className="input" value={identifier} onChange={(e) => setIdentifier(e.target.value)} autoComplete="username" required autoFocus />
+          <label htmlFor="identifier">E-mail, nom d&apos;utilisateur ou mobile</label>
+          <input id="identifier" className="input" value={identifier} onChange={(e) => setIdentifier(e.target.value)} autoComplete="username" inputMode="email" required autoFocus aria-invalid={error ? true : undefined} />
+          <span className="hint">Le numéro de mobile de votre compte fonctionne aussi (06 12 34 56 78).</span>
         </div>
         <div className="field">
           <div className="row spread" style={{ alignItems: "baseline" }}>

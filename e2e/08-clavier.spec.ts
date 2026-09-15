@@ -58,7 +58,7 @@ test("lien d'évitement puis recherche complète au clavier : mots-clés, commun
 
 test('menu du compte : ouverture, déconnexion et fermeture par Échap au clavier', async ({ page }) => {
   await page.goto('/connexion');
-  await page.getByLabel("E-mail ou nom d'utilisateur").focus();
+  await page.getByLabel("E-mail, nom d'utilisateur ou mobile").focus();
   await page.keyboard.type(seed.buyer.email);
   const pwd = page.getByLabel('Mot de passe', { exact: true });
   await pwd.focus();
@@ -86,7 +86,7 @@ test('menu du compte : ouverture, déconnexion et fermeture par Échap au clavie
 test('boîte de dialogue « Écrire au vendeur » : focus placé dedans, confiné, Échap et retour du focus', async ({ page }) => {
   // Le VTT reste en ligne à ce stade (la PlayStation est vendue par le scénario d'achat)
   await page.goto('/connexion?next=' + encodeURIComponent(`/annonces/${L.vtt.id}`));
-  await page.getByLabel("E-mail ou nom d'utilisateur").fill(seed.buyer.email);
+  await page.getByLabel("E-mail, nom d'utilisateur ou mobile").fill(seed.buyer.email);
   await page.getByLabel('Mot de passe', { exact: true }).fill(seed.buyer.password);
   await page.keyboard.press('Enter');
   const opener = page.getByRole('button', { name: 'Contacter le vendeur' });
@@ -108,7 +108,7 @@ test('boîte de dialogue « Écrire au vendeur » : focus placé dedans, confin�
 
 test('dépôt : catégorie choisie aux flèches, étapes validées avec Entrée, erreur annoncée', async ({ page }) => {
   await page.goto('/connexion?next=%2Fdeposer');
-  await page.getByLabel("E-mail ou nom d'utilisateur").fill(seed.seller.email);
+  await page.getByLabel("E-mail, nom d'utilisateur ou mobile").fill(seed.seller.email);
   await page.getByLabel('Mot de passe', { exact: true }).fill(seed.seller.password);
   await page.keyboard.press('Enter');
   await expect(page.getByRole('heading', { name: 'Déposer une annonce' })).toBeVisible();
