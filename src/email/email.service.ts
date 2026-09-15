@@ -1,6 +1,6 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { isProduction } from '../config/env.validation';
+import { isProduction, resolveSiteUrl } from '../config/env.validation';
 
 /**
  * Envoi d'e-mails transactionnels (réinitialisation de mot de passe), sur le
@@ -98,12 +98,14 @@ export class EmailService {
     return this.provider !== null;
   }
 
-  /** Lien public du site pour les e-mails (SITE_URL, sinon première origine CORS, sinon le front local). */
+  /**
+   * Base des liens envoyés par e-mail : la même règle que le reste de l'API (`resolveSiteUrl` :
+   * SITE_URL, remplacée en production par le domaine canonique si elle pointe encore vers vercel.app
+   * ou onrender.com). Une copie locale de cette logique lisait SITE_URL telle quelle : les e-mails de
+   * confirmation ont gardé l'ancienne adresse après la bascule de domaine (AUDIT.md §24).
+   */
   siteUrl(): string {
-    const explicit = this.config.get<string>('SITE_URL');
-    if (explicit) return explicit.replace(/\/$/, '');
-    const cors = (this.config.get<string>('CORS_ORIGINS') || '').split(',').map((s) => s.trim()).filter(Boolean);
-    return (cors[0] || 'http://localhost:3001').replace(/\/$/, '');
+    return resolveSiteUrl();
   }
 
   async sendPasswordReset(to: string, link: string, displayName: string): Promise<void> {

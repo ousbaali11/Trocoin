@@ -98,7 +98,6 @@ export function LoginForm() {
         <div className="field">
           <label htmlFor="identifier">E-mail, nom d&apos;utilisateur ou mobile</label>
           <input id="identifier" className="input" value={identifier} onChange={(e) => setIdentifier(e.target.value)} autoComplete="username" inputMode="email" required autoFocus aria-invalid={error ? true : undefined} />
-          <span className="hint">Le numéro de mobile de votre compte fonctionne aussi (06 12 34 56 78).</span>
         </div>
         <div className="field">
           <div className="row spread" style={{ alignItems: "baseline" }}>

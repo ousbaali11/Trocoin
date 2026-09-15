@@ -1,5 +1,7 @@
 import { INestApplication } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import request from 'supertest';
+import { EmailService } from '../src/email/email.service';
 import { CANONICAL_SITE_URL, resolveCorsOrigins, resolveSiteUrl, validateEnv } from '../src/config/env.validation';
 import { createApp } from './utils';
 
@@ -44,6 +46,21 @@ describe('Domaine trocoin.fr', () => {
     void BOXTAL_V1_PASSWORD;
     expect(() => validateEnv(partial)).toThrow(/BOXTAL_V3_SECRET_KEY, BOXTAL_V1_PASSWORD/);
     expect(() => validateEnv({ ...base, SHIPPING_PROVIDER: 'colissimo' })).toThrow(/mock, none ou boxtal/);
+  });
+
+  it("les liens des e-mails suivent la même règle que /health : SITE_URL sur vercel.app en production → domaine canonique", () => {
+    const saved = { NODE_ENV: process.env.NODE_ENV, SITE_URL: process.env.SITE_URL };
+    try {
+      process.env.NODE_ENV = 'production';
+      process.env.SITE_URL = 'https://trocoin.vercel.app';
+      const email = new EmailService(new ConfigService({ SITE_URL: 'https://trocoin.vercel.app', EMAIL_PROVIDER: 'none' }));
+      expect(email.siteUrl()).toBe(CANONICAL_SITE_URL);
+      expect(email.siteUrl()).toBe(resolveSiteUrl());
+    } finally {
+      process.env.NODE_ENV = saved.NODE_ENV;
+      if (saved.SITE_URL === undefined) delete process.env.SITE_URL;
+      else process.env.SITE_URL = saved.SITE_URL;
+    }
   });
 
   describe('/health', () => {
