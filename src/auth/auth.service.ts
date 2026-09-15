@@ -213,7 +213,7 @@ export class AuthService {
     const ok = user ? await verifyPassword(password, user.passwordHash) : await verifyPassword(password, DUMMY_HASH); // temps constant
     if (!user || !ok) {
       if (user && !user.passwordHash) {
-        throw new UnauthorizedException("Ce compte a été créé par code SMS et n'a pas de mot de passe : utilisez la connexion par SMS.");
+        throw new UnauthorizedException("Ce compte a été créé par code SMS et n'a pas de mot de passe : utilisez « Mot de passe oublié » pour en définir un.");
       }
       throw new UnauthorizedException('Identifiant ou mot de passe incorrect.');
     }

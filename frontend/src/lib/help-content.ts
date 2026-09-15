@@ -50,7 +50,7 @@ Aucun SMS n'est envoyé à l'inscription : le numéro est enregistré sans véri
         body: `Sur la page **Se connecter**, saisissez votre e-mail, votre nom d'utilisateur *ou* le numéro de mobile de votre compte, puis votre mot de passe. L'icône « œil » affiche le mot de passe pour éviter les fautes de frappe.
 
 ## Compte créé par SMS, sans mot de passe
-Les premiers comptes ont été ouverts uniquement par code SMS. Deux possibilités : la page **Connexion par code SMS** (lien en bas du formulaire), ou **Mot de passe oublié** pour définir un mot de passe si une adresse e-mail est rattachée au compte.
+Les premiers comptes ont été ouverts uniquement par code SMS, sans mot de passe. Pour vous connecter, utilisez **Mot de passe oublié** (lien sous le champ du mot de passe) : un e-mail vous permet de définir un mot de passe, à condition qu'une adresse e-mail soit rattachée au compte. La connexion par code SMS n'est plus proposée.
 
 ## Sessions
 Chaque connexion crée une session d'un mois, renouvelée automatiquement. Depuis **Paramètres**, changer de mot de passe déconnecte toutes vos sessions.`,
