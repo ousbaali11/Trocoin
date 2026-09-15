@@ -823,3 +823,55 @@ du compte Resend tant que le domaine n'est pas vérifié), un achat en carte 424
   réduite ; cartes ≤ 215 px de large, ≤ 340 px de haut, ≥ 4 colonnes, 2 sur mobile, sans
   débordement), 51 scénarios navigateur verts. Captures avant/après à 1280, 1440, 1920 px et
   375 px comparées.
+
+---
+
+## 17. Refonte mobile-first en sept sections — 15 septembre 2026
+
+Brief : espacements mobiles, textes, connexion par e-mail, comparatif leboncoin, fluidité, palette,
+audit bugs et sécurité. Traité dans l'ordre recommandé, un commit par section, testé à 360, 375,
+390 et 414 px.
+
+1. **Espacements mobiles** [exécuté] — cause unique : `.page { padding: 28px 0 64px }` écrasait le
+   remplissage horizontal de `.container` (les deux classes sur le même élément), d'où titres,
+   cartes, champs et boutons collés aux bords sur toutes les pages « page ». Correction : variable
+   globale `--page-padding-x` (20 px, 16 px sous 720 px) appliquée au conteneur, `.page` en
+   `padding-block`. Bandeau d'onglets du compte : pleine largeur avec remplissage et espace de fin
+   (`::after`), `scroll-padding-inline`. Tableau « Mes dernières annonces » et matrice des
+   notifications remplacés par des listes empilables. Preuve : scénario `11-marges-mobile` (pages
+   publiques aux quatre largeurs, pages du compte à 375 px : aucun élément à moins de 12 px du bord,
+   aucun défilement horizontal, premier et dernier onglets à distance des bords) ; captures
+   avant/après envoyées.
+2. **Textes** [exécuté] — grep sur `IA|claude|chatgpt|openai|anthropic|généré|lorem|placeholder|
+   TODO` : aucune occurrence visible (le seul « todo » est une variable de l'admin). Retiré des
+   pages légales les notes de travail (« Modèle à faire valider… », « Modèle à compléter… ») ;
+   centre d'aide remis à jour (e-mail actif, connexion par mobile, plus de « back-office ») ;
+   « sans friction » → « sans complication » ; « jeton » → « lien incomplet » ; réponse 429 en
+   français. Les mentions légales gardent des champs entre crochets : ce sont vos données
+   d'éditeur, à saisir depuis Admin → Pages (aucune valeur inventée).
+3. **Connexion** [exécuté] — la connexion par e-mail fonctionnait déjà (insensible à la casse et aux
+   espaces, tests phase 5 et scénario 03 verts avant ce tour) ; le brief demandait aussi le mobile.
+   `findForLogin` accepte désormais le numéro du compte sous toutes ses écritures ; le formulaire
+   signale avant envoi un e-mail incomplet ou un numéro non français ; le message serveur reste
+   unique (« Identifiant ou mot de passe incorrect ») pour ne pas révéler l'existence d'un compte.
+   Tests : phase 5 (e-mail majuscule, espaces, mobile +33 / 06 / espacé, mauvais mot de passe),
+   scénario 03 (e-mail, nom d'utilisateur, mobile dicté, e-mail incomplet).
+4. **Comparatif leboncoin** [exécuté] — `docs/comparatif-leboncoin.md` : parcours connecté et
+   non connecté, fonctionnalités fines, statut présent / ajouté / non pertinent / différé. Ajouté :
+   tri par **pertinence** (score plein texte PostgreSQL puis mises en avant puis fraîcheur).
+5. **Fluidité** [exécuté] — apparition douce des cartes et blocs (0,22 s, décalée), enfoncement des
+   boutons au clic, rebond du cœur favori, fondu des boîtes de dialogue et menus, transitions
+   homogènes ; squelettes de chargement ajoutés au tableau de bord et à la page Formule (les autres
+   pages du compte en avaient déjà) ; images déjà en chargement paresseux ; tout est coupé par
+   `prefers-reduced-motion`.
+6. **Palette et cohérence** [exécuté] — fond `#f6f8f7`, texte `#1f2937`, gris `#5f6b78`
+   (contraste ≥ 4,9:1), accent vert inchangé (5,5:1 sur blanc) ; titres en graisse 700 ; sur
+   mobile, boutons ≥ 44 px, champs ≥ 46 px avec police 16 px (pas de zoom iOS), texte courant
+   ≥ 14 px. Aucun fond sombre. axe : 0 violation (scénario 07).
+7. **Audit bugs et sécurité** [exécuté] — `docs/audit-bugs.md` : 11 bugs corrigés dont une
+   **injection possible via le JSON-LD** (titre contenant `</script>`), relevé console sur 29 pages
+   (0 exception, 0 erreur hors 404 attendus), revue sécurité (secrets côté client, validation
+   serveur, routes protégées, messages d'erreur, en-têtes).
+
+**Suites** : 105 tests API, 56 scénarios navigateur (11-marges-mobile +5, 01 +0). Déploiement
+vérifié par la CI (`/health`) et Vercel.

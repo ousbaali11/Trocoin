@@ -80,7 +80,7 @@ export default async function ListingPage({ params }: { params: Promise<{ id: st
 
   return (
     <div className="container page">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }} />
       <nav className="small muted" aria-label="Fil d'Ariane" style={{ marginBottom: 12 }}>
         <Link href="/">Accueil</Link>
         {listing.rootCategory && <> › <Link href={`/recherche?category=${listing.rootCategory.slug}`}>{listing.rootCategory.name}</Link></>}
