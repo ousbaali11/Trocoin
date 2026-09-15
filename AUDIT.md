@@ -1069,3 +1069,12 @@ n'étant pas encore acheté, rien n'a été changé côté e-mail de production 
   choisie puis liste Peugeot (35 modèles), formulaire de changement d'adresse, QR code et clé de la
   double authentification, codes de récupération, écran « Double authentification » à la
   connexion, sous-menu Marseille à 375 px.
+- **Déploiement** : CI verte (run 34964221761 : typecheck, 112 tests SQLite et PostgreSQL 16 avec
+  la migration `ConfortAvantOuverture`, image Docker, 60 scénarios navigateur, déploiement Render).
+  Production : `/health` → `version 1.11.0`, `databaseRegion eu-central-1` ;
+  `GET /categories/voitures/schema` → `marque` en liste (57 marques + Autre), `modele` avec
+  `dependsOn: marque` (Peugeot → 35 modèles) ; `GET /categories/animaux-vente-don/schema` → les
+  valeurs observées sur leboncoin ; `POST /auth/login` avec un identifiant inconnu → 401 (la
+  requête lit les nouvelles colonnes sans erreur, donc la migration est passée) ;
+  `POST /auth/login/2fa` avec un jeton bidon → 401 « Délai dépassé » ; `POST /auth/2fa/setup` et
+  `POST /auth/email/change` sans session → 401 ; `trocoin.vercel.app/connexion` → 200.
