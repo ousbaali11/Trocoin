@@ -27,6 +27,8 @@ describe('Phase 17 : suggestion de catégorie, actions groupées, appareils', ()
       ['Cours particuliers de mathématiques niveau lycée', 'cours-particuliers'],
       ['Tracteur Kubota 60 ch 2015', 'agricole'],
       ['Appartement T3 65 m² à louer Lyon', 'locations'],
+      // « bureau » seul tirait vers Bureaux & commerces (relevé lors du passage en production) : l'expression complète l'emporte
+      ['Lampe de bureau articulée bras métal', 'decoration'],
       ['PlayStation 5 édition standard avec deux manettes', 'consoles-jeux-video'],
     ];
     for (const [title, slug] of cases) {

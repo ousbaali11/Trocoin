@@ -9,6 +9,9 @@ import styles from "./home.module.css";
 
 export const revalidate = 60;
 
+/** Adresse canonique de l'accueil (résolue sur metadataBase : https://www.trocoin.fr). */
+export const metadata = { alternates: { canonical: "/" }, openGraph: { url: "/" } };
+
 async function load() {
   try {
     const [tree, recent, pro, settings] = await Promise.all([
