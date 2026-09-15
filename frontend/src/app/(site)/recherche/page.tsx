@@ -29,6 +29,13 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
   return { title: "Rechercher une annonce", description: DEFAULT_DESC, alternates: { canonical: `${SITE_URL}/recherche` } };
 }
 
+/**
+ * Rendu à la demande : la page dépend des paramètres d'adresse. Sans cela, Next sert d'abord le
+ * squelette puis diffuse le résultat dans un segment caché que le navigateur remplace ; pendant
+ * cet instant, la page existe deux fois dans le DOM (bandeau livraison, zone aria-live en double).
+ */
+export const dynamic = "force-dynamic";
+
 export default function Page() {
   return (
     <Suspense fallback={<div className="container page" style={{ minHeight: "calc(100vh - var(--header-h))" }} aria-busy="true"><div className="skeleton" style={{ height: 44, width: 320, marginBottom: 22 }} /><div className="skeleton" style={{ height: 480 }} /></div>}>

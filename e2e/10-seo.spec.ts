@@ -31,8 +31,10 @@ test('titres et descriptions uniques par page ; pages privées non indexées', a
   const seen = new Map<string, string>();
   for (const [url, mustIndex] of [['/', true], ['/recherche', true], ['/recherche?category=velos', true], ['/aide', true], ['/aide/litige', true], ['/cgu', true], ['/mentions-legales', true], ['/a-propos', true], [`/annonces/${seed.listings.vtt.id}`, true], [`/vendeurs/${seed.seller.id}`, true], ['/connexion', false], ['/inscription', false], ['/mot-de-passe-oublie', false], ['/deposer', false]] as const) {
     await page.goto(url);
+    await page.waitForLoadState('networkidle').catch(() => null);
     const title = await page.title();
-    const desc = (await page.locator('meta[name="description"]').getAttribute('content')) || '';
+    // Les métadonnées peuvent être diffusées après la coquille : on lit la première balise en place
+    const desc = (await page.locator('meta[name="description"]').first().getAttribute('content')) || '';
     const robotsMeta = page.locator('meta[name="robots"]');
     const robots = (await robotsMeta.count()) ? (await robotsMeta.first().getAttribute('content')) || '' : '';
     expect(title, `titre de ${url}`).toMatch(/\S/);

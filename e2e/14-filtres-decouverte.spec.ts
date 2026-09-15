@@ -13,6 +13,13 @@ test.beforeEach(async ({ page }) => {
   await mockGeo(page);
 });
 
+// Annonces créées par un scénario : supprimées même si le scénario échoue (le projet mobile passe
+// avant le tri par prix du projet bureau, qui attend le seed intact)
+const leftovers: Array<{ id: string; token: string }> = [];
+test.afterEach(async () => {
+  for (const l of leftovers.splice(0)) await api(`/listings/${l.id}`, { method: 'DELETE', token: l.token }).catch(() => undefined);
+});
+
 test('panneau « Tous les filtres » : essentiels visibles, « Plus de filtres » en sections repliables mémorisées, tri, dons, vendeurs avec compteurs, urgentes, Tout effacer et Rechercher (N)', async ({ page, isMobile }) => {
   await page.goto('/recherche?category=loisirs');
   if (isMobile) {
@@ -88,6 +95,7 @@ test('livraison : bandeau explicatif, puce retirable et périmètre « Autour de
     token: login.accessToken,
     body: { title: 'Fauteuil livrable partout ' + Date.now().toString().slice(-5), description: 'Fauteuil en bon état, envoi possible dans toute la France, emballage soigné.', categorySlug: 'ameublement', price: 120, priceType: 'fixe', condition: 'bon_etat', city: 'Paris', postalCode: '75011', latitude: 48.8566, longitude: 2.3522, deliveryAvailable: true },
   });
+  leftovers.push({ id: livrable.id, token: login.accessToken });
   await page.goto('/recherche?delivery=true&city=Lyon');
   const banner = page.getByTestId('delivery-banner');
   await expect(banner).toContainText('Livraison :');
@@ -105,8 +113,6 @@ test('livraison : bandeau explicatif, puce retirable et périmètre « Autour de
   await banner.getByRole('button', { name: 'Retirer le filtre Livraison acceptée' }).click();
   await expect(page.getByTestId('delivery-banner')).toHaveCount(0);
   await expect(page).not.toHaveURL(/delivery=/);
-  // Nettoyage : le projet mobile joue ce scénario avant le tri par prix du projet bureau (seed intact attendu)
-  await api(`/listings/${livrable.id}`, { method: 'DELETE', token: login.accessToken }).catch(() => undefined);
 });
 
 test('bas de page de catégorie : recherches suggérées, localisations les plus demandées cliquables, fil d\'Ariane ; pagination numérotée', async ({ page }) => {
