@@ -15,8 +15,8 @@ export function EmailVerificationBanner() {
   if (!user || !user.email || user.emailVerified) return null;
   const onSettings = pathname?.startsWith("/compte/parametres");
   return (
-    <div className="alert alert-info" role="status" data-testid="email-verification-banner" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 16px", marginBottom: 20 }}>
-      <span style={{ flex: "1 1 260px" }}>
+    <div className="alert alert-info" role="status" data-testid="email-verification-banner" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 16px", marginBottom: 20, minWidth: 0 }}>
+      <span style={{ flex: "1 1 240px", minWidth: 0, overflowWrap: "anywhere" }}>
         <strong>Confirmez votre adresse e-mail.</strong> Un lien vous a été envoyé à {user.email}. Pensez à vérifier vos courriers indésirables.
       </span>
       {onSettings ? <Link href="#identifiants" className="btn btn-outline btn-sm">Voir mes identifiants</Link> : <ResendVerificationButton size="sm" />}

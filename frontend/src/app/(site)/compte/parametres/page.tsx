@@ -163,10 +163,10 @@ export default function ParametresPage() {
       <section className="panel" id="identifiants">
         <h2 className="h3">Identifiants</h2>
         <p className="small muted">Ces informations ne sont jamais affichées publiquement. Le numéro de mobile identifie le compte et ne se modifie pas.</p>
-        <dl className="small" style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "6px 16px", margin: 0 }}>
+        <dl className="small" style={{ display: "grid", gridTemplateColumns: "auto minmax(0, 1fr)", gap: "6px 16px", margin: 0 }}>
           <dt className="muted">Numéro de mobile</dt><dd style={{ margin: 0 }}>{phone}</dd>
           <dt className="muted">E-mail</dt>
-          <dd style={{ margin: 0 }}>
+          <dd style={{ margin: 0, minWidth: 0, overflowWrap: "anywhere" }}>
             {user.email ? (
               <>
                 {user.email}{" "}
@@ -174,12 +174,6 @@ export default function ParametresPage() {
                   <span className="pill pill-green" data-testid="email-status">Adresse confirmée</span>
                 ) : (
                   <span className="pill pill-ochre" data-testid="email-status">Adresse non confirmée</span>
-                )}
-                {!user.emailVerified && (
-                  <div style={{ marginTop: 8 }}>
-                    <ResendVerificationButton size="sm" />
-                    <span className="hint" style={{ display: "block", marginTop: 6 }}>Ouvrez le lien reçu par e-mail pour confirmer votre adresse. Pensez à vérifier vos courriers indésirables.</span>
-                  </div>
                 )}
               </>
             ) : (
@@ -190,6 +184,12 @@ export default function ParametresPage() {
           {(user.firstName || user.lastName) && <><dt className="muted">Nom</dt><dd style={{ margin: 0 }}>{[user.firstName, user.lastName].filter(Boolean).join(" ")}</dd></>}
           {user.companyName && <><dt className="muted">Raison sociale</dt><dd style={{ margin: 0 }}>{user.companyName}</dd></>}
         </dl>
+        {user.email && !user.emailVerified && (
+          <div style={{ marginTop: 12 }}>
+            <ResendVerificationButton size="sm" />
+            <span className="hint" style={{ display: "block", marginTop: 6 }}>Ouvrez le lien reçu par e-mail pour confirmer votre adresse. Pensez à vérifier vos courriers indésirables.</span>
+          </div>
+        )}
       </section>
 
       <section className="panel" id="mot-de-passe">
