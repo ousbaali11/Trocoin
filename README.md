@@ -6,7 +6,7 @@ indicatif est refusé à l'inscription. La vérification de ce numéro par SMS e
 choix** pendant la bêta (voir `AUDIT.md` §6) : le code Vonage reste en place, désactivé.
 
 Documents : `cahier-des-charges.md`, `architecture-technique.md`,
-`analyse-concurrentielle.md` (étude leboncoin + écarts), `docs/design-system.md` (direction artistique et composants), `docs/parite-resultats.md` (contrôle de parité rejouable : `node scripts/audit-parite.js`), `AUDIT.md` (sécurité,
+`analyse-concurrentielle.md` (étude leboncoin + écarts), `docs/design-system.md` (direction artistique et composants), `docs/etiquettes-transporteur.md` (étiquettes d'envoi : comparatif Boxtal / Sendcloud / direct, architecture en simulation), `docs/parite-resultats.md` (contrôle de parité rejouable : `node scripts/audit-parite.js`), `AUDIT.md` (sécurité,
 complétude, ce qui n'a pas pu être testé, recommandations avant lancement),
 `DEPLOIEMENT.md` (mise en ligne pas à pas : Neon + Render + Vercel, sauvegardes, SMS).
 
@@ -36,7 +36,7 @@ cd frontend && npm install && cp .env.example .env.local && npm run dev -- -p 30
 ## Tests
 
 ```bash
-npm test                 # 120 tests e2e (API, supertest)
+npm test                 # 124 tests e2e (API, supertest)
 npm run e2e:build        # construit l'API (dist/) et le front (next build) pour les tests navigateur
 npm run e2e              # 93 scénarios Playwright dans Chromium (desktop 1280 px + mobile 375 px) : parcours, accessibilité (axe) site + back-office, clavier, SEO
 node scripts/charge.js --api https://trocoin.onrender.com --front https://trocoin.vercel.app --vus 10 --minutes 3   # test de charge léger (lectures publiques)
@@ -231,6 +231,7 @@ GET  /settings/public · GET /plans · /users/me/entitlements · /users/me/subsc
 GET  /listings (filtres) · POST /listings · GET/PATCH/DELETE /listings/:id · POST /listings/bulk
 POST /listings/:id/photos · PATCH /listings/:id/photos/order · /listings/:id/similar
 /listings/:id/favorite · /conversations · /transactions (quote, ship, handover, dispute…)
+/transactions/:id/shipment (quote, relay-points, étiquette PDF, tracking — SHIPPING_PROVIDER=mock|none, docs/etiquettes-transporteur.md)
 /transactions/:id/review · /reports · /notifications
 /admin/stats · /admin/users · /admin/listings · /admin/reports · /admin/transactions · /admin/audit-log
 WebSocket : join / leave / message (JWT dans handshake.auth.token)

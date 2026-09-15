@@ -20,6 +20,7 @@ import { ListingsModule } from './listings/listings.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { OtpModule } from './otp/otp.module';
 import { PaymentsModule } from './payments/payments.module';
+import { ShippingModule } from './shipping/shipping.module';
 import { ReportsModule } from './reports/reports.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { SavedSearchesModule } from './saved-searches/saved-searches.module';
@@ -72,6 +73,7 @@ import { UsersModule } from './users/users.module';
     FavoritesModule,
     ConversationsModule,
     PaymentsModule,
+    ShippingModule,
     ReviewsModule,
     ReportsModule,
     NotificationsModule,

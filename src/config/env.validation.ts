@@ -31,6 +31,7 @@ export function validateEnv(env: Record<string, unknown>): Record<string, unknow
     if ((env.NOTIFICATION_PROVIDER || 'mock') === 'mock') errors.push('NOTIFICATION_PROVIDER=mock est interdit en production (utilisez "none" : notifications in-app uniquement).');
     if (env.DB_TYPE !== 'postgres') errors.push('DB_TYPE doit valoir "postgres" en production.');
     if (env.THROTTLE_DISABLED === 'true') errors.push('THROTTLE_DISABLED=true est interdit en production.');
+    if (env.SHIPPING_PROVIDER === 'mock') errors.push("SHIPPING_PROVIDER=mock est interdit en production (utilisez \"none\" tant qu'aucun compte prestataire n'est ouvert : le vendeur saisit son numéro de suivi).");
     if (env.EMAIL_PROVIDER === 'mock') errors.push('EMAIL_PROVIDER=mock est interdit en production (utilisez "none" tant qu\'aucun fournisseur n\'est configuré : la réinitialisation par e-mail répondra 503 et l\'admin pourra réinitialiser).');
   }
 
@@ -72,6 +73,7 @@ export function validateEnv(env: Record<string, unknown>): Record<string, unknow
   } else if (env.STORAGE_PROVIDER && env.STORAGE_PROVIDER !== 'local') {
     errors.push(`STORAGE_PROVIDER="${env.STORAGE_PROVIDER}" inconnu (valeurs : local, s3).`);
   }
+  if (env.SHIPPING_PROVIDER && !['mock', 'none'].includes(String(env.SHIPPING_PROVIDER))) errors.push('SHIPPING_PROVIDER : valeurs mock ou none (boxtal : phase 2, après les clés de test).');
   if (env.REDIS_URL && !/^rediss?:\/\//.test(String(env.REDIS_URL))) errors.push('REDIS_URL doit commencer par redis:// ou rediss://.');
   if (env.SIRENE_PROVIDER && !['api', 'mock', 'none'].includes(String(env.SIRENE_PROVIDER))) errors.push('SIRENE_PROVIDER : valeurs api, mock ou none.');
   if (prod && env.SIRENE_PROVIDER === 'mock') errors.push('SIRENE_PROVIDER=mock est interdit en production.');

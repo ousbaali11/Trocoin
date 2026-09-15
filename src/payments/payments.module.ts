@@ -11,10 +11,11 @@ import { PAYMENT_PROVIDER } from './payments.constants';
 import { PaymentsService } from './payments.service';
 import { PaypalPaymentProvider } from './paypal-payment.provider';
 import { StripePaymentProvider } from './stripe-payment.provider';
+import { Shipment } from '../shipping/shipment.entity';
 import { Transaction } from './transaction.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Transaction, Listing]), ConfigModule, UsersModule, NotificationsModule],
+  imports: [TypeOrmModule.forFeature([Transaction, Listing, Shipment]), ConfigModule, UsersModule, NotificationsModule],
   controllers: [PaymentsController],
   providers: [
     PaymentsService,

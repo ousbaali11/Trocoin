@@ -31,6 +31,7 @@ const env = {
   CORS_ORIGINS: frontUrl,
   SMS_PROVIDER: 'mock',
   PAYMENT_PROVIDER: 'mock',
+  SHIPPING_PROVIDER: 'mock',
   NOTIFICATION_PROVIDER: 'mock',
   EMAIL_PROVIDER: 'mock',
   SIRENE_PROVIDER: 'mock',

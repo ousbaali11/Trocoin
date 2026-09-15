@@ -9,6 +9,7 @@ process.env.JWT_SECRET = 'secret-de-test-suffisamment-long-pour-les-tests-automa
 process.env.SIRENE_PROVIDER = process.env.SIRENE_PROVIDER || 'mock';
 process.env.SMS_PROVIDER = 'mock';
 process.env.PAYMENT_PROVIDER = 'mock';
+process.env.SHIPPING_PROVIDER = 'mock';
 process.env.NOTIFICATION_PROVIDER = 'mock';
 process.env.THROTTLE_DISABLED = 'true';
 process.env.CORS_ORIGINS = 'http://localhost:3001';

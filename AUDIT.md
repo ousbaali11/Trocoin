@@ -1309,3 +1309,41 @@ groupés pour les pros. Version 1.13.0. Référence des décisions visuelles : `
   **32 équivalents, 2 partiels** (cartes non vérifiables en production faute d'annonce en ligne ;
   badge « Réactif »), **1 manquant** (étiquettes transporteur, différé), **1 non pertinent**
   (services partenaires et régie). Détail ligne par ligne dans `docs/parite-resultats.md`.
+
+## 22. Étiquettes transporteur, phase 1 : comparatif et mode simulation — 15 septembre 2026 (nuit)
+
+Le domaine `trocoin.fr` est acheté (Resend / `EMAIL_FROM` : étape séparée). L'impression
+d'étiquettes dépend d'un compte prestataire que Trocoin n'a pas encore : cette phase prépare tout
+sans clé externe ; la phase 2 (intégration réelle, écrans, tests navigateur) attend les clés de
+test. Version 1.14.0. Référence : `docs/etiquettes-transporteur.md`.
+
+- **Comparatif** (Boxtal, Sendcloud, Colissimo + Mondial Relay en direct) : coût d'usage,
+  simplicité d'intégration, transporteurs couverts, délai d'activation, avec la distinction entre
+  ce qui a été observé sur les pages consultées et ce qui vient de la documentation publique (le
+  portail développeur Boxtal se charge en JavaScript et n'a pas pu être lu automatiquement).
+  **Recommandation : Boxtal** — sans abonnement ni frais par étiquette, une seule intégration pour
+  Colissimo et Mondial Relay, compte et environnement de test gratuits ouverts en ligne.
+- **Liste des démarches** pour obtenir des clés de test (compte, clé v3, identifiants v1,
+  environnement de test, codes d'offre, variables Render à renseigner sans jamais les coller).
+- **Architecture en simulation** : `IShippingProvider` (cotation, points relais, étiquette, suivi ;
+  erreurs typées) ; `MockShippingProvider` avec tarifs indicatifs par poids, points relais fictifs,
+  étiquette PDF 10 × 15 cm marquée « SIMULATION » générée sans dépendance, numéro `SIM…`, suivi qui
+  progresse dans le temps, pannes simulées (`SHIPPING_MOCK_FAIL`) ; `UnconfiguredShippingProvider`
+  pour `SHIPPING_PROVIDER=none` (503 explicite ; `mock` interdit en production). Entité `Shipment`
+  (table `shipments`, migration `Expeditions`), six routes sous `/transactions/:id/shipment`
+  (vendeur : cotation, points relais, achat de l'étiquette, PDF ; vendeur et acheteur : état et
+  suivi). Une étiquette achetée reporte son numéro sur la transaction : « Confirmer l'expédition »
+  n'exige plus de saisie ; un refus du prestataire laisse l'expédition en `echec` avec la raison et
+  ne bloque rien.
+- **Rien d'exposé aux utilisateurs** : aucun écran en phase 1, la production reste en `none`
+  (saisie manuelle du numéro de suivi, comme avant).
+
+**Preuves d'exécution (15 septembre 2026, nuit)**
+- `npm test` : **124 tests réussis, 1 ignoré** (120 → 124 ; `test/phase18.e2e-spec.ts` +4 :
+  cotation par tranche de poids et droits vendeur / acheteur / tiers, étiquette PDF (en-tête
+  `%PDF-`, mention SIMULATION, numéro, `%%EOF`) téléchargeable par le vendeur seul, suivi côté
+  acheteur, expédition confirmée sans ressaisie puis statut `expediee`, panne du prestataire →
+  502 + `echec` + transaction intacte, adresse refusée → 400, nouvel essai réussi sur la même
+  ligne, remise en main propre sans étiquette, numéro saisi à la main → suivi minimal).
+- Capture : étiquette simulée rendue en image (Colissimo point relais, 900 g, expéditeur Lyon,
+  destinataire Paris, référence, valeur déclarée, code-barres et numéro `SIM…`).

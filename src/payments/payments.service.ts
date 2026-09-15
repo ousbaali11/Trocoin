@@ -14,6 +14,7 @@ import { In, LessThan, MoreThan, Repository } from 'typeorm';
 import { resolveSiteUrl } from '../config/env.validation';
 import { Listing } from '../listings/listing.entity';
 import { NotificationsService } from '../notifications/notifications.service';
+import { Shipment } from '../shipping/shipment.entity';
 import { StripeConnectService } from '../users/stripe-connect.service';
 import { UsersService } from '../users/users.service';
 import { CheckoutSync, IPaymentProvider } from './payment-provider.interface';
@@ -56,6 +57,7 @@ export class PaymentsService {
   constructor(
     @InjectRepository(Transaction) private transactionsRepo: Repository<Transaction>,
     @InjectRepository(Listing) private listingsRepo: Repository<Listing>,
+    @InjectRepository(Shipment) private shipments: Repository<Shipment>,
     @Inject(PAYMENT_PROVIDER) private paymentProvider: IPaymentProvider,
     private usersService: UsersService,
     private stripeConnect: StripeConnectService,
@@ -320,17 +322,20 @@ export class PaymentsService {
     const tx = await this.getOwned(transactionId, userId);
     if (tx.sellerId !== userId) throw new ForbiddenException("Seul le vendeur peut déclarer l'envoi.");
     if (tx.status !== 'sequestre') throw new BadRequestException(`Impossible depuis le statut "${tx.status}".`);
-    if (tx.deliveryMethod !== 'main_propre' && !trackingNumber) {
+    // Une étiquette achetée via Trocoin a déjà fourni le numéro de suivi (ShippingService)
+    const tracking = trackingNumber || tx.deliveryTrackingNumber;
+    if (tx.deliveryMethod !== 'main_propre' && !tracking) {
       throw new BadRequestException('Un numéro de suivi est requis pour un envoi.');
     }
     tx.status = 'livree';
-    tx.deliveryTrackingNumber = trackingNumber;
+    tx.deliveryTrackingNumber = tracking;
+    await this.shipments.update({ transactionId: tx.id, status: 'etiquette_prete' }, { status: 'expediee' });
     tx.shippedAt = new Date();
     const saved = await this.transactionsRepo.save(tx);
     await this.notifications.notify(tx.buyerId, {
       type: 'transaction',
       title: tx.deliveryMethod === 'main_propre' ? 'Le vendeur est prêt pour la remise' : 'Votre colis est en route',
-      body: trackingNumber ? `Numéro de suivi : ${trackingNumber}` : 'Convenez d\'un rendez-vous et confirmez la réception une fois l\'objet en main.',
+      body: tracking ? `Numéro de suivi : ${tracking}` : 'Convenez d\'un rendez-vous et confirmez la réception une fois l\'objet en main.',
       link: `/compte/transactions/${tx.id}`,
     });
     return saved;
