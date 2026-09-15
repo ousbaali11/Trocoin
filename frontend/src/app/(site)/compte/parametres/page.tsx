@@ -207,36 +207,23 @@ export default function ParametresPage() {
         <h2 className="h3">Notifications</h2>
         <p className="small muted">Choisissez, pour chaque type d&apos;évènement, les canaux par lesquels vous souhaitez être prévenu. Les notifications restent toujours consultables dans <Link href="/compte/notifications">Notifications</Link>.</p>
         {prefs ? (
-          <div className="table-wrap">
-            <table className="table" style={{ marginBottom: 8 }}>
-              <thead>
-                <tr>
-                  <th>Évènement</th>
-                  <th style={{ textAlign: "center" }}>Dans le compte</th>
-                  <th style={{ textAlign: "center" }}>Push</th>
-                  <th style={{ textAlign: "center" }}>E-mail</th>
-                  <th style={{ textAlign: "center" }}>SMS</th>
-                </tr>
-              </thead>
-              <tbody>
-                {NOTIF_ROWS.map((r) => (
-                  <tr key={r.key}>
-                    <td><strong>{r.label}</strong><br /><span className="small muted">{r.help}</span></td>
-                    <td style={{ textAlign: "center" }}><input type="checkbox" checked disabled aria-label={`${r.label} : toujours dans le compte`} style={{ width: 18, height: 18, accentColor: "var(--accent)" }} /></td>
-                    <td style={{ textAlign: "center" }}><input type="checkbox" checked={prefs[r.key].push} onChange={(e) => setPref(r.key, "push", e.target.checked)} aria-label={`${r.label} par push`} style={{ width: 18, height: 18, accentColor: "var(--accent)" }} /></td>
-                    <td style={{ textAlign: "center" }}><input type="checkbox" checked={prefs[r.key].email} onChange={(e) => setPref(r.key, "email", e.target.checked)} aria-label={`${r.label} par e-mail`} style={{ width: 18, height: 18, accentColor: "var(--accent)" }} /></td>
-                    <td style={{ textAlign: "center" }}>
-                      {r.sms ? (
-                        <input type="checkbox" checked={prefs[r.key].sms} onChange={(e) => setPref(r.key, "sms", e.target.checked)} aria-label={`${r.label} par SMS`} style={{ width: 18, height: 18, accentColor: "var(--accent)" }} />
-                      ) : (
-                        <span className="small muted" title="Le SMS est réservé aux évènements critiques">—</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ul className="notif-list" style={{ listStyle: "none", margin: "0 0 8px", padding: 0 }}>
+            {NOTIF_ROWS.map((r) => (
+              <li key={r.key} style={{ padding: "12px 0", borderBottom: "1px solid var(--line-soft)", display: "flex", flexWrap: "wrap", gap: "6px 18px", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ flex: "1 1 220px", minWidth: 0 }}>
+                  <strong>{r.label}</strong>
+                  <br />
+                  <span className="small muted">{r.help}</span>
+                </div>
+                <div className="row" style={{ gap: "4px 12px", flex: "1 1 100%", minWidth: 0 }} role="group" aria-label={`Canaux pour : ${r.label}`}>
+                  <label className="checkbox small" title="Toujours visible dans votre compte"><input type="checkbox" checked disabled aria-label={`${r.label} : toujours dans le compte`} /> Compte</label>
+                  <label className="checkbox small"><input type="checkbox" checked={prefs[r.key].push} onChange={(e) => setPref(r.key, "push", e.target.checked)} aria-label={`${r.label} par push`} /> Push</label>
+                  <label className="checkbox small"><input type="checkbox" checked={prefs[r.key].email} onChange={(e) => setPref(r.key, "email", e.target.checked)} aria-label={`${r.label} par e-mail`} /> E-mail</label>
+                  {r.sms && <label className="checkbox small"><input type="checkbox" checked={prefs[r.key].sms} onChange={(e) => setPref(r.key, "sms", e.target.checked)} aria-label={`${r.label} par SMS`} /> SMS</label>}
+                </div>
+              </li>
+            ))}
+          </ul>
         ) : (
           <div className="skeleton" style={{ height: 160 }} />
         )}

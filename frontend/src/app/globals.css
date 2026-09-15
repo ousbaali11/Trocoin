@@ -30,6 +30,8 @@
   --font-display: var(--font-fraunces), Georgia, serif;
   --container: 1180px;
   --header-h: 64px;
+  /* Marge horizontale de sécurité de toutes les pages : jamais de texte, carte ou bouton collé au bord */
+  --page-padding-x: 20px;
 
   /* Alias conservés pour les composants existants */
   --bottle: var(--accent);
@@ -115,7 +117,7 @@ textarea {
   width: 100%;
   max-width: var(--container);
   margin: 0 auto;
-  padding: 0 20px;
+  padding-inline: var(--page-padding-x);
 }
 .narrow {
   max-width: 760px;
@@ -439,8 +441,9 @@ textarea {
 }
 
 /* ---------- Page ---------- */
+/* Remplissage vertical seulement : la marge horizontale reste celle du conteneur (`.container.page`) */
 .page {
-  padding: 28px 0 64px;
+  padding-block: 28px 64px;
 }
 .page-head {
   display: flex;
@@ -539,6 +542,9 @@ a.card:hover * {
   display: none !important;
 }
 @media (max-width: 720px) {
+  :root {
+    --page-padding-x: 16px;
+  }
   .only-desktop {
     display: none !important;
   }
@@ -546,7 +552,7 @@ a.card:hover * {
     display: flex !important;
   }
   .page {
-    padding: 18px 0 48px;
+    padding-block: 18px 48px;
   }
   .page-head {
     margin-bottom: 16px;

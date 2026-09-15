@@ -72,18 +72,18 @@ export default function DashboardPage() {
         {listings.length === 0 ? (
           <p className="muted" style={{ margin: 0 }}>Vous n&apos;avez pas encore d&apos;annonce. <Link href="/deposer">Déposez-en une</Link> en deux minutes.</p>
         ) : (
-          <table className="table">
-            <tbody>
-              {listings.map((l) => (
-                <tr key={l.id}>
-                  <td><Link href={`/annonces/${l.id}`}>{l.title}</Link></td>
-                  <td><span className={LISTING_STATUS_LABELS[l.status].pill}>{LISTING_STATUS_LABELS[l.status].label}</span></td>
-                  <td className="muted">{l.viewsCount} vues</td>
-                  <td><Link href={`/compte/annonces/${l.id}/modifier`} className="small">Modifier</Link></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <ul className="stack" style={{ listStyle: "none", margin: 0, padding: 0, gap: 0 }}>
+            {listings.map((l) => (
+              <li key={l.id} className="row spread" style={{ padding: "10px 0", borderBottom: "1px solid var(--line-soft)", gap: 8 }}>
+                <Link href={`/annonces/${l.id}`} style={{ flex: "1 1 160px", minWidth: 0, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.title}</Link>
+                <span className="row" style={{ gap: 10, flexWrap: "nowrap" }}>
+                  <span className={LISTING_STATUS_LABELS[l.status].pill}>{LISTING_STATUS_LABELS[l.status].label}</span>
+                  <span className="small muted" style={{ whiteSpace: "nowrap" }}>{l.viewsCount} vues</span>
+                  <Link href={`/compte/annonces/${l.id}/modifier`} className="small" style={{ whiteSpace: "nowrap" }}>Modifier</Link>
+                </span>
+              </li>
+            ))}
+          </ul>
         )}
       </section>
 

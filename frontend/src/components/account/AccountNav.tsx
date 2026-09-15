@@ -33,7 +33,7 @@ export function AccountNav() {
   }, [pathname]);
 
   return (
-    <nav aria-label="Mon compte" className={`card ${styles.nav}`}>
+    <nav aria-label="Mon compte" className={`card ${styles.nav}`} data-full-bleed>
       <div className={styles.who}>
         <strong style={{ display: "block" }}>{user?.displayName}</strong>
         <span className="small muted">{user?.accountType === "professionnel" ? "Compte professionnel" : user?.accountType === "admin" ? "Administrateur" : "Compte particulier"}</span>

@@ -59,7 +59,7 @@ export async function mockGeo(page: Page) {
 /** Connexion par le formulaire du site (e-mail ou username + mot de passe). */
 export async function loginAs(page: Page, user: { email: string; password: string }, next = '/compte') {
   await page.goto(`/connexion?next=${encodeURIComponent(next)}`);
-  await page.getByLabel("E-mail ou nom d'utilisateur").fill(user.email);
+  await page.getByLabel("E-mail, nom d'utilisateur ou mobile").fill(user.email);
   await page.getByLabel('Mot de passe', { exact: true }).fill(user.password);
   await page.getByRole('button', { name: 'Me connecter' }).click();
   await expect(page).toHaveURL(new RegExp(next.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
@@ -117,4 +117,27 @@ export async function api<T = unknown>(pathname: string, init: { method?: string
   const data = text ? JSON.parse(text) : null;
   if (!res.ok) throw new Error(`${init.method || 'GET'} ${pathname} -> ${res.status} ${JSON.stringify(data)}`);
   return data as T;
+}
+
+/**
+ * Marge de sécurité mobile : aucun texte, carte, champ ou bouton du contenu principal ne doit
+ * s'approcher à moins de `min` px des bords de l'écran (les bandeaux volontairement en pleine
+ * largeur, comme la navigation du compte, sont exclus par leur attribut `data-full-bleed`).
+ */
+export async function expectSafeMargins(page: Page, min = 12) {
+  const bad = await page.evaluate((m) => {
+    const w = document.documentElement.clientWidth;
+    const out: string[] = [];
+    const els = document.querySelectorAll('main h1, main h2, main h3, main p, main .card, main .panel, main input, main select, main textarea, main button, main a.btn, main article, main table, footer h2, footer a, footer p');
+    for (const el of els) {
+      if (el.closest('[data-full-bleed]')) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) continue;
+      const cs = getComputedStyle(el);
+      if (cs.visibility === 'hidden' || cs.position === 'fixed') continue;
+      if (r.left < m || r.right > w - m) out.push(`${el.tagName.toLowerCase()} gauche=${Math.round(r.left)} droite=${Math.round(w - r.right)} « ${(el.textContent || '').trim().slice(0, 30)} »`);
+    }
+    return [...new Set(out)];
+  }, min);
+  expect(bad, `éléments à moins de ${min} px du bord :\n${bad.join('\n')}`).toEqual([]);
 }
