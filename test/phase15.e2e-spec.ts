@@ -127,16 +127,18 @@ describe('Phase 15 : changement d\'e-mail, double authentification, localisation
     // Mauvais code → 401 ; jeton bidon → 401
     await request(server).post('/auth/login/2fa').send({ challengeToken: step1.body.challengeToken, code: '000000' }).expect(401);
     await request(server).post('/auth/login/2fa').send({ challengeToken: 'x'.repeat(40), code: totpCode(setup.body.secret) }).expect(401);
-    // Bon code → session ouverte
-    const step2 = await request(server).post('/auth/login/2fa').send({ challengeToken: step1.body.challengeToken, code: totpCode(setup.body.secret) }).expect(200);
+    // Bon code → session ouverte. Le pas est figé ici : sans cela, un changement de fenêtre de 30 s entre
+    // cet appel et le rejeu ci-dessous produirait un code différent, donc valide (échec vu en CI).
+    const usedStep = totpStep();
+    const step2 = await request(server).post('/auth/login/2fa').send({ challengeToken: step1.body.challengeToken, code: totpCode(setup.body.secret, usedStep) }).expect(200);
     expect(step2.body.accessToken).toBeTruthy();
     expect(step2.body.user.twoFactorEnabled).toBe(true);
     await request(server).get('/users/me').set({ Authorization: `Bearer ${step2.body.accessToken}` }).expect(200);
     // Le même code ne peut pas être rejoué dans sa fenêtre de 30 s
     const again = await request(server).post('/auth/login').send({ identifier: dto.email, password: dto.password }).expect(200);
-    await request(server).post('/auth/login/2fa').send({ challengeToken: again.body.challengeToken, code: totpCode(setup.body.secret) }).expect(401);
+    await request(server).post('/auth/login/2fa').send({ challengeToken: again.body.challengeToken, code: totpCode(setup.body.secret, usedStep) }).expect(401);
     // … mais le code du pas suivant, lui, passe (tolérance ± 1 pas)
-    const next = await request(server).post('/auth/login/2fa').send({ challengeToken: again.body.challengeToken, code: totpCode(setup.body.secret, totpStep() + 1) }).expect(200);
+    const next = await request(server).post('/auth/login/2fa').send({ challengeToken: again.body.challengeToken, code: totpCode(setup.body.secret, usedStep + 1) }).expect(200);
     expect(next.body.accessToken).toBeTruthy();
 
     // Code de récupération : accepté une fois, pas deux
