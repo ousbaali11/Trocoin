@@ -1347,3 +1347,8 @@ test. Version 1.14.0. Référence : `docs/etiquettes-transporteur.md`.
   ligne, remise en main propre sans étiquette, numéro saisi à la main → suivi minimal).
 - Capture : étiquette simulée rendue en image (Colissimo point relais, 900 g, expéditeur Lyon,
   destinataire Paris, référence, valeur déclarée, code-barres et numéro `SIM…`).
+- **Déploiement** : CI verte (run 34995199471 : typecheck, 124 tests SQLite et PostgreSQL 16 avec
+  la migration `Expeditions`, image Docker, 93 scénarios navigateur, déploiement Render). Production :
+  `/health` → `version 1.14.0` ; `POST /transactions/:id/shipment/quote`, `GET …/shipment` et
+  `GET …/shipment/label.pdf` sans session → 401 ; `SHIPPING_PROVIDER` absent en production →
+  fournisseur `none` (503 explicite pour un vendeur, saisie manuelle inchangée).
