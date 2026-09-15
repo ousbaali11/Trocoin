@@ -961,3 +961,12 @@ après un envoi, comme le serveur).
   ces e-mails (§5). Pour toute autre adresse, l'inscription réussit quand même mais avec
   `verificationEmailSent: false` (journal d'erreur côté serveur) : vérifier un domaine chez Resend et
   mettre `EMAIL_FROM` dessus est la seule action restante pour que tous les inscrits reçoivent le lien.
+- **Déploiement** : CI verte (run 34956652354 : typecheck, 107 tests SQLite et PostgreSQL 16, image
+  Docker, 56 scénarios navigateur, déploiement Render) ; `/health` en production →
+  `version 1.10.0`, `databaseRegion eu-central-1` ; `POST /auth/email/verify` avec un jeton inconnu →
+  400 « invalide ou expiré » (la migration `email_verification_tokens` est passée : la table est
+  interrogée sans erreur) ; `POST /auth/email/resend` sans session → 401 ; page
+  `https://trocoin.vercel.app/confirmer-email` → 200. Un premier passage CI avait échoué sur trois
+  scénarios navigateur (débordement horizontal du rappel avec une adresse longue à 375 px, bloc
+  Identifiants trop large, sélecteur « Envoyer » qui attrapait aussi « Renvoyer l'e-mail… ») :
+  corrigé (retours à la ligne, bouton sous la liste, sélecteurs exacts) au commit suivant.
