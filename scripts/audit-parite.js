@@ -90,8 +90,9 @@ async function publicChecks() {
     await page.goto(FRONT_PROD + '/', { waitUntil: 'networkidle' });
     const families = await page.getByRole('navigation', { name: 'Familles de catégories' }).getByRole('button').count();
     await page.getByRole('button', { name: 'Catégories' }).click();
-    const megaItems = await page.getByRole('menu').first().getByRole('link').count().catch(() => 0);
-    add('Non connecté', 'Mega-menu des familles (barre + menu « Catégories »)', families >= 11 && megaItems > 10 ? 'équivalent' : 'partiel', `production dans Chromium : barre des familles ${families} boutons, menu « Catégories » ${megaItems} liens ; accordéon dans le menu mobile`, S);
+    await page.getByRole('menu').first().getByRole('menuitem').first().waitFor({ timeout: 8000 }).catch(() => undefined);
+    const megaItems = await page.getByRole('menu').first().getByRole('menuitem').count().catch(() => 0);
+    add('Non connecté', 'Mega-menu des familles (barre + menu « Catégories »)', families >= 11 && megaItems > 10 ? 'équivalent' : 'partiel', `production dans Chromium : barre des familles ${families} boutons, menu « Catégories » ${megaItems} entrées (familles et sous-catégories) ; accordéon dans le menu mobile`, S);
     await page.goto(FRONT_PROD + '/recherche?category=velos', { waitUntil: 'networkidle' });
     const more = await page.getByTestId('more-filters').count();
     add('Non connecté', 'Filtres essentiels puis « Plus de filtres » en accordéon', more === 1 ? 'équivalent' : 'partiel', `production : bouton « Plus de filtres » ${more === 1 ? 'présent' : 'absent'} sur /recherche?category=velos (sections mémorisées pour la session, scénario 14)`, S);

@@ -1298,3 +1298,14 @@ groupés pour les pros. Version 1.13.0. Référence des décisions visuelles : `
   « un peu haut » puis « dans la fourchette », checklist), Mes annonces en sélection groupée,
   appareils connectés, menu mobile, volet de filtres mobile. Les captures « avant » du tour
   précédent (§20) servent de comparaison.
+- **Déploiement** : CI verte (run 34989038250 : typecheck, 120 tests SQLite et PostgreSQL 16,
+  image Docker, 93 scénarios navigateur dont les specs 14 et 15 sur mobile, déploiement Render).
+  Production : `/health` → `version 1.13.0` (postgres, eu-central-1) ; `GET
+  /categories/suggest?q=Appartement T3 à louer Lyon` → Locations (8,11) devant Ventes
+  immobilières (2,11) ; `POST /listings/bulk` et `GET /auth/sessions` sans session → 401 ; les
+  fichiers servis par Vercel contiennent « Plus de filtres », « Appareils connectés », « Que
+  proposez-vous », « Mettre en pause », « Vos recherches récentes » et l'aperçu rapide.
+- **Parité rejouée sur la production 1.13.0** (`node scripts/audit-parite.js`) : 36 points,
+  **32 équivalents, 2 partiels** (cartes non vérifiables en production faute d'annonce en ligne ;
+  badge « Réactif »), **1 manquant** (étiquettes transporteur, différé), **1 non pertinent**
+  (services partenaires et régie). Détail ligne par ligne dans `docs/parite-resultats.md`.

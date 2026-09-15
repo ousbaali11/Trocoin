@@ -143,8 +143,8 @@ connectés, la **pile locale construite à partir du même commit** avec le seed
 de test n'écrit en production). Le tableau complet, numéroté, avec la preuve et la source de
 chaque ligne, est dans `docs/parite-resultats.md` (régénéré à chaque exécution).
 
-**Résultat chiffré : 36 points contrôlés — 30 équivalents, 4 partiels,
-1 manquant, 1 non pertinent (choix produit).**
+**Résultat chiffré (production 1.13.0, 15 septembre 2026, nuit) : 36 points contrôlés —
+32 équivalents, 2 partiels, 1 manquant, 1 non pertinent (choix produit).**
 
 Ce qui n'est pas équivalent, et pourquoi :
 

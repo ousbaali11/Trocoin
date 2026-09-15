@@ -2,7 +2,7 @@
 
 Script : `node scripts/audit-parite.js`. Sources : **PROD** = production publique sans connexion ; **LOCAL** = pile construite à partir du même commit avec le seed e2e (aucun compte de test n'écrit en production).
 
-**Bilan : 36 points contrôlés — 30 équivalents, 4 partiels, 1 manquant(s), 1 non pertinents (choix produit).**
+**Bilan : 36 points contrôlés — 32 équivalents, 2 partiels, 1 manquant(s), 1 non pertinents (choix produit).**
 
 | # | Section | Point | Statut | Preuve | Source |
 |---|---|---|---|---|---|
@@ -26,8 +26,8 @@ Script : `node scripts/audit-parite.js`. Sources : **PROD** = production publiqu
 | 18 | Non connecté | Bas de page de catégorie : recherches suggérées, villes, fil d'Ariane | équivalent | GET /listings/discover?category=velos → 200, 22 suggestions, 24 villes | PROD |
 | 19 | Non connecté | Panneau « Tous les filtres » (ordre, compteurs, Tout effacer / Rechercher (N), volet mobile) | équivalent | GET /listings/facets → 200 {"total":0,"particulier":0,"professionnel":0} ; structure vérifiée par le scénario 14 (bureau + mobile) | PROD |
 | 20 | Non connecté | Pied de page structuré | équivalent | accueil : colonnes À propos / Informations légales / Nos solutions pros / Des questions ? présentes ; applications, réseaux, avis externes volontairement omis | PROD |
-| 21 | Non connecté | Mega-menu des familles (barre + menu « Catégories ») | partiel | production dans Chromium : barre des familles 12 boutons, menu « Catégories » 1 liens ; accordéon dans le menu mobile | PROD |
-| 22 | Non connecté | Filtres essentiels puis « Plus de filtres » en accordéon | partiel | production : bouton « Plus de filtres » absent sur /recherche?category=velos (sections mémorisées pour la session, scénario 14) | PROD |
+| 21 | Non connecté | Mega-menu des familles (barre + menu « Catégories ») | équivalent | production dans Chromium : barre des familles 12 boutons, menu « Catégories » 71 entrées (familles et sous-catégories) ; accordéon dans le menu mobile | PROD |
+| 22 | Non connecté | Filtres essentiels puis « Plus de filtres » en accordéon | équivalent | production : bouton « Plus de filtres » présent sur /recherche?category=velos (sections mémorisées pour la session, scénario 14) | PROD |
 | 23 | Connecté | Tableau de bord (statistiques, dernières annonces, messages, transactions, notifications) | équivalent | GET /listings/mine/stats → 200 ; page /compte (scénario 07 axe) | LOCAL |
 | 24 | Connecté | Dépôt : catégorie suggérée, champs par catégorie, photos réordonnables, prix, localisation, aperçu, brouillon, barre de progression | équivalent | scénarios 04 (voiture + vacances), 08 (clavier), 15 (progression, catégorie suggérée, estimation, checklist) | LOCAL |
 | 25 | Connecté | Gestion des annonces : modifier, renouveler, dupliquer, pause, vendue, statistiques, mise en avant, actions groupées | équivalent | GET /listings/mine → 200 (5 annonces) ; routes PATCH/renew/duplicate/promote/bulk (phases 2, 17) ; page Mes annonces (spec 15) | LOCAL |
