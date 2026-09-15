@@ -1,6 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { CANONICAL_SITE_URL, resolveCorsOrigins, resolveSiteUrl } from '../src/config/env.validation';
+import { CANONICAL_SITE_URL, resolveCorsOrigins, resolveSiteUrl, validateEnv } from '../src/config/env.validation';
 import { createApp } from './utils';
 
 /**
@@ -31,6 +31,19 @@ describe('Domaine trocoin.fr', () => {
     // En dev : SITE_URL puis première origine CORS
     expect(resolveSiteUrl({ NODE_ENV: 'development', SITE_URL: 'http://localhost:3011/' })).toBe('http://localhost:3011');
     expect(resolveSiteUrl({ NODE_ENV: 'development', CORS_ORIGINS: 'http://localhost:3011' })).toBe('http://localhost:3011');
+  });
+
+  it('SHIPPING_PROVIDER=boxtal : accepté, les quatre identifiants sont exigés au démarrage, BOXTAL_ENV contrôlée', () => {
+    const base = { NODE_ENV: 'development', JWT_SECRET: 'x'.repeat(40) };
+    const full = { ...base, SHIPPING_PROVIDER: 'boxtal', BOXTAL_V3_ACCESS_KEY: 'ak', BOXTAL_V3_SECRET_KEY: 'sk', BOXTAL_V1_LOGIN: 'login', BOXTAL_V1_PASSWORD: 'pw' };
+    expect(() => validateEnv(full)).not.toThrow();
+    expect(() => validateEnv({ ...full, BOXTAL_ENV: 'production' })).not.toThrow();
+    expect(() => validateEnv({ ...full, BOXTAL_ENV: 'staging' })).toThrow(/BOXTAL_ENV/);
+    const { BOXTAL_V3_SECRET_KEY, BOXTAL_V1_PASSWORD, ...partial } = full;
+    void BOXTAL_V3_SECRET_KEY;
+    void BOXTAL_V1_PASSWORD;
+    expect(() => validateEnv(partial)).toThrow(/BOXTAL_V3_SECRET_KEY, BOXTAL_V1_PASSWORD/);
+    expect(() => validateEnv({ ...base, SHIPPING_PROVIDER: 'colissimo' })).toThrow(/mock, none ou boxtal/);
   });
 
   describe('/health', () => {

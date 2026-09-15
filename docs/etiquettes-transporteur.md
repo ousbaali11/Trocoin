@@ -75,8 +75,8 @@ toucher au parcours.
    paiement pour la production (aucun pour le test).
 6. Transmettre : URL de test, clé v3 de test, identifiants v1 de test, codes d'offre. Rien ne
    doit être collé dans une conversation ni commité : les valeurs vont dans les variables
-   d'environnement Render (`SHIPPING_PROVIDER=boxtal`, `BOXTAL_API_URL`, `BOXTAL_API_KEY`,
-   `BOXTAL_V1_USER`, `BOXTAL_V1_PASSWORD`, `BOXTAL_OFFER_COLISSIMO_*`, `BOXTAL_OFFER_MONDIAL_RELAY_*`).
+   d'environnement Render (noms exacts et valeurs à copier : §7 ; les codes d'offre seront lus
+   par l'API au lieu d'être configurés, si le compte les expose).
 
 ## 5. Architecture livrée en phase 1 (mode simulation)
 
@@ -143,3 +143,35 @@ Même principe que l'e-mail (`IEmailProvider`, Resend / mock / none) et le paiem
 7. Production : `SHIPPING_PROVIDER=boxtal` et les clés de **production** seulement après un envoi
    réel réussi en test ; le coût de l'étiquette est à la charge du vendeur (prélevé sur son
    versement ou payé à part : décision à prendre avant l'ouverture).
+
+## 7. Variables d'environnement Boxtal (phase 2, comptes de test créés le 15 septembre 2026)
+
+Deux applications existent sur le portail développeur : « transport-test » (API v1, cotation) et
+« Trocoin - Test » (API v3, étiquettes, suivi, points relais). Convention du projet : préfixe du
+prestataire puis rôle de la valeur (`RESEND_API_KEY`, `STRIPE_SECRET_KEY`, `S3_ACCESS_KEY_ID`).
+
+| Variable | Application Boxtal | Valeur à copier | Rôle |
+|---|---|---|---|
+| `BOXTAL_V3_ACCESS_KEY` | Trocoin - Test (API v3) | la **clé d'accès** (*access key*) affichée sur la fiche de l'application | identifiant de l'application v3 |
+| `BOXTAL_V3_SECRET_KEY` | Trocoin - Test (API v3) | la **clé secrète** (*secret key*), révélée par l'icône œil ou affichée une seule fois à la création | secret de l'application v3 |
+| `BOXTAL_V1_LOGIN` | transport-test (API v1) | l'**identifiant** (*login*) de l'application | authentification HTTP Basic de l'API v1 |
+| `BOXTAL_V1_PASSWORD` | transport-test (API v1) | le **mot de passe** (*password*), révélé par l'icône œil | authentification HTTP Basic de l'API v1 |
+| `BOXTAL_ENV` | — | `sandbox` (défaut) ; `production` seulement avec des applications de production | choix des serveurs : `api.boxtal.build` / `test.envoimoinscher.com` ou `api.boxtal.com` / `www.envoimoinscher.com` |
+| `SHIPPING_PROVIDER` | — | `boxtal` | active le fournisseur (tant que la phase 2 n'est pas déployée : mêmes réponses que `none`) |
+
+Ce qui n'est **pas** à copier : le nom ou l'identifiant numérique de l'application, l'e-mail du
+compte Boxtal, le mot de passe du compte Boxtal lui-même (l'API v1 s'authentifie avec les
+identifiants de l'application, pas ceux du compte).
+
+Mécanisme (d'après le SDK public de l'API v3 et la bibliothèque PHP officielle de l'API v1,
+consultés le 15 septembre 2026 ; le portail lui-même se charge en JavaScript et n'a pas pu être lu) :
+- API v3 : `POST {base}/iam/account-app/token` avec `Authorization: Basic base64(accessKey:secretKey)`
+  → `{ accessToken, expiresIn }`, puis `Authorization: Bearer …` sur `shipping-orders`,
+  `parcel-points`, suivi ; sandbox `https://api.boxtal.build`, production `https://api.boxtal.com`.
+- API v1 : `Authorization: Basic base64(login:password)` sur `api/v1/cotation` (test
+  `https://test.envoimoinscher.com`, production `https://www.envoimoinscher.com`) ; en-tête
+  `Api-Version`. L'hôte de test sera confirmé au premier appel réel (repli sur `api.boxtal.build`).
+
+Le démarrage de l'API vérifie la présence des quatre identifiants quand `SHIPPING_PROVIDER=boxtal`
+et refuse toute valeur de `BOXTAL_ENV` autre que `sandbox` ou `production`. Aucune de ces valeurs
+n'est journalisée ni renvoyée par une route.

@@ -15,6 +15,9 @@ export function isProduction(env: Record<string, unknown> = process.env): boolea
   return env.NODE_ENV === 'production';
 }
 
+/** Identifiants Boxtal : API v3 (clé d'accès + clé secrète de l'application) et API v1 (identifiant + mot de passe de l'application). */
+export const BOXTAL_REQUIRED = ['BOXTAL_V3_ACCESS_KEY', 'BOXTAL_V3_SECRET_KEY', 'BOXTAL_V1_LOGIN', 'BOXTAL_V1_PASSWORD'];
+
 export function validateEnv(env: Record<string, unknown>): Record<string, unknown> {
   const errors: string[] = [];
   const prod = isProduction(env);
@@ -73,7 +76,13 @@ export function validateEnv(env: Record<string, unknown>): Record<string, unknow
   } else if (env.STORAGE_PROVIDER && env.STORAGE_PROVIDER !== 'local') {
     errors.push(`STORAGE_PROVIDER="${env.STORAGE_PROVIDER}" inconnu (valeurs : local, s3).`);
   }
-  if (env.SHIPPING_PROVIDER && !['mock', 'none'].includes(String(env.SHIPPING_PROVIDER))) errors.push('SHIPPING_PROVIDER : valeurs mock ou none (boxtal : phase 2, après les clés de test).');
+  if (env.SHIPPING_PROVIDER && !['mock', 'none', 'boxtal'].includes(String(env.SHIPPING_PROVIDER))) errors.push('SHIPPING_PROVIDER : valeurs mock, none ou boxtal.');
+  // Boxtal (docs/etiquettes-transporteur.md §7) : application API v3 (étiquettes, suivi, points relais) + application API v1 (cotation). Noms exacts attendus :
+  if (env.SHIPPING_PROVIDER === 'boxtal') {
+    const missing = BOXTAL_REQUIRED.filter((k) => !env[k]);
+    if (missing.length) errors.push(`SHIPPING_PROVIDER=boxtal : variables manquantes ${missing.join(', ')}.`);
+    if (env.BOXTAL_ENV && !['sandbox', 'production'].includes(String(env.BOXTAL_ENV))) errors.push('BOXTAL_ENV : valeurs sandbox (défaut) ou production.');
+  }
   if (env.REDIS_URL && !/^rediss?:\/\//.test(String(env.REDIS_URL))) errors.push('REDIS_URL doit commencer par redis:// ou rediss://.');
   if (env.SIRENE_PROVIDER && !['api', 'mock', 'none'].includes(String(env.SIRENE_PROVIDER))) errors.push('SIRENE_PROVIDER : valeurs api, mock ou none.');
   if (prod && env.SIRENE_PROVIDER === 'mock') errors.push('SIRENE_PROVIDER=mock est interdit en production.');

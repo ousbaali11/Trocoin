@@ -21,8 +21,9 @@ import { UnconfiguredShippingProvider } from './unconfigured-shipping.provider';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
         const provider = config.get<string>('SHIPPING_PROVIDER') || (process.env.NODE_ENV === 'production' ? 'none' : 'mock');
-        // Phase 2 : if (provider === 'boxtal') return new BoxtalShippingProvider(config);
         if (provider === 'mock') return new MockShippingProvider();
+        // boxtal : les variables sont acceptées et vérifiées au démarrage (env.validation) ; le fournisseur réel
+        // arrive avec la phase 2 — d'ici là, même comportement que « none » (503 explicite, saisie manuelle).
         return new UnconfiguredShippingProvider();
       },
     },
