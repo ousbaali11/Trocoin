@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import type { CategoryNode } from "@/lib/types";
 import { CategoryIcon } from "@/components/ui/CategoryIcon";
+import { usePresence } from "@/lib/use-presence";
 import styles from "./CategoryBar.module.css";
 
 /**
@@ -18,6 +19,8 @@ export function CategoryBar() {
   const pathname = usePathname();
   const [tree, setTree] = useState<CategoryNode[]>([]);
   const [open, setOpen] = useState<string | null>(null);
+  const [shown, setShown] = useState<string | null>(null);
+  const presence = usePresence(!!open);
   const root = useRef<HTMLDivElement>(null);
   const closeTimer = useRef<number | null>(null);
 
@@ -53,8 +56,12 @@ export function CategoryBar() {
     closeTimer.current = window.setTimeout(() => setOpen(null), 180);
   };
 
+  // Le panneau reste affiché pendant son animation de sortie (dernière famille ouverte)
+  useEffect(() => {
+    if (open) setShown(open);
+  }, [open]);
   if (tree.length === 0) return null;
-  const current = tree.find((r) => r.slug === open) || null;
+  const current = presence.mounted ? tree.find((r) => r.slug === (open || shown)) || null : null;
   // Colonnes lisibles : au plus 8 sous-catégories par colonne
   const columns: CategoryNode["children"][] = [];
   if (current) for (let i = 0; i < current.children.length; i += 8) columns.push(current.children.slice(i, i + 8));
@@ -80,7 +87,7 @@ export function CategoryBar() {
         </ul>
       </div>
       {current && (
-        <div className={styles.panel} id={`family-panel-${current.slug}`} role="region" aria-label={`Sous-catégories de ${current.name}`} onMouseEnter={() => enter(current.slug)}>
+        <div className={`${styles.panel} ${presence.leaving ? "menu-leave" : "menu-enter"}`} id={`family-panel-${current.slug}`} role="region" aria-label={`Sous-catégories de ${current.name}`} onMouseEnter={() => enter(current.slug)}>
           <div className={`container ${styles.panelInner}`}>
             <div className={styles.panelHead}>
               <CategoryIcon name={current.icon} size={22} />

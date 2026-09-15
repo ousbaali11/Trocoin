@@ -18,7 +18,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { Throttle } from '@nestjs/throttler';
-import { IsIn, IsOptional, IsUUID } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsIn, IsOptional, IsUUID } from 'class-validator';
 import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
@@ -32,6 +32,13 @@ import { ListingsService, MAX_PHOTOS_PER_LISTING } from './listings.service';
 class PromoteDto {
   @IsIn(['boost', 'urgent'])
   type: 'boost' | 'urgent';
+}
+class BulkDto {
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(100) @IsUUID("4", { each: true })
+  ids: string[];
+
+  @IsIn(["pause", "republish", "renew"])
+  action: "pause" | "republish" | "renew";
 }
 class ImportDto {
   @IsOptional() @IsUUID()
@@ -87,6 +94,15 @@ export class ListingsController {
   @Get('price-estimate')
   priceEstimate(@Query('category') category?: string, @Query('q') q?: string) {
     return this.listingsService.priceEstimate((category || '').slice(0, 60), (q || '').slice(0, 150));
+  }
+
+  /** Actions groupées sur ses annonces : mettre en pause, remettre en ligne, renouveler (100 max). */
+  @UseGuards(JwtAuthGuard)
+  @Post('bulk')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 30, ttl: 600_000 } })
+  bulk(@Req() req: any, @Body() dto: BulkDto) {
+    return this.listingsService.bulkOwn(req.user.userId, dto.ids, dto.action);
   }
 
   @UseGuards(JwtAuthGuard)

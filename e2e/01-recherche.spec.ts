@@ -46,13 +46,13 @@ test('« Toute la France » : choisi depuis l\'accueil, affiché dans le champ �
   await page.getByRole('button', { name: 'Rechercher' }).click();
   await expect(page).toHaveURL(/\/recherche(\?.*)?$/);
   expect(page.url()).not.toMatch(/city|lat=|radius=/);
-  await expect(page.getByText('· Toute la France')).toBeVisible();
+  await expect(page.getByText(/\d+ annonces · Toute la France/).first()).toBeVisible();
   for (const key of ['vtt', 'ps5', 'poussette', 'canape', 'tondeuse']) {
     await expect(page.getByRole('link', { name: L[key].title, exact: true }).first()).toBeVisible();
   }
   // Sans choix explicite, la recherche nationale reste le défaut
   await page.goto('/recherche');
-  await expect(page.getByText('· Toute la France')).toBeVisible();
+  await expect(page.getByText(/\d+ annonces · Toute la France/).first()).toBeVisible();
   await expect(page.getByRole('link', { name: L.canape.title, exact: true }).first()).toBeVisible();
 });
 
@@ -117,52 +117,74 @@ test('tri par prix croissant puis décroissant : toute la liste est ordonnée', 
   await expect.poll(async () => sorted(await prices(), -1), { message: 'prix décroissants' }).toBe(true);
 });
 
-test("carte d'annonce : hiérarchie leboncoin (titre 16 px gras, prix 16 px gras foncé, cœur 32 px à 8 px du coin, lieu + date de dépôt)", async ({ page }) => {
+test("carte d'annonce « fiche » Trocoin : prix en pilule sur la photo, cœur à cheval sur le cadre, titre 15 px, lieu · date en pied", async ({ page }) => {
   await page.goto('/recherche');
   const card = page.locator('article').filter({ hasText: L.vtt.title }).first();
   await expect(card).toBeVisible();
   const style = (sel: string) => card.locator(sel).first().evaluate((el) => {
     const cs = getComputedStyle(el);
-    return { size: cs.fontSize, weight: cs.fontWeight, color: cs.color };
+    return { size: cs.fontSize, weight: cs.fontWeight, color: cs.color, family: cs.fontFamily };
   });
   const ink = 'rgb(31, 41, 55)';
-  expect(await style('a[class*="title"]')).toEqual({ size: '16px', weight: '700', color: ink });
-  // Le prix n'est plus ni vert ni surdimensionné : même corps que le titre, foncé, gras
-  expect(await style('[class*="price"]')).toEqual({ size: '16px', weight: '700', color: ink });
-  await expect(card.locator('[class*="price"]')).toHaveText('890 €');
+  // Titre : Public Sans 15 px demi-gras, encre ; deux lignes maximum
+  const title = await style('a[class*="title"]');
+  expect([title.size, title.weight, title.color]).toEqual(['15.04px', '600', ink]);
+  expect(title.family.toLowerCase()).toContain('public sans');
+  // Prix : pilule blanche posée sur la photo, en Fraunces
+  const price = card.getByTestId('card-price');
+  await expect(price).toHaveText('890 €');
+  const priceStyle = await style('[data-testid="card-price"]');
+  expect(priceStyle.family.toLowerCase()).toContain('fraunces');
+  expect(priceStyle.color).toBe(ink);
+  const media = (await card.locator('a[class*="media"]').boundingBox())!;
+  const pb = (await price.boundingBox())!;
+  expect(pb.x).toBeGreaterThanOrEqual(media.x + 6);
+  expect(pb.y + pb.height).toBeLessThanOrEqual(media.y + media.height - 6);
+  expect(pb.y).toBeGreaterThan(media.y + media.height / 2);
+  // Cœur : 32 px, à cheval sur le bord bas droit du cadre photo (centre à ± 4 px du bord bas)
   const fav = card.getByRole('button', { name: 'Ajouter aux favoris' });
   const heart = (await fav.boundingBox())!;
-  const media = (await card.locator('a[class*="media"]').boundingBox())!;
   expect([Math.round(heart.width), Math.round(heart.height)]).toEqual([32, 32]);
-  // 8 px du coin de la photo (± 1 px : arrondis de sous-pixel pendant l'animation d'apparition)
-  expect(Math.abs(media.x + media.width - (heart.x + heart.width) - 8)).toBeLessThanOrEqual(1);
-  expect(Math.abs(heart.y - media.y - 8)).toBeLessThanOrEqual(1);
+  expect(Math.abs(heart.y + heart.height / 2 - (media.y + media.height))).toBeLessThanOrEqual(4);
+  expect(media.x + media.width - (heart.x + heart.width)).toBeGreaterThanOrEqual(6);
+  // Pied : lieu · date, en 12 px gris
   const foot = card.locator('[class*="foot"]');
   await expect(foot.locator('[class*="place"]:not([class*="placeholder"])')).toHaveText('Lyon 69003');
   await expect(foot.locator('[class*="date"]')).toHaveText(/^aujourd'hui à \d{2}:\d{2}$/);
   const muted = await style('[class*="date"]');
-  expect(muted).toEqual({ size: '12px', weight: '400', color: 'rgb(95, 107, 120)' });
+  expect([muted.size, muted.weight, muted.color]).toEqual(['12px', '400', 'rgb(95, 107, 120)']);
+  // Photo carrée encadrée de 6 px, coins 12 px
+  const cardBox = (await card.boundingBox())!;
+  expect(Math.round(media.x - cardBox.x)).toBe(6);
+  expect(Math.abs(media.width - media.height)).toBeLessThanOrEqual(1);
+  expect(await card.locator('a[class*="media"]').evaluate((el) => getComputedStyle(el).borderRadius)).toBe('12px');
 });
 
-test("en-tête bureau sur une seule ligne à 1280, 1440 et 1920 px, libellés visibles ; barre d'accueil réduite", async ({ page, isMobile }) => {
+test("en-tête bureau sur deux rangées à 1280, 1440 et 1920 px : identité et compte en haut, recherche large en dessous ; barre d'accueil réduite", async ({ page, isMobile }) => {
   test.skip(!!isMobile, 'bureau uniquement');
   for (const width of [1280, 1440, 1920]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/');
     const header = page.locator('header');
     const box = (await header.boundingBox())!;
-    expect(box.height, `hauteur de l'en-tête à ${width}px`).toBeLessThan(80);
-    // Tous les éléments alignés sur la même ligne : même ordonnée de centre (± 4 px)
-    const items = [header.locator('a[title="Accueil"]'), header.getByRole('button', { name: 'Catégories' }), header.getByRole('combobox', { name: 'Rechercher une annonce' }), header.getByRole('link', { name: 'Mes recherches' }), header.getByRole('link', { name: 'Favoris' }), header.getByRole('link', { name: 'Messages' }), header.getByRole('link', { name: 'Se connecter' }), header.getByRole('link', { name: 'Déposer une annonce' })];
+    expect(box.height, `hauteur de l'en-tête à ${width}px`).toBeLessThan(120);
+    // Rangée 1 : logo, liens personnels (icône au-dessus du libellé), connexion, dépôt — mêmes centres (± 6 px)
+    const top = [header.locator('a[title="Accueil"]'), header.getByRole('link', { name: 'Mes recherches' }), header.getByRole('link', { name: 'Favoris' }), header.getByRole('link', { name: 'Messages' }), header.getByRole('link', { name: 'Se connecter' }), header.getByRole('link', { name: 'Déposer une annonce' })];
     const centers: number[] = [];
-    for (const it of items) {
+    for (const it of top) {
       await expect(it).toBeVisible();
       const b = (await it.boundingBox())!;
       centers.push(b.y + b.height / 2);
     }
-    expect(Math.max(...centers) - Math.min(...centers), `alignement à ${width}px`).toBeLessThan(4);
+    expect(Math.max(...centers) - Math.min(...centers), `rangée 1 alignée à ${width}px`).toBeLessThan(6);
+    // Rangée 2 : Catégories et recherche, sous la première rangée
+    const cats = (await header.getByRole('button', { name: 'Catégories' }).boundingBox())!;
+    const search = (await header.getByRole('combobox', { name: 'Rechercher une annonce' }).boundingBox())!;
+    expect(cats.y).toBeGreaterThan(Math.max(...centers));
+    expect(Math.abs(cats.y + cats.height / 2 - (search.y + search.height / 2))).toBeLessThan(6);
+    expect(search.width).toBeGreaterThan(300);
     for (const label of ['Mes recherches', 'Favoris', 'Messages', 'Catégories']) await expect(header.getByText(label, { exact: true })).toBeVisible();
-    // L'invite de la recherche compacte n'est pas tronquée : largeur du texte < largeur utile du champ
+    // L'invite de la recherche n'est pas tronquée
     const fits = await header.getByRole('combobox', { name: 'Rechercher une annonce' }).evaluate((el: HTMLInputElement) => {
       const cs = getComputedStyle(el);
       const ctx = document.createElement('canvas').getContext('2d')!;
@@ -170,6 +192,9 @@ test("en-tête bureau sur une seule ligne à 1280, 1440 et 1920 px, libellés vi
       return ctx.measureText(el.placeholder).width < el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
     });
     expect(fits, `invite « Rechercher » entière à ${width}px`).toBe(true);
+    // Une seule action verte dans l'en-tête : « Déposer une annonce »
+    const greens = await header.locator('.btn-primary').evaluateAll((els) => els.filter((e) => (e as HTMLElement).offsetParent !== null).map((e) => e.textContent?.trim()));
+    expect(greens.filter((t) => t && !/^$/.test(t))).toEqual(['Déposer une annonce']);
     await expectNoHorizontalOverflow(page);
   }
   // Barre « QUOI ? / OÙ ? » : ≤ 720 px de large et ≤ 52 px de haut, textes d'invite lisibles
@@ -185,7 +210,7 @@ test("en-tête bureau sur une seule ligne à 1280, 1440 et 1920 px, libellés vi
   }
 });
 
-test('cartes réduites : au plus 200 px de large, 4 colonnes ou plus sur bureau, 2 sur mobile, texte sans débordement', async ({ page, isMobile }) => {
+test('cartes réduites : au plus 215 px de large, 4 colonnes ou plus sur bureau, 2 sur mobile, coins 16 px, texte sans débordement', async ({ page, isMobile }) => {
   await page.goto('/recherche');
   const card = page.locator('article').first();
   await expect(card).toBeVisible();
@@ -198,7 +223,7 @@ test('cartes réduites : au plus 200 px de large, 4 colonnes ou plus sur bureau,
     expect(b.height).toBeLessThanOrEqual(340);
     expect(cols).toBeGreaterThanOrEqual(4);
   }
-  expect(await card.evaluate((el) => getComputedStyle(el).borderRadius)).toBe('10px');
+  expect(await card.evaluate((el) => getComputedStyle(el).borderRadius)).toBe('16px');
   // Aucun texte ne déborde de sa carte
   const overflow = await card.evaluate((el) => [...el.querySelectorAll('a, span, div')].some((n) => n.scrollWidth > n.clientWidth + 1 && getComputedStyle(n).overflow === 'visible' && getComputedStyle(n).display !== '-webkit-box'));
   expect(overflow).toBe(false);

@@ -319,6 +319,28 @@ export class ListingsService {
     return this.listingsRepo.findOne({ where: { id: listingId } }) as Promise<Listing>;
   }
 
+  /**
+   * Actions groupées de « Mes annonces » (comptes avec plusieurs annonces) : pause, remise en
+   * ligne ou renouvellement de plusieurs annonces d'un coup. Chaque annonce passe par les mêmes
+   * règles que l'action unitaire ; une annonce refusée est comptée, pas bloquante.
+   */
+  async bulkOwn(userId: string, ids: string[], action: 'pause' | 'republish' | 'renew'): Promise<{ done: number; failed: Array<{ id: string; reason: string }> }> {
+    let done = 0;
+    const failed: Array<{ id: string; reason: string }> = [];
+    for (const id of [...new Set(ids)]) {
+      try {
+        if (action === 'pause') await this.updateOwn(id, userId, { status: 'desactivee' } as UpdateListingDto);
+        else if (action === 'republish') await this.updateOwn(id, userId, { status: 'en_ligne' } as UpdateListingDto);
+        else await this.renewOwn(id, userId);
+        done += 1;
+      } catch (err) {
+        const message = (err as { message?: unknown }).message;
+        failed.push({ id, reason: Array.isArray(message) ? message.join(' ') : String(message ?? 'Action impossible') });
+      }
+    }
+    return { done, failed };
+  }
+
   async renewOwn(listingId: string, userId: string): Promise<Listing> {
     const listing = await this.getManaged(listingId, userId);
     if (!['en_ligne', 'expiree', 'desactivee'].includes(listing.status)) {

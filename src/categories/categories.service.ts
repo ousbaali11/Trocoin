@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { suggestCategories, type CategorySuggestion } from './category-suggest';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { FieldSchema, getSchemaForSlugs } from './category-schemas';
@@ -151,6 +152,12 @@ export class CategoriesService {
     if (!cat) return null;
     const all = await this.findAll();
     return [cat.id, ...all.filter((c) => c.parentId === cat.id).map((c) => c.id)];
+  }
+
+  /** Suggestion de catégorie à partir du titre (feuilles seulement, dictionnaire de mots-clés). */
+  async suggestFor(title: string): Promise<{ suggestions: CategorySuggestion[] }> {
+    if (title.trim().length < 3) return { suggestions: [] };
+    return { suggestions: suggestCategories(title, await this.findAll()) };
   }
 
   async schemaFor(slug: string): Promise<{ category: Category; parent: Category | null; fields: FieldSchema[] }> {

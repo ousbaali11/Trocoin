@@ -13,48 +13,57 @@ test.beforeEach(async ({ page }) => {
   await mockGeo(page);
 });
 
-test('panneau « Tous les filtres » : ordre des blocs, tri, dons, type de vendeurs avec compteurs, urgentes, Tout effacer et Rechercher (N)', async ({ page, isMobile }) => {
+test('panneau « Tous les filtres » : essentiels visibles, « Plus de filtres » en sections repliables mémorisées, tri, dons, vendeurs avec compteurs, urgentes, Tout effacer et Rechercher (N)', async ({ page, isMobile }) => {
   await page.goto('/recherche?category=loisirs');
   if (isMobile) {
     await page.getByRole('button', { name: /^Filtres/ }).click();
     await expect(page.getByRole('dialog', { name: 'Tous les filtres' })).toBeVisible();
   }
   const panel = isMobile ? page.getByRole('dialog', { name: 'Tous les filtres' }) : page.getByRole('complementary', { name: 'Tous les filtres' });
-  // Ordre : Catégories, Localisation, Étendre à la livraison, Prix, Dons uniquement, Tri, Type de vendeurs, Annonces urgentes
-  const labels = await panel.locator('label[for], .label, legend').allTextContents();
-  const cleaned = labels.map((t) => t.trim());
-  const order = ['Catégories', 'Localisation', 'Étendre à la livraison', 'Prix', 'Tri', 'Type de vendeurs', 'Annonces urgentes'];
-  let last = -1;
-  for (const o of order) {
-    const idx = cleaned.findIndex((t) => t.startsWith(o));
-    expect(idx, `bloc « ${o} » présent et dans l'ordre`).toBeGreaterThan(last);
-    last = idx;
-  }
+  // Essentiels visibles d'emblée : Catégories, Localisation, Prix, Tri ; le reste derrière « Plus de filtres »
   await expect(panel.getByLabel('Catégories')).toHaveValue('loisirs');
   await expect(panel.getByText('Catégorie active : Loisirs')).toBeVisible();
+  await expect(panel.getByLabel('Localisation', { exact: true })).toBeVisible();
   await expect(panel.getByLabel('Prix minimum')).toBeVisible();
   await expect(panel.getByLabel('Prix maximum')).toBeVisible();
-
-  // Tri : choix unique, cinq libellés
   const tri = panel.getByRole('group', { name: 'Tri' });
   for (const l of ['Pertinence', 'Plus récentes', 'Plus anciennes', 'Prix croissants', 'Prix décroissants']) await expect(tri.getByRole('radio', { name: l })).toBeVisible();
   await expect(tri.getByRole('radio', { name: 'Plus récentes' })).toBeChecked();
-  await tri.getByRole('radio', { name: 'Prix croissants' }).click();
-  await expect(page).toHaveURL(/sort=price_asc/);
+  const more = panel.getByTestId('more-filters');
+  await expect(more).toHaveText('Plus de filtres');
+  await expect(panel.getByRole('checkbox', { name: 'Dons uniquement' })).toBeHidden();
 
-  // Type de vendeurs : deux cases cochées par défaut, compteurs affichés
-  const vendeurs = panel.getByRole('group', { name: 'Type de vendeurs' });
+  // Sections dans l'ordre observé : Livraison, Dons, Type de vendeurs, Annonces urgentes, État, Date
+  await more.click();
+  await expect(more).toHaveText('Moins de filtres');
+  const order = ['livraison', 'dons', 'vendeurs', 'urgentes', 'etat', 'date'];
+  const ids = await panel.locator('[data-testid^="filter-section-"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')!.replace('filter-section-', '')));
+  expect(ids.slice(0, order.length)).toEqual(order);
+  // Une section fermée se déplie au clic ; l'état est mémorisé pour la session
+  const vendeurs = panel.getByTestId('filter-section-vendeurs');
+  await vendeurs.getByRole('button', { name: /Type de vendeurs/ }).click();
+  await expect(vendeurs.getByRole('checkbox', { name: /^Particuliers/ })).toBeVisible();
   await expect(vendeurs.getByRole('checkbox', { name: /^Particuliers/ })).toBeChecked();
   await expect(vendeurs.getByRole('checkbox', { name: /^Professionnels/ })).toBeChecked();
   await expect(vendeurs.getByText(/Particuliers \(\d+\)/)).toBeVisible();
   await expect(vendeurs.getByText(/Professionnels \(\d+\)/)).toBeVisible();
   await vendeurs.getByRole('checkbox', { name: /^Professionnels/ }).click();
   await expect(page).toHaveURL(/seller_type=particulier/);
+  await page.reload();
+  if (isMobile) await page.getByRole('button', { name: /^Filtres/ }).click();
+  await expect(panel.getByTestId('more-filters')).toHaveText(/Moins de filtres/);
+  await expect(panel.getByTestId('filter-section-vendeurs').getByRole('checkbox', { name: /^Particuliers/ })).toBeVisible();
 
-  // Dons uniquement et Annonces urgentes uniquement
-  await panel.getByRole('checkbox', { name: 'Dons uniquement' }).click();
+  // Tri, dons, urgentes
+  await tri.getByRole('radio', { name: 'Prix croissants' }).click();
+  await expect(page).toHaveURL(/sort=price_asc/);
+  const dons = panel.getByTestId('filter-section-dons');
+  await dons.getByRole('button', { name: /Dons et type/ }).click();
+  await dons.getByRole('checkbox', { name: 'Dons uniquement' }).click();
   await expect(page).toHaveURL(/price_type=gratuit/);
-  await panel.getByRole('checkbox', { name: 'Annonces urgentes uniquement' }).click();
+  const urgentes = panel.getByTestId('filter-section-urgentes');
+  await urgentes.getByRole('button', { name: /Annonces urgentes/ }).click();
+  await urgentes.getByRole('checkbox', { name: 'Annonces urgentes uniquement' }).click();
   await expect(page).toHaveURL(/urgent=true/);
 
   // Rechercher (N) suit le nombre d'annonces ; Tout effacer remet à zéro (le mot-clé est gardé)
@@ -62,7 +71,7 @@ test('panneau « Tous les filtres » : ordre des blocs, tri, dons, type de vende
   await panel.getByRole('button', { name: 'Tout effacer' }).click();
   await expect(page).toHaveURL(/\/recherche$/);
   if (isMobile) {
-    await page.getByRole('button', { name: /^Filtres/ }).click();
+    // Sur mobile, « Tout effacer » garde le volet ouvert (comme observé sur leboncoin) : « Rechercher » le referme
     await expect(page.getByRole('dialog', { name: 'Tous les filtres' })).toBeVisible();
     await expectNoHorizontalOverflow(page);
     await page.getByRole('dialog', { name: 'Tous les filtres' }).getByRole('button', { name: /^Rechercher/ }).click();
@@ -96,6 +105,8 @@ test('livraison : bandeau explicatif, puce retirable et périmètre « Autour de
   await banner.getByRole('button', { name: 'Retirer le filtre Livraison acceptée' }).click();
   await expect(page.getByTestId('delivery-banner')).toHaveCount(0);
   await expect(page).not.toHaveURL(/delivery=/);
+  // Nettoyage : le projet mobile joue ce scénario avant le tri par prix du projet bureau (seed intact attendu)
+  await api(`/listings/${livrable.id}`, { method: 'DELETE', token: login.accessToken }).catch(() => undefined);
 });
 
 test('bas de page de catégorie : recherches suggérées, localisations les plus demandées cliquables, fil d\'Ariane ; pagination numérotée', async ({ page }) => {
@@ -134,8 +145,11 @@ test('barre des familles (bureau) : chaque famille ouvre un panneau de sous-cat�
   await page.keyboard.press('Escape');
   await expect(panel).toHaveCount(0);
   await bar.getByRole('button', { name: 'Services', exact: true }).hover();
-  await expect(page.getByRole('region', { name: 'Sous-catégories de Services' }).locator('ul')).toHaveCount(2); // 15 sous-catégories → 2 colonnes
-  await page.getByRole('region', { name: 'Sous-catégories de Services' }).getByRole('link', { name: 'Cours particuliers' }).click();
+  const services = page.getByRole('region', { name: 'Sous-catégories de Services' });
+  await expect(services.locator('ul')).toHaveCount(2); // 15 sous-catégories → 2 colonnes
+  // Le panneau glisse en place (menu-in) : on attend la fin de l'animation avant de cliquer dedans
+  await services.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)));
+  await services.getByRole('link', { name: 'Cours particuliers' }).click();
   await expect(page).toHaveURL(/category=cours-particuliers/);
 });
 

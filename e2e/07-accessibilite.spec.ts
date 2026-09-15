@@ -91,11 +91,12 @@ test.describe('Espace compte', () => {
 
   test('formulaire de dépôt : étapes description et photos', async ({ page }) => {
     await loginAs(page, seed.seller, '/deposer');
+    await page.getByLabel('Titre').fill('Voiture pour test axe');
+    await expectNoAxeViolations(page, 'dépôt étape titre et catégorie');
     await page.getByRole('radio', { name: 'Voitures' }).check();
     await page.getByRole('button', { name: 'Continuer' }).click();
-    await expect(page.getByLabel('Titre')).toBeVisible();
+    await expect(page.getByLabel(/^Prix/)).toBeVisible();
     await expectNoAxeViolations(page, 'dépôt étape description');
-    await page.getByLabel('Titre').fill('Voiture pour test axe');
     await page.getByLabel(/^Prix/).fill('1000');
     await page.getByLabel('Description').fill('Description suffisamment longue pour passer.');
     await page.getByLabel('Marque *').selectOption('Renault');

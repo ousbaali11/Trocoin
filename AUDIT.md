@@ -1177,3 +1177,124 @@ Dix points relevés par vos captures d'écran leboncoin (statut point par point 
   suggestions, 24 villes ; `GET /listings?sort=oldest&city=Lyon&delivery_anywhere=true` → 200 ;
   `POST /conversations/bulk-delete` sans session → 401 ; `trocoin.vercel.app/accessibilite` et
   `/recherche?category=velos` → 200, barre des familles présente dans les fichiers servis par Vercel.
+
+## 21. Confirmation de parité et différenciation du design — 15 septembre 2026 (nuit)
+
+Brief en six points : re-vérifier la parité page par page avec un résultat chiffré, puis rendre
+Trocoin visuellement et structurellement distinct de leboncoin (direction artistique documentée),
+plus dynamique, plus clair, avec ses fonctions « intelligentes » mises en avant et des outils
+groupés pour les pros. Version 1.13.0. Référence des décisions visuelles : `docs/design-system.md`.
+
+### 21.1 Parité re-vérifiée (point 1)
+
+- Le contrôle est un script rejouable, `scripts/audit-parite.js`, qui lit chaque ligne du comparatif
+  et la vérifie contre **la production publique sans connexion** (routes API et pages servies par
+  Vercel, plus Chromium pour ce qui se rend côté navigateur : barre des familles, menu
+  « Catégories », bouton « Plus de filtres ») et, pour les parcours connectés, contre **la pile
+  locale construite à partir du même commit** avec le seed e2e (aucun compte de test ne doit écrire
+  en production). Il produit `docs/parite-resultats.md` (tableau numéroté avec la preuve et la
+  source de chaque ligne) ; le bilan chiffré est repris dans `docs/comparatif-leboncoin.md` §7.
+- Le premier passage a mis un écart au jour : la ligne « appareils connectés » du comparatif
+  était marquée présente alors que l'API (`GET/DELETE /auth/sessions`) n'avait aucun écran. Ajouté
+  ce tour : section « Appareils connectés » des paramètres (`SessionsSection.tsx`, navigateur et
+  système déduits de l'agent utilisateur, « Déconnecter tous les appareils » avec confirmation).
+- Restent en écart, et le disent : badge « Réactif » (taux de réponse calculé, pas affiché) et
+  étiquettes transporteur intégrées (différées, pas de partenaire) ; les cartes ne peuvent pas être
+  vérifiées en production tant qu'aucune annonce n'y est en ligne (vérifiées sur la pile locale).
+
+### 21.2 Direction artistique et différenciation (point 2)
+
+- **En-tête sur deux rangées** (`Header.tsx`) : logo et liens personnels (icône au-dessus du
+  libellé) avec le seul bouton vert « Déposer une annonce » sur la première ; bouton « Catégories »
+  (menu complet) et **recherche large en pilule** sur la seconde ; barre des familles en dessous
+  sur bureau. Plus aucune barre « recherche à gauche, actions à droite » sur une ligne.
+- **Cartes « fiche »** (`ListingCard.tsx`) : cadre blanc 16 px avec 6 px autour d'une photo
+  carrée à coins 12 px, **prix en pilule Fraunces posée sur la photo**, **cœur rond à cheval sur le
+  bas du cadre**, étiquettes « À la une » / « Urgent » en blanc avec point coloré, titre Public Sans
+  15 px sur deux lignes, ligne Pro / état / note, pied « lieu · date » (date entière, lieu tronqué)
+  avec l'icône livraison.
+- **Système de design** (`docs/design-system.md`) : palette avec usage de chaque teinte,
+  typographie (Fraunces pour les titres et les prix, Public Sans pour le reste, tailles et
+  graisses), rayons (6 / 10 / 16 / pilule), ombres (aucune au repos), grille de 4 px, composants
+  (boutons en pilule, une seule action verte par écran, `btn-dark` encre pour l'action forte
+  secondaire, étiquettes, champs, icônes en traits, pas d'illustration figurative), en-tête,
+  mouvements (durées, courbes, ce qui n'est jamais animé), action dominante écran par écran.
+- Retouches issues des captures : `pill-accent` passée au vert foncé (7,6:1) et étiquettes sans
+  transition de couleur (axe relevait une teinte intermédiaire) ; cadre de carte à 5 px + bordure
+  1 px pour un cadre visible de 6 px ; boutons « Tout effacer / Rechercher (N) » qui se partagent
+  la colonne des filtres sans déborder ; boîtes de dialogue rendues dans `<body>` par portail (une
+  boîte `fixed` ouverte depuis une carte survolée, donc transformée, restait confinée à la carte).
+
+### 21.3 Interface plus dynamique (point 3)
+
+- **Accordéons de filtres** (`FilterSection.tsx`) : ouverture par `grid-template-rows` (0fr → 1fr,
+  220 ms), en-tête bouton avec chevron et compteur d'actifs, état mémorisé pour la session
+  (`sessionStorage`), invisibilité et non-focus une fois replié (axe `aria-hidden-focus`).
+- **Menus animés** : `usePresence` garde un menu monté le temps de sa sortie ; entrée / sortie
+  par translation et léger agrandissement (`menu-in` / `menu-out`), volet mobile et menu mobile
+  (`drawer-in/out`, `slide-down-in/out`). Jamais d'opacité à l'ouverture (les mesures d'axe et de
+  Playwright ne doivent pas tomber sur un état intermédiaire). Réduits à zéro avec
+  `prefers-reduced-motion`.
+- **Suggestions pendant la frappe** (`SearchBox.tsx`) : annonces et catégories (`/listings/suggest`),
+  communes (référentiel local, sans arrondissements), et **recherches récentes** du navigateur
+  (`localStorage`, six au plus) proposées avant même de taper.
+- **Cartes** : élévation au survol, zoom léger de la photo, **aperçu rapide** au clic long à la
+  souris (500 ms, `QuickPreview.tsx` : couverture, prix, lieu, quatre critères, extrait de la
+  description, « Voir l'annonce ») sans quitter la liste ; le clic simple ouvre la fiche.
+- **États intermédiaires** : filet vert en haut de l'écran pendant un changement de page
+  (`RouteProgress.tsx`), squelettes dans l'aperçu rapide, boutons « Envoi… » déjà en place.
+
+### 21.4 Boutons et champs plus clairs (point 4)
+
+- Une seule action verte par écran (tableau dans `docs/design-system.md` §8) : « Acheter » passe
+  en encre à côté de « Contacter », « Publier / Remettre en ligne » en encre dans Mes annonces.
+- Panneau de filtres : seuls **Catégories, Localisation, Prix, Tri** sont visibles ; « Plus de
+  filtres (n actifs) » déplie Livraison, Dons et type d'annonce, Type de vendeurs, Annonces
+  urgentes, État et photos, Date de publication, puis les caractéristiques de la catégorie
+  (ouvertes par défaut). Ouverture automatique si un filtre avancé est actif.
+- Dépôt en **cinq étapes nommées** avec barre de progression (`role="progressbar"`, étape n sur 5,
+  pourcentage, pilules cliquables pour revenir) : Titre et catégorie → Description → Photos →
+  Localisation → Aperçu.
+
+### 21.5 Fonctions intelligentes mises en avant (point 5)
+
+- **Estimation de prix en direct** (`PriceEstimate.tsx`) : jauge fourchette basse — médiane —
+  haute des annonces comparables, curseur du prix tapé qui se déplace, verdict en une phrase
+  (`bas`, `un-peu-bas`, `ok`, `un-peu-haut`, `haut`).
+- **Score de complétude actionnable** (`CompletenessHint.tsx`) : anneau de progression et, pour
+  chaque manque, un bouton « Faire → » qui ouvre le sélecteur de photos ou ramène au champ concerné.
+- **Catégorie suggérée d'après le titre** (`src/categories/category-suggest.ts`, `GET
+  /categories/suggest?q=`) : dictionnaire de mots-clés par sous-catégorie (mots décisifs « louer »
+  / « vendre » pondérés), trois propositions cliquables sous le titre.
+- **Raccourcis** : recherches récentes et localisations récentes proposées en premier.
+
+### 21.6 Simple pour les particuliers, puissant pour les pros (point 6)
+
+- Mes annonces : avec une seule annonce, aucune complexité (ni onglets ni sélection). À partir de
+  deux : onglets par statut avec compteurs, « Sélectionner » → cases, « Tout sélectionner »,
+  « Mettre en pause (n) », « Remettre en ligne (n) », « Renouveler (n) » sur `POST /listings/bulk`
+  (100 identifiants au plus, réponse `{ done, failed: [{ id, reason }] }`, une annonce qui n'est
+  pas à soi est refusée sans faire échouer les autres).
+
+**Preuves d'exécution (15 septembre 2026, nuit)**
+- `npm test` : **120 tests réussis, 1 ignoré** (117 → 120 ; `test/phase17.e2e-spec.ts` +3 :
+  dix titres → catégorie attendue dont « Appartement T3 à louer » → Locations et « à vendre » →
+  Ventes immobilières, actions groupées avec une annonce étrangère en `failed`, validations 400 et
+  401, liste des sessions puis déconnexion générale qui invalide le refresh).
+- Playwright : **93 scénarios, 83 réussis et 10 passés volontairement** (73 → 93 ;
+  `15-experience` +7 sur bureau et +7 sur mobile, et le projet mobile joue enfin `14-filtres-decouverte`
+  (+6, dont le volet de filtres à 375 px, qui n'avait jamais été exécuté : il supposait que « Tout
+  effacer » refermait le volet) ; `01-recherche` réécrit pour la carte « fiche »,
+  l'en-tête sur deux rangées et la grille ; `04`, `07`, `08` adaptés au titre saisi en première
+  étape ; `14` à l'accordéon). Le premier passage complet avait relevé : cadre de carte de 7 px au
+  lieu de 6, cartes qui élargissaient la grille mobile (`min-width: 0`), `#more-filters` masqué
+  mais focusable, titres de sections h3 sous un h1, contraste des pilules pris pendant une
+  transition, animation `appear` du module qui écrasait `menu-in`, estimation absente faute de
+  trois annonces comparables, libellé « Type » ambigu, clic dans un panneau encore en mouvement
+  (Playwright fait alors défiler la page sous l'en-tête fixe) : tous corrigés, dernier passage vert.
+- Captures « après » (bureau 1280 px et mobile 375 px, pile locale) : en-tête et cartes, menu
+  « Catégories », suggestions pendant la frappe (annonce, catégorie, commune), carte survolée et
+  aperçu rapide, filtres essentiels puis accordéon, dépôt (suggestion de catégorie, jauge de prix
+  « un peu haut » puis « dans la fourchette », checklist), Mes annonces en sélection groupée,
+  appareils connectés, menu mobile, volet de filtres mobile. Les captures « avant » du tour
+  précédent (§20) servent de comparaison.

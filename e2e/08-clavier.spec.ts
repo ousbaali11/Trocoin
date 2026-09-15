@@ -120,6 +120,7 @@ test('dépôt : catégorie choisie aux flèches, étapes validées avec Entrée,
   await page.getByRole('button', { name: 'Continuer' }).focus();
   await page.keyboard.press('Enter');
   await expect(page.locator('.alert-error[role="alert"]')).toHaveText('Choisissez une catégorie.');
+  await page.getByLabel('Titre').fill('Moto de test clavier');
   // Choix par le groupe radio (Espace) puis flèche : Voitures → Motos
   const voitures = page.getByRole('radio', { name: 'Voitures' });
   await voitures.focus();
@@ -131,7 +132,6 @@ test('dépôt : catégorie choisie aux flèches, étapes validées avec Entrée,
   await page.keyboard.press('Enter');
   await expect(page.getByRole('heading', { name: 'Décrivez votre bien' })).toBeVisible();
   // Étape « Photos » : le champ fichier est atteignable au clavier (rendu hors écran, pas masqué)
-  await page.getByLabel('Titre').fill('Moto de test clavier');
   await page.getByLabel(/^Prix/).fill('2500');
   await page.getByLabel('Description').fill('Description assez longue pour la validation.');
   await page.getByLabel('Marque *').selectOption('Yamaha');

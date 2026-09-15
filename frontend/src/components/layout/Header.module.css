@@ -7,7 +7,7 @@
   background: var(--accent);
   color: #fff;
   padding: 10px 14px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   font-weight: 700;
 }
 .skip:focus {
@@ -22,12 +22,12 @@
   z-index: 50;
   border-bottom: 1px solid var(--line);
 }
-.inner {
-  min-height: var(--header-h);
+/* Rangée 1 : identité et compte */
+.top {
+  min-height: 52px;
   display: flex;
   align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
+  gap: 8px;
 }
 .logo {
   display: flex;
@@ -37,6 +37,14 @@
 .logo:hover {
   text-decoration: none;
 }
+/* Rangée 2 : catégories et recherche large */
+.bar {
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 8px;
+}
 .cats {
   position: relative;
   flex-shrink: 0;
@@ -45,12 +53,13 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 36px;
-  padding: 6px 10px;
+  min-height: 40px;
+  padding: 6px 14px;
   white-space: nowrap;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--ink-soft);
   background: var(--white);
+  color: var(--ink);
   font-weight: 600;
   font-size: 0.9rem;
   cursor: pointer;
@@ -62,7 +71,7 @@
 .mega {
   position: absolute;
   left: 0;
-  top: calc(100% + 10px);
+  top: calc(100% + 8px);
   width: min(960px, calc(100vw - 40px));
   background: var(--white);
   border: 1px solid var(--line);
@@ -74,6 +83,8 @@
   gap: 14px 18px;
   max-height: calc(100vh - var(--header-h) - 30px);
   overflow: auto;
+  transform-origin: top left;
+  z-index: 60;
 }
 .megaCol {
   display: flex;
@@ -103,12 +114,10 @@
 .megaChild:hover {
   color: var(--accent);
 }
-/* Bureau : tout tient sur UNE ligne (logo, Catégories, recherche, liens, compte, dépôt) ; la
-   recherche prend la place restante, avec un minimum qui garde son texte d'invite lisible. */
 .search {
-  flex: 1 1 200px;
-  min-width: 160px;
-  order: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 720px;
 }
 .nav {
   margin-left: auto;
@@ -117,59 +126,70 @@
   gap: 2px;
   flex-shrink: 0;
 }
+/* Liens personnels : icône au-dessus du libellé (signature Trocoin, pas une ligne d'icônes) */
 .navLink {
   display: inline-flex;
+  flex-direction: column;
   align-items: center;
-  gap: 5px;
-  min-height: 36px;
-  padding: 6px 7px;
-  border-radius: var(--radius-sm);
+  justify-content: center;
+  gap: 2px;
+  min-width: 64px;
+  min-height: 46px;
+  padding: 4px 8px;
+  border-radius: var(--radius);
   color: var(--ink-soft);
   font-weight: 600;
-  font-size: 0.86rem;
+  font-size: 0.72rem;
   white-space: nowrap;
   position: relative;
+  line-height: 1.1;
 }
 .navLink:hover {
   background: var(--accent-tint);
   color: var(--accent-dark);
   text-decoration: none;
 }
+.navLink .badge,
+.navLink .badgeSoft {
+  position: absolute;
+  top: 2px;
+  right: 8px;
+}
 .loginBtn,
 .deposit {
-  min-height: 36px;
-  padding: 0 10px;
+  min-height: 40px;
+  padding: 0 16px;
   font-size: 0.88rem;
   white-space: nowrap;
 }
 .loginBtn {
-  margin-left: 4px;
+  margin-left: 6px;
 }
 .deposit {
-  margin-left: 4px;
+  margin-left: 6px;
 }
 .userMenu {
   position: relative;
-  margin-left: 4px;
+  margin-left: 6px;
 }
 .userBtn {
   display: flex;
   align-items: center;
   gap: 6px;
   background: var(--white);
-  border: 1px solid var(--line);
+  border: 1px solid var(--ink-soft);
   color: var(--ink);
-  min-height: 36px;
-  padding: 3px 10px 3px 3px;
-  border-radius: 999px;
+  min-height: 40px;
+  padding: 3px 12px 3px 3px;
+  border-radius: var(--radius-pill);
   cursor: pointer;
 }
 .userBtn:hover {
   border-color: var(--accent);
 }
 .avatar {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   background: var(--accent);
   color: #fff;
@@ -192,9 +212,10 @@
   font-size: 0.7rem;
   font-weight: 700;
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   min-width: 18px;
   text-align: center;
+  line-height: 1.4;
 }
 .badge {
   background: var(--brick);
@@ -221,6 +242,8 @@
   padding: 8px;
   display: flex;
   flex-direction: column;
+  transform-origin: top right;
+  z-index: 60;
 }
 .dropdown a,
 .dropdown button {
@@ -253,7 +276,11 @@
   background: none;
   border: 0;
   cursor: pointer;
-  padding: 8px;
+  padding: 10px;
+  min-width: 44px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
 }
 .burger span {
   width: 22px;
@@ -264,54 +291,75 @@
 .mobileMenu {
   display: none;
 }
+/* Les @keyframes d'un module CSS sont locales : on les définit ici (nom suffixé slide-down-in/out) */
+@keyframes slide-down-in {
+  from {
+    transform: translateY(-10px);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes slide-down-out {
+  to {
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+}
+.mobileEnter {
+  animation: slide-down-in 0.2s ease-out both;
+}
+.mobileLeave {
+  animation: slide-down-out 0.18s ease-in both;
+  pointer-events: none;
+}
+
 @media (max-width: 1199px) {
-  /* Entre 1100 et 1200 px : libellés remplacés par les icônes seules, toujours sur une ligne */
-  .navLink span:not([class]) {
-    display: none;
-  }
-  .navLink {
-    padding: 6px 8px;
-  }
   .userName {
     display: none;
   }
-  .catsBtn span {
-    display: none;
-  }
 }
-@media (max-width: 1100px) {
-  /* Sous 1100 px : la recherche passe sur une deuxième ligne, pleine largeur, pour rester dominante */
-  .search {
-    order: 10;
-    flex: 1 1 100%;
-    padding-bottom: 10px;
-  }
-  .inner {
-    padding-top: 8px;
-  }
-}
+
 @media (max-width: 900px) {
+  .top {
+    min-height: 56px;
+  }
+  .bar {
+    min-height: 52px;
+    padding-bottom: 8px;
+  }
   .cats,
-  .navLink,
+  .navLink:not(.navMessages),
   .userName,
   .deposit,
-  .loginBtn {
+  .loginBtn,
+  .userMenu {
+    display: none;
+  }
+  .navMessages {
+    min-width: 44px;
+    padding: 4px 6px;
+  }
+  .navMessages > span:not([class]) {
     display: none;
   }
   .burger {
     display: flex;
   }
+  .search {
+    max-width: none;
+  }
   .mobileMenu {
     display: flex;
     flex-direction: column;
     gap: 12px;
-    padding: 14px 20px 22px;
+    padding: 14px var(--page-padding-x, 16px) 22px;
     background: var(--white);
     border-top: 1px solid var(--line);
   }
   .mobileMenu a {
     font-weight: 600;
-    min-height: 40px;
+    min-height: 44px;
     display: flex;
     align-items: center;
   }
@@ -321,9 +369,18 @@
   }
   .mobileLinks .navLink {
     display: inline-flex;
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 10px;
+    font-size: 0.95rem;
+    min-height: 44px;
   }
   .mobileLinks .navLink span {
     display: inline;
+  }
+  .mobileLinks .navLink .badge,
+  .mobileLinks .navLink .badgeSoft {
+    position: static;
   }
   .mobileCats {
     display: grid;
@@ -342,19 +399,15 @@
   .mobileMenu summary {
     font-weight: 600;
     cursor: pointer;
-    min-height: 40px;
+    min-height: 44px;
     display: flex;
     align-items: center;
   }
 }
 
 @media (max-width: 400px) {
-  /* Très petits écrans : logo réduit pour garder logo + compte + menu sur une seule ligne */
   .logo > span {
     font-size: 1.2rem !important;
     gap: 6px !important;
-  }
-  .inner {
-    gap: 6px;
   }
 }

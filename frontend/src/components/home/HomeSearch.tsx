@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { LocationPicker, type LocationValue } from "@/components/ui/LocationPicker";
+import { rememberSearch } from "@/components/search/SearchBox";
 import styles from "./HomeSearch.module.css";
 
 /**
@@ -41,6 +42,7 @@ export function HomeSearch({ total }: { total: number }) {
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
+    rememberSearch(q);
     router.push(`/recherche?${buildParams().toString()}`);
   };
 

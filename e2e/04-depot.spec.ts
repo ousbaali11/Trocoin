@@ -23,12 +23,16 @@ test('voiture : critères obligatoires, deux photos, localisation par code posta
   // Étape 1 : catégorie — impossible de continuer sans choix
   await page.getByRole('button', { name: 'Continuer' }).click();
   await expect(errorAlert(page)).toHaveText('Choisissez une catégorie.');
-  await page.getByRole('radio', { name: 'Voitures' }).check();
+  // Le titre vient en premier : la catégorie est suggérée d'après ses mots
+  const title = `Peugeot 208 PureTech 2019 ${Date.now().toString().slice(-5)}`;
+  await page.getByLabel('Titre').fill(title);
+  const suggested = page.getByTestId('category-suggestions');
+  await expect(suggested).toContainText('Voitures');
+  await suggested.getByRole('button', { name: /Voitures/ }).click();
+  await expect(page.getByRole('radio', { name: 'Voitures' })).toBeChecked();
   await page.getByRole('button', { name: 'Continuer' }).click();
 
   // Étape 2 : description — les critères obligatoires de la catégorie bloquent
-  const title = `Peugeot 208 PureTech 2019 ${Date.now().toString().slice(-5)}`;
-  await page.getByLabel('Titre').fill(title);
   await page.getByLabel(/^Prix/).fill('11900');
   await page.getByLabel('État', { exact: true }).selectOption('bon_etat');
   await page.getByLabel('Description').fill('Peugeot 208 essence, boîte manuelle, entretien à jour, carnet et factures disponibles. Aucun frais à prévoir, contrôle technique récent.');
@@ -74,12 +78,12 @@ test('voiture : critères obligatoires, deux photos, localisation par code posta
 test('location de vacances : champs propres à la famille, prix par semaine, une photo, commune choisie', async ({ page }) => {
   await mockGeo(page);
   await loginAs(page, seed.seller, '/deposer');
+  const title = `Chalet avec vue lac, 6 personnes ${Date.now().toString().slice(-5)}`;
+  await page.getByLabel('Titre').fill(title);
   await page.getByRole('radio', { name: 'Locations de vacances' }).check();
   await page.getByRole('button', { name: 'Continuer' }).click();
 
   await expect(page.getByRole('heading', { name: 'Décrivez votre hébergement' })).toBeVisible();
-  const title = `Chalet avec vue lac, 6 personnes ${Date.now().toString().slice(-5)}`;
-  await page.getByLabel('Titre').fill(title);
   await expect(page.getByLabel('Prix (€) par semaine')).toBeVisible();
   await page.getByLabel('Prix (€) par semaine').fill('1400');
   // Pas de champ « État » pour un hébergement

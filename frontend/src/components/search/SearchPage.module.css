@@ -87,7 +87,10 @@
   border-top: 1px solid var(--line-soft);
 }
 .panelFooter .btn {
-  flex: 1 1 auto;
+  /* Deux boutons qui se partagent la colonne : ils rétrécissent (marges internes réduites) plutôt que de déborder */
+  flex: 1 1 0;
+  min-width: 0;
+  padding-inline: 12px;
   justify-content: center;
 }
 
@@ -203,4 +206,12 @@
   .drawer {
     animation: none;
   }
+}
+
+.drawerOut {
+  animation: drawer-out 0.2s ease-in both;
+  pointer-events: none;
+}
+.drawerLeave {
+  pointer-events: none;
 }

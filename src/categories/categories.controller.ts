@@ -1,4 +1,4 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import { Controller, Get, Param, Query } from '@nestjs/common';
 import { CategoriesService } from './categories.service';
 
 @Controller('categories')
@@ -15,6 +15,12 @@ export class CategoriesController {
   @Get('tree')
   findTree() {
     return this.categoriesService.findTree();
+  }
+
+  /** Catégories suggérées d'après les mots du titre saisi au dépôt (3 au plus). */
+  @Get('suggest')
+  suggest(@Query('q') q?: string) {
+    return this.categoriesService.suggestFor((q || '').slice(0, 150));
   }
 
   /** Champs dynamiques d'une catégorie (formulaire de dépôt + filtres) */

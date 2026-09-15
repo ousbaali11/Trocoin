@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError, mediaUrl } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast-context";
@@ -31,7 +31,7 @@ interface FormState {
   onBehalfOf: string;
 }
 
-const STEPS = ["Catégorie", "Description", "Photos", "Localisation", "Aperçu"];
+const STEPS = ["Titre et catégorie", "Description", "Photos", "Localisation", "Aperçu"];
 
 export function ListingForm({ existing }: { existing?: ListingDetail }) {
   const router = useRouter();
@@ -41,6 +41,15 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
   const [shops, setShops] = useState<ManagedShop[]>([]);
   const [schema, setSchema] = useState<FieldSchema[]>([]);
   const [step, setStep] = useState(0);
+  // Changement d'étape : on remonte à la barre de progression pour que le nouvel écran commence en haut
+  const firstStep = useRef(true);
+  useEffect(() => {
+    if (firstStep.current) {
+      firstStep.current = false;
+      return;
+    }
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }, [step]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [listingId, setListingId] = useState<string | null>(existing?.id ?? null);
@@ -71,6 +80,41 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
     api<{ fields: FieldSchema[] }>(`/categories/${form.categorySlug}/schema`).then((s) => setSchema(s.fields)).catch(() => setSchema([]));
   }, [form.categorySlug]);
 
+  // Catégorie suggérée d'après les mots du titre (300 ms après la dernière frappe)
+  const [catSuggestions, setCatSuggestions] = useState<Array<{ slug: string; name: string; rootName?: string }>>([]);
+  useEffect(() => {
+    const q = form.title.trim();
+    if (q.length < 3) {
+      setCatSuggestions([]);
+      return;
+    }
+    const ctrl = new AbortController();
+    const t = setTimeout(() => {
+      api<{ suggestions: Array<{ slug: string; name: string; rootName?: string }> }>(`/categories/suggest?q=${encodeURIComponent(q)}`, { signal: ctrl.signal, token: null })
+        .then((r) => !ctrl.signal.aborted && setCatSuggestions(r.suggestions))
+        .catch(() => undefined);
+    }, 300);
+    return () => {
+      clearTimeout(t);
+      ctrl.abort();
+    };
+  }, [form.title]);
+
+  /** Actions de la checklist « Fiche complète » : aller directement au champ concerné. */
+  const completenessAction = (action: "photos" | "description" | "prix" | "criteres") => {
+    if (action === "photos") {
+      (document.querySelector('input[aria-label="Choisir des photos"]') as HTMLInputElement | null)?.click();
+      return;
+    }
+    setStep(1);
+    const id = action === "description" ? "description" : action === "prix" ? "price" : `a-${schema.find((f) => f.type !== "boolean" && (form.attributes[f.key] === undefined || form.attributes[f.key] === ""))?.key ?? ""}`;
+    window.setTimeout(() => {
+      const el = document.getElementById(id);
+      el?.scrollIntoView({ block: "center", behavior: "smooth" });
+      (el as HTMLElement | null)?.focus?.();
+    }, 80);
+  };
+
   const root = useMemo(() => tree.find((r) => r.slug === form.categorySlug || r.children.some((c) => c.slug === form.categorySlug)), [tree, form.categorySlug]);
   const categoryName = useMemo(() => {
     for (const r of tree) {
@@ -95,6 +139,7 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
 
   const validateStep = (): string | null => {
     if (step === 0 && !form.categorySlug) return "Choisissez une catégorie.";
+    if (step === 0 && form.title.trim().length < 3) return "Le titre doit faire au moins 3 caractères.";
     if (step === 1) {
       if (form.title.trim().length < 3) return "Le titre doit faire au moins 3 caractères.";
       if (form.description.trim().length < 10) return "La description doit faire au moins 10 caractères.";
@@ -229,19 +274,46 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
 
   return (
     <div className="panel">
-      <ol className="row" style={{ listStyle: "none", padding: 0, margin: "0 0 24px", gap: 6 }} aria-label="Étapes">
-        {STEPS.map((s, i) => (
-          <li key={s} className={`pill ${i === step ? "pill-accent" : i < step ? "pill-green" : ""}`} aria-current={i === step ? "step" : undefined} style={{ cursor: i < step ? "pointer" : "default" }} onClick={() => i < step && setStep(i)}>
-            {i + 1}. {s}
-          </li>
-        ))}
-      </ol>
+      {/* Barre de progression : étape n/5 et pourcentage, pills cliquables pour revenir en arrière */}
+      <div style={{ marginBottom: 20 }} data-testid="deposit-progress">
+        <div className="row spread small" style={{ marginBottom: 6 }}>
+          <strong>Étape {step + 1} sur {STEPS.length} : {STEPS[step]}</strong>
+          <span className="muted">{Math.round(((step + 1) / STEPS.length) * 100)} %</span>
+        </div>
+        <div role="progressbar" aria-valuemin={1} aria-valuemax={STEPS.length} aria-valuenow={step + 1} aria-label={`Étape ${step + 1} sur ${STEPS.length}`} style={{ height: 6, borderRadius: 3, background: "var(--ivory-warm)", overflow: "hidden" }}>
+          <div style={{ width: `${((step + 1) / STEPS.length) * 100}%`, height: "100%", background: "var(--accent)", transition: "width 0.25s ease-out" }} />
+        </div>
+        <ol className="row" style={{ listStyle: "none", padding: 0, margin: "10px 0 0", gap: 6, flexWrap: "wrap" }} aria-label="Étapes">
+          {STEPS.map((s, i) => (
+            <li key={s} className={`pill ${i === step ? "pill-accent" : i < step ? "pill-green" : ""}`} aria-current={i === step ? "step" : undefined} style={{ cursor: i < step ? "pointer" : "default" }} onClick={() => i < step && setStep(i)}>
+              {i + 1}. {s}
+            </li>
+          ))}
+        </ol>
+      </div>
       {error && <div className="alert alert-error" role="alert">{error}</div>}
 
       {step === 0 && (
         <div>
-          <h2>Dans quelle catégorie ?</h2>
-          <p className="muted">Choisissez la catégorie la plus précise : elle détermine les critères demandés et les filtres de recherche.</p>
+          <h2>Que proposez-vous ?</h2>
+          <p className="muted">Commencez par un titre : nous vous proposons la bonne catégorie d&apos;après les mots que vous tapez.</p>
+          <div className="field">
+            <label htmlFor="title">Titre</label>
+            <input id="title" className="input" value={form.title} onChange={(e) => set("title", e.target.value)} maxLength={150} placeholder={titleExample(form.categorySlug, root?.slug)} autoFocus={!existing} />
+            <span className="hint">{form.title.length}/150 — précis et sans coordonnées.</span>
+          </div>
+          {catSuggestions.length > 0 && (
+            <div className="alert alert-info" role="status" data-testid="category-suggestions" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+              <span>D&apos;après votre titre :</span>
+              {catSuggestions.map((c) => (
+                <button key={c.slug} type="button" className={`btn btn-sm ${form.categorySlug === c.slug ? "btn-primary" : "btn-outline"}`} aria-pressed={form.categorySlug === c.slug} onClick={() => { set("categorySlug", c.slug); set("attributes", {}); }}>
+                  {c.rootName ? `${c.rootName} › ` : ""}{c.name}
+                </button>
+              ))}
+            </div>
+          )}
+          <h3 className="h3" style={{ marginTop: 8 }}>Catégorie</h3>
+          <p className="muted small">Choisissez la catégorie la plus précise : elle détermine les critères demandés et les filtres de recherche.</p>
           {!existing && shops.length > 0 && (
             <div className="field" style={{ maxWidth: 420 }}>
               <label htmlFor="obo">Publier au nom de</label>
@@ -273,12 +345,7 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
       {step === 1 && (
         <div>
           <h2>Décrivez votre {root?.slug === "emploi" ? "offre" : root?.slug === "vacances" ? "hébergement" : "bien"}</h2>
-          <p className="small muted">{categoryName}</p>
-          <div className="field">
-            <label htmlFor="title">Titre</label>
-            <input id="title" className="input" value={form.title} onChange={(e) => set("title", e.target.value)} maxLength={150} placeholder={titleExample(form.categorySlug, root?.slug)} />
-            <span className="hint">{form.title.length}/150 — précis et sans coordonnées.</span>
-          </div>
+          <p className="small muted">{categoryName} · <strong>{form.title || "sans titre"}</strong> <button type="button" className="btn btn-ghost btn-sm" style={{ minHeight: 28, padding: "0 8px" }} onClick={() => setStep(0)}>modifier le titre</button></p>
           <div className="form-row">
             <div className="field">
               <label htmlFor="priceType">Type de prix</label>
@@ -348,7 +415,7 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
       {step === 2 && (
         <div>
           <h2>Ajoutez des photos</h2>
-          <CompletenessHint photosCount={photos.length + pending.length} description={form.description} price={form.price} priceType={form.priceType} attributes={form.attributes} schema={schema} />
+          <CompletenessHint photosCount={photos.length + pending.length} description={form.description} price={form.price} priceType={form.priceType} attributes={form.attributes} schema={schema} onAction={completenessAction} />
           <p className="muted">Jusqu&apos;à {MAX_PHOTOS} photos (JPEG, PNG, WEBP, 8 Mo max). Un recadrage vous est proposé à l&apos;ajout. La première est la photo de couverture : <strong>glissez-déposez</strong> pour réorganiser.</p>
           <label className="card" style={{ display: "grid", placeItems: "center", padding: 32, borderStyle: "dashed", cursor: "pointer", marginBottom: 16 }}
             onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); addFiles(e.dataTransfer.files); }}>

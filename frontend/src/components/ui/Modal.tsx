@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef } from "react";
+import { createPortal } from "react-dom";
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -42,8 +43,10 @@ export function Modal({ open, onClose, title, children, width = 520 }: { open: b
       (opener.current as HTMLElement | null)?.focus?.();
     };
   }, [open, onClose]);
-  if (!open) return null;
-  return (
+  if (!open || typeof document === "undefined") return null;
+  // Rendue dans <body> (portail) : une boîte « fixed » placée dans une carte survolée (transform)
+  // resterait sinon confinée à cette carte.
+  return createPortal(
     <div
       role="presentation"
       onClick={onClose}
@@ -68,6 +71,7 @@ export function Modal({ open, onClose, title, children, width = 520 }: { open: b
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

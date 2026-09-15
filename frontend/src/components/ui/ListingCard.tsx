@@ -1,22 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { mediaUrl } from "@/lib/api";
 import { CONDITION_LABELS, formatPrice, LISTING_STATUS_LABELS, postedAt } from "@/lib/format";
 import type { ListingCard as ListingCardType } from "@/lib/types";
 import { FavoriteButton } from "./FavoriteButton";
+import { QuickPreview } from "./QuickPreview";
 import styles from "./ListingCard.module.css";
 
+const LONG_PRESS_MS = 500;
+
 /**
- * Carte d'annonce partagée (accueil, recherche, favoris, historique, vitrine vendeur, annonces
- * similaires). Hiérarchie calquée sur les cartes leboncoin : photo portrait avec cœur en haut à
- * droite, titre 16 px gras sur deux lignes max, prix 16 px gras foncé et compact, mentions
- * secondaires en 12 px, puis localisation et date de dépôt en 12 px gris, alignées en bas.
+ * Carte d'annonce « fiche » Trocoin (docs/design-system.md §5) : photo carrée encadrée, prix en
+ * pilule sur la photo, cœur à cheval sur le bas droit du cadre, étiquettes en haut à gauche, puis
+ * titre sur deux lignes, ligne Pro / état / note du vendeur, et « lieu · date » en pied.
+ * Clic long à la souris (500 ms) : aperçu rapide sans quitter la liste.
  */
 export function ListingCard({ listing, showStatus = false }: { listing: ListingCardType; showStatus?: boolean }) {
   // Image introuvable (photo supprimée du stockage, lien périmé) : on revient au visuel « Pas de photo »
   const [broken, setBroken] = useState(false);
+  const [preview, setPreview] = useState(false);
+  const pressTimer = useRef<number | null>(null);
+  const longPressed = useRef(false);
   const cover = broken ? undefined : mediaUrl(listing.coverUrl);
   const isPro = listing.seller?.accountType === "professionnel";
   const negotiable = listing.priceType === "negociable";
@@ -25,9 +31,30 @@ export function ListingCard({ listing, showStatus = false }: { listing: ListingC
   // Note du vendeur (visible sans connexion, comme le reste de la carte) dès qu'il a reçu un avis
   const rating = listing.seller && listing.seller.ratingCount && listing.seller.ratingCount > 0 ? listing.seller : null;
   const hasMeta = isPro || !!listing.condition || !!listing.isComplete || !!rating;
+
+  const pressStart = (e: React.PointerEvent) => {
+    if (e.pointerType !== "mouse" || e.button !== 0) return;
+    longPressed.current = false;
+    pressTimer.current = window.setTimeout(() => {
+      longPressed.current = true;
+      setPreview(true);
+    }, LONG_PRESS_MS);
+  };
+  const pressEnd = () => {
+    if (pressTimer.current) window.clearTimeout(pressTimer.current);
+    pressTimer.current = null;
+  };
+  const onClick = (e: React.MouseEvent) => {
+    if (longPressed.current) {
+      e.preventDefault();
+      longPressed.current = false;
+    }
+  };
+
   return (
-    <article className={`card card-hover ${styles.card} ${listing.isBoosted ? styles.boosted : ""}`}>
-      <Link href={`/annonces/${listing.id}`} className={styles.media} aria-label={listing.title}>
+    <article className={`card card-hover ${styles.card} ${listing.isBoosted ? styles.boosted : ""}`} data-testid="listing-card">
+      <div className={styles.frame}>
+      <Link href={`/annonces/${listing.id}`} className={styles.media} aria-label={listing.title} onPointerDown={pressStart} onPointerUp={pressEnd} onPointerLeave={pressEnd} onPointerCancel={pressEnd} onClick={onClick}>
         {cover ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={cover} alt={listing.title} loading="lazy" decoding="async" onError={() => setBroken(true)} />
@@ -39,8 +66,8 @@ export function ListingCard({ listing, showStatus = false }: { listing: ListingC
         )}
         {(listing.isUrgent || listing.isBoosted) && (
           <div className={styles.tags}>
-            {listing.isUrgent && <span className={`${styles.tag} ${styles.tagUrgent}`}>Urgent</span>}
             {listing.isBoosted && <span className={`${styles.tag} ${styles.tagBoosted}`}>À la une</span>}
+            {listing.isUrgent && <span className={`${styles.tag} ${styles.tagUrgent}`}>Urgent</span>}
           </div>
         )}
         {listing.photosCount > 1 && (
@@ -50,18 +77,19 @@ export function ListingCard({ listing, showStatus = false }: { listing: ListingC
             <span className="sr-only"> photos</span>
           </span>
         )}
+        <span className={styles.pricePill} data-testid="card-price">
+          {priceLabel}
+          {negotiable && <span className={styles.negotiable}>à débattre</span>}
+        </span>
       </Link>
       <div className={styles.fav}>
         <FavoriteButton listingId={listing.id} compact />
       </div>
+      </div>
       <div className={styles.body}>
-        <Link href={`/annonces/${listing.id}`} className={styles.title}>
+        <Link href={`/annonces/${listing.id}`} className={styles.title} onPointerDown={pressStart} onPointerUp={pressEnd} onPointerLeave={pressEnd} onPointerCancel={pressEnd} onClick={onClick}>
           {listing.title}
         </Link>
-        <div className={styles.price}>
-          {priceLabel}
-          {negotiable && <span className={styles.negotiable}>à débattre</span>}
-        </div>
         {hasMeta && (
           <div className={styles.meta}>
             {isPro && <span className={styles.pro}>Pro</span>}
@@ -80,22 +108,27 @@ export function ListingCard({ listing, showStatus = false }: { listing: ListingC
           </div>
         )}
         <div className={styles.foot}>
+          <span className={styles.where}>
+            <span className={styles.place}>
+              {place}
+              {listing.distanceKm !== undefined && ` · ${listing.distanceKm} km`}
+            </span>
+            <span className={styles.dot} aria-hidden="true">·</span>
+            <span className={styles.date} suppressHydrationWarning>
+              {postedAt(listing.publishedAt || listing.createdAt)}
+            </span>
+          </span>
           {listing.deliveryAvailable && (
-            <span className={styles.delivery}>
+            <span className={styles.delivery} title="Livraison possible">
               <ParcelIcon />
-              Livraison possible
+              <span className="sr-only">Livraison possible</span>
+              <span aria-hidden="true">Livraison</span>
             </span>
           )}
-          <span className={styles.place}>
-            {place}
-            {listing.distanceKm !== undefined && ` · ${listing.distanceKm} km`}
-          </span>
-          <span className={styles.date} suppressHydrationWarning>
-            {postedAt(listing.publishedAt || listing.createdAt)}
-          </span>
-          {showStatus && <span className={`${LISTING_STATUS_LABELS[listing.status].pill} ${styles.status}`}>{LISTING_STATUS_LABELS[listing.status].label}</span>}
         </div>
+        {showStatus && <span className={`${LISTING_STATUS_LABELS[listing.status].pill} ${styles.status}`}>{LISTING_STATUS_LABELS[listing.status].label}</span>}
       </div>
+      {preview && <QuickPreview listingId={listing.id} onClose={() => setPreview(false)} />}
     </article>
   );
 }

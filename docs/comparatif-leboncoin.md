@@ -133,3 +133,32 @@ et il exige une clé d'application Facebook — non repris. Aucun changement ce 
 | 8 | Bandeau explicatif quand le filtre livraison est actif, puce « Livraison acceptée ✕ », sélecteur de périmètre France | Bandeau « Livraison : les annonces ci-dessous peuvent vous être envoyées… », puce « Livraison acceptée ✕ » retirable, périmètre « Autour de {commune} » / « France » (= étendre à la livraison) quand une localisation est choisie ; l'en-tête des résultats indique « + livraison partout en France » | ajouté |
 | 9 | Pied de page sombre en 4 colonnes, applications mobiles, marques sœurs, réseaux sociaux, note Trustpilot | Quatre colonnes (À propos, Informations légales, Nos solutions pros, Des questions ?) avec 16 liens qui aboutissent tous (nouvelle page `/accessibilite`, factuelle, sans taux de conformité inventé). Omis volontairement : applications mobiles, réseaux sociaux et avis externes (n'existent pas), fond sombre (palette claire du site) | ajouté (partiel, volontaire) |
 | 10 | Encarts Google Ads et « Sponsorisé » tiers | Aucune régie publicitaire ; les seules mises en avant sont les annonces « À la une » des vendeurs Trocoin (point 7) | non pertinent |
+
+## 7. Confirmation de parité, ligne par ligne — 15 septembre 2026 (nuit)
+
+Ce n'est pas une relecture du document : chaque ligne des sections 1, 2, 5 et 6 a été rejouée
+par `node scripts/audit-parite.js`, qui interroge la **production publique sans connexion** (API
+Render, pages Vercel, Chromium pour ce qui se rend côté navigateur) et, pour les parcours
+connectés, la **pile locale construite à partir du même commit** avec le seed e2e (aucun compte
+de test n'écrit en production). Le tableau complet, numéroté, avec la preuve et la source de
+chaque ligne, est dans `docs/parite-resultats.md` (régénéré à chaque exécution).
+
+**Résultat chiffré : 36 points contrôlés — 30 équivalents, 4 partiels,
+1 manquant, 1 non pertinent (choix produit).**
+
+Ce qui n'est pas équivalent, et pourquoi :
+
+| # | Point | Statut | Constat |
+|---|---|---|---|
+| 1 | Cartes en production (photo, prix, badges, cœur, note) | partiel | aucune annonce n'est en ligne en production au moment du contrôle : la carte est vérifiée sur la pile locale (scénario 01) mais pas en production |
+| 2 | Badges Pro / Identité vérifiée / **Réactif** | partiel | Pro et Identité vérifiée affichés ; « Réactif » toujours différé (le taux de réponse est calculé, aucun badge ne l'affiche) |
+| 3 | Étiquettes transporteur intégrées | manquant | pas de partenaire transporteur : numéro de suivi saisi à la main (différé, §2) |
+| 4 | Bons plans, crédit, financement, Protection Panne, régie publicitaire | non pertinent | services partenaires hors périmètre (§3, §6 point 10) |
+
+Écart découvert par ce contrôle et corrigé dans le même tour : la ligne « appareils connectés »
+de la section 2 était marquée présente alors que seule l'API existait (`GET/DELETE
+/auth/sessions`) ; l'écran « Appareils connectés » des paramètres a été ajouté (liste des
+sessions avec navigateur et système, « Déconnecter tous les appareils » avec confirmation).
+Ajouts de ce tour repris dans le contrôle : aperçu rapide d'une annonce au clic long, « Plus de
+filtres » en accordéon, suggestions de communes et recherches récentes pendant la frappe,
+catégorie suggérée d'après le titre, actions groupées sur Mes annonces.

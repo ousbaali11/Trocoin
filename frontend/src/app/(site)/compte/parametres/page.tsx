@@ -12,6 +12,7 @@ import { PasswordInput } from "@/components/ui/PasswordInput";
 import { ResendVerificationButton } from "@/components/account/ResendVerificationButton";
 import { ChangeEmailForm } from "@/components/account/ChangeEmailForm";
 import { TwoFactorSection } from "@/components/account/TwoFactorSection";
+import { SessionsSection } from "@/components/account/SessionsSection";
 
 const NOTIF_ROWS: Array<{ key: keyof NotificationPrefs; label: string; help: string; sms: boolean }> = [
   { key: "message", label: "Messages", help: "Nouveau message, proposition de prix", sms: false },
@@ -196,6 +197,8 @@ export default function ParametresPage() {
       </section>
 
       <TwoFactorSection />
+
+      <SessionsSection />
 
       <section className="panel" id="mot-de-passe">
         <h2 className="h3">Mot de passe</h2>

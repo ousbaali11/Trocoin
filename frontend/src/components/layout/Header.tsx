@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { usePresence } from "@/lib/use-presence";
 import type { CategoryNode } from "@/lib/types";
 import { CategoryIcon } from "@/components/ui/CategoryIcon";
 import { SearchBox } from "@/components/search/SearchBox";
@@ -12,13 +13,15 @@ import { Logo } from "./Logo";
 import styles from "./Header.module.css";
 
 /**
- * Barre de navigation publique (brief phase 2 §3) — ordre et libellés exacts :
- * Mes recherches · Favoris · Messages · Se connecter (ou menu compte) · Déposer une annonce.
- * Les pages personnelles déclenchent la connexion si besoin (retour à l'action ensuite).
+ * En-tête sur deux rangées (docs/design-system.md §6) :
+ *  - rangée 1 : logo, puis à droite Mes recherches · Favoris · Messages (icône au-dessus du
+ *    libellé), compte ou connexion, et la seule action verte de la page « Déposer une annonce » ;
+ *  - rangée 2 : bouton « Catégories » (panneau) et recherche large en pilule.
+ * Sur mobile : logo, Messages et menu sur la première rangée, recherche pleine largeur dessous,
+ * menu qui glisse vers le bas. Les pages personnelles déclenchent la connexion si besoin.
  */
 export function Header() {
   const { user, loading, unreadMessages, unreadNotifications, logout, requireAuth } = useAuth();
-  const router = useRouter();
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const [catsOpen, setCatsOpen] = useState(false);
@@ -27,6 +30,9 @@ export function Header() {
   const [savedCount, setSavedCount] = useState(0);
   const menuRef = useRef<HTMLDivElement>(null);
   const catsRef = useRef<HTMLDivElement>(null);
+  const menu = usePresence(menuOpen);
+  const cats = usePresence(catsOpen);
+  const mobile = usePresence(mobileOpen, 200);
 
   useEffect(() => {
     setMenuOpen(false);
@@ -82,7 +88,7 @@ export function Header() {
       <Link href="/compte/favoris" onClick={personal("/compte/favoris")} className={styles.navLink} aria-label="Favoris">
         <HeartIcon /> <span>Favoris</span>
       </Link>
-      <Link href="/compte/messages" onClick={personal("/compte/messages")} className={styles.navLink} aria-label={unreadMessages > 0 ? `Messages, ${unreadMessages} non lu${unreadMessages > 1 ? "s" : ""}` : "Messages"}>
+      <Link href="/compte/messages" onClick={personal("/compte/messages")} className={`${styles.navLink} ${styles.navMessages}`} aria-label={unreadMessages > 0 ? `Messages, ${unreadMessages} non lu${unreadMessages > 1 ? "s" : ""}` : "Messages"}>
         <MailIcon /> <span>Messages</span>
         {unreadMessages > 0 && <span className={styles.badge}>{unreadMessages > 99 ? "99+" : unreadMessages}</span>}
       </Link>
@@ -92,37 +98,12 @@ export function Header() {
   return (
     <header className={styles.header}>
       <a href="#contenu" className={styles.skip}>Aller au contenu</a>
-      <div className={`container ${styles.inner}`}>
+
+      {/* Rangée 1 : identité et compte */}
+      <div className={`container ${styles.top}`}>
         <Link href="/" className={styles.logo} title="Accueil">
           <Logo dark />
         </Link>
-
-        <div className={styles.cats} ref={catsRef}>
-          <button className={styles.catsBtn} onClick={() => setCatsOpen((o) => !o)} aria-expanded={catsOpen} aria-haspopup="true" aria-label="Catégories" aria-controls="mega-categories">
-            <MenuIcon /> <span>Catégories</span>
-          </button>
-          {catsOpen && (
-            <div className={styles.mega} role="menu" id="mega-categories">
-              {tree.map((root) => (
-                <div key={root.slug} className={styles.megaCol}>
-                  <Link href={`/recherche?category=${root.slug}`} className={styles.megaRoot} role="menuitem">
-                    <CategoryIcon name={root.icon} size={18} /> {root.name}
-                  </Link>
-                  {root.children.map((c) => (
-                    <Link key={c.slug} href={`/recherche?category=${c.slug}`} className={styles.megaChild} role="menuitem">
-                      {c.name}
-                    </Link>
-                  ))}
-                  {root.children.length === 0 && <Link href={`/recherche?category=${root.slug}`} className={styles.megaChild}>Toutes les annonces</Link>}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className={styles.search}>
-          <SearchBox compact />
-        </div>
 
         <nav className={styles.nav} aria-label="Navigation principale">
           {personalLinks}
@@ -138,8 +119,8 @@ export function Header() {
                 <span className={styles.userName}>{user.displayName}</span>
                 {unreadNotifications > 0 && <span className={styles.badge}>{unreadNotifications}</span>}
               </button>
-              {menuOpen && (
-                <div className={styles.dropdown} role="menu">
+              {menu.mounted && (
+                <div className={`${styles.dropdown} ${menu.leaving ? "menu-leave" : "menu-enter"}`} role="menu">
                   <Link href="/compte" role="menuitem">Mon tableau de bord</Link>
                   <Link href="/compte/annonces" role="menuitem">Mes annonces</Link>
                   <Link href="/compte/notifications" role="menuitem">
@@ -167,9 +148,37 @@ export function Header() {
         </nav>
       </div>
 
-      {mobileOpen && (
-        <div className={styles.mobileMenu} id="mobile-menu">
-          <SearchBox onNavigate={() => setMobileOpen(false)} />
+      {/* Rangée 2 : catégories et recherche */}
+      <div className={`container ${styles.bar}`}>
+        <div className={styles.cats} ref={catsRef}>
+          <button className={styles.catsBtn} onClick={() => setCatsOpen((o) => !o)} aria-expanded={catsOpen} aria-haspopup="true" aria-label="Catégories" aria-controls={catsOpen ? "mega-categories" : undefined}>
+            <MenuIcon /> <span>Catégories</span>
+          </button>
+          {cats.mounted && (
+            <div className={`${styles.mega} ${cats.leaving ? "menu-leave" : "menu-enter"}`} role="menu" id="mega-categories">
+              {tree.map((root) => (
+                <div key={root.slug} className={styles.megaCol}>
+                  <Link href={`/recherche?category=${root.slug}`} className={styles.megaRoot} role="menuitem">
+                    <CategoryIcon name={root.icon} size={18} /> {root.name}
+                  </Link>
+                  {root.children.map((c) => (
+                    <Link key={c.slug} href={`/recherche?category=${c.slug}`} className={styles.megaChild} role="menuitem">
+                      {c.name}
+                    </Link>
+                  ))}
+                  {root.children.length === 0 && <Link href={`/recherche?category=${root.slug}`} className={styles.megaChild}>Toutes les annonces</Link>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className={styles.search}>
+          <SearchBox compact />
+        </div>
+      </div>
+
+      {mobile.mounted && (
+        <div className={`${styles.mobileMenu} ${mobile.leaving ? styles.mobileLeave : styles.mobileEnter}`} id="mobile-menu">
           <Link href="/deposer" className="btn btn-primary btn-block">Déposer une annonce</Link>
           <div className={styles.mobileLinks}>{personalLinks}</div>
           <details>
@@ -217,21 +226,21 @@ function MenuIcon() {
 }
 function BellIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M6 16V11a6 6 0 0112 0v5l2 2H4zM10 20a2 2 0 004 0" />
     </svg>
   );
 }
 function HeartIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
       <path d="M12 20.5s-7.5-4.6-9.3-9.2C1.4 8 3.3 4.5 6.8 4.5c2 0 3.4 1.1 4.2 2.3.8-1.2 2.2-2.3 4.2-2.3 3.5 0 5.4 3.5 4.1 6.8C19.5 15.9 12 20.5 12 20.5z" />
     </svg>
   );
 }
 function MailIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <rect x="3" y="5" width="18" height="14" rx="2" />
       <path d="M3 7l9 6 9-6" />
     </svg>

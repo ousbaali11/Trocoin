@@ -47,7 +47,6 @@
   background: var(--white);
   border-bottom: 1px solid var(--line);
   box-shadow: var(--shadow-lg);
-  animation: appear 0.16s ease-out both;
 }
 .panelInner {
   padding-block: 18px 22px;

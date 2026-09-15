@@ -27,10 +27,11 @@
   --radius: 10px;
   --radius-sm: 6px;
   --radius-lg: 16px;
+  --radius-pill: 999px;
   --font-body: var(--font-public-sans), "Segoe UI", system-ui, sans-serif;
   --font-display: var(--font-fraunces), Georgia, serif;
   --container: 1180px;
-  --header-h: 64px;
+  --header-h: 108px;
   /* Marge horizontale de sécurité de toutes les pages : jamais de texte, carte ou bouton collé au bord */
   --page-padding-x: 20px;
 
@@ -153,8 +154,8 @@ textarea {
   justify-content: center;
   gap: 8px;
   min-height: 42px;
-  padding: 10px 18px;
-  border-radius: var(--radius-sm);
+  padding: 10px 20px;
+  border-radius: var(--radius-pill);
   font-size: 0.95rem;
   font-weight: 600;
   border: 1px solid transparent;
@@ -169,18 +170,24 @@ textarea {
   opacity: 0.55;
   cursor: not-allowed;
 }
-.btn-primary,
-.btn-dark {
+.btn-primary {
   background: var(--accent);
   color: var(--accent-ink);
 }
-.btn-primary:hover:not(:disabled),
-.btn-dark:hover:not(:disabled) {
+.btn-primary:hover:not(:disabled) {
   background: var(--accent-dark);
+}
+/* Action forte mais secondaire (Acheter à côté de Contacter) et onglet sélectionné : encre pleine */
+.btn-dark {
+  background: var(--ink);
+  color: var(--white);
+}
+.btn-dark:hover:not(:disabled) {
+  background: #111827;
 }
 .btn-outline {
   background: var(--white);
-  border-color: var(--line);
+  border-color: var(--ink-soft);
   color: var(--ink);
 }
 .btn-outline:hover:not(:disabled) {
@@ -331,10 +338,11 @@ textarea {
   align-items: center;
   gap: 5px;
   padding: 3px 9px;
-  border-radius: 999px;
-  font-size: 0.76rem;
+  border-radius: var(--radius-pill);
+  font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   background: var(--ivory-warm);
   color: var(--ink-soft);
   white-space: nowrap;
@@ -360,7 +368,8 @@ textarea {
   color: #fff;
 }
 .pill-accent {
-  background: var(--accent);
+  /* Vert foncé : 7,6:1 avec le blanc, marge confortable pour un texte de 11,5 px en capitales */
+  background: var(--accent-dark);
   color: #fff;
 }
 
@@ -640,8 +649,8 @@ a.card:hover * {
 [role="dialog"]:not(.modal-panel) {
   animation: appear 0.16s ease-out both;
 }
-/* Entrées de formulaire, pastilles et liens de navigation : transitions homogènes */
-.pill,
+/* Entrées de formulaire et liens de navigation : transitions homogènes (pas les étiquettes :
+   leur couleur change d'un coup, sinon un contrôle de contraste peut tomber sur une teinte intermédiaire) */
 .input,
 .select,
 .textarea,
@@ -698,4 +707,120 @@ h2 {
   .identifiants-list dt:first-child {
     margin-top: 0;
   }
+}
+
+/* ---------- Système de design (docs/design-system.md) : mouvement des menus et accordéons ---------- */
+@keyframes menu-in {
+  from {
+    transform: translateY(-6px) scale(0.98);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes menu-out {
+  to {
+    transform: translateY(-6px) scale(0.98);
+    opacity: 0;
+  }
+}
+@keyframes drawer-out {
+  to {
+    transform: translateX(40px);
+    opacity: 0;
+  }
+}
+@keyframes slide-down-in {
+  from {
+    transform: translateY(-10px);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes slide-down-out {
+  to {
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+}
+.menu-enter {
+  animation: menu-in 0.18s ease-out both;
+}
+.menu-leave {
+  animation: menu-out 0.16s ease-in both;
+  pointer-events: none;
+}
+/* Accordéon : ouverture animée sans mesurer la hauteur (grid-template-rows 0fr → 1fr) */
+.accordion-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  /* Replié : invisible (donc non focusable) une fois la fermeture terminée */
+  visibility: hidden;
+  transition: grid-template-rows 0.22s ease-out, visibility 0s linear 0.22s;
+}
+.accordion-body[data-open="true"] {
+  grid-template-rows: 1fr;
+  visibility: visible;
+  transition: grid-template-rows 0.22s ease-out, visibility 0s;
+}
+.accordion-body > div {
+  overflow: hidden;
+  min-height: 0;
+}
+/* Filet de progression en haut de l'écran pendant un changement de page */
+.route-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3px;
+  width: 30%;
+  background: var(--accent);
+  z-index: 300;
+  animation: route-progress 1.2s ease-in-out infinite;
+}
+@keyframes route-progress {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(400vw);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .menu-enter,
+  .menu-leave,
+  .route-progress {
+    animation: none;
+  }
+  .accordion-body {
+    transition: none;
+  }
+}
+/* Sections repliables du panneau de filtres */
+.filter-section {
+  border-top: 1px solid var(--line-soft);
+}
+.filter-section-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--ink);
+  text-align: left;
+  min-height: 44px;
+}
+.filter-section-head:hover {
+  color: var(--accent-dark);
+}
+.filter-section-body {
+  padding: 0 0 8px;
 }

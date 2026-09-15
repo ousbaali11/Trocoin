@@ -14,6 +14,8 @@ import { ListingCard } from "@/components/ui/ListingCard";
 import { Modal } from "@/components/ui/Modal";
 import { Pagination } from "@/components/ui/Pagination";
 import { DiscoverSections, type DiscoverData } from "./DiscoverSections";
+import { FilterSection } from "./FilterSection";
+import { usePresence } from "@/lib/use-presence";
 import styles from "./SearchPage.module.css";
 
 /** Tri : ordre et libellés du panneau « Tous les filtres » (choix unique). */
@@ -54,6 +56,7 @@ export function SearchPage() {
   const [saveName, setSaveName] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const drawer = usePresence(filtersOpen && isMobile, 200);
 
   const get = useCallback((k: string) => params.get(k) || "", [params]);
   const category = get("category");
@@ -174,6 +177,30 @@ export function SearchPage() {
   };
 
   const activeCount = FILTER_KEYS.filter((k) => !["lng", "radius", "city_label", "sort"].includes(k) && get(k)).length + [...params.keys()].filter((k) => k.startsWith("attr.") && get(k)).length;
+  // Filtres avancés (derrière « Plus de filtres ») : tout sauf catégorie, localisation, prix et tri
+  const advancedCount = ["delivery", "delivery_anywhere", "price_type", "seller_type", "urgent", "condition", "with_photo", "since_days"].filter((k) => get(k)).length;
+  const [moreOpen, setMoreOpen] = useState(false);
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem("trocoin_filters_more");
+      if (saved === "1") setMoreOpen(true);
+    } catch {
+      /* navigation privée */
+    }
+  }, []);
+  useEffect(() => {
+    if (advancedCount > 0) setMoreOpen(true);
+  }, [advancedCount]);
+  const toggleMore = () => {
+    setMoreOpen((o) => {
+      try {
+        sessionStorage.setItem("trocoin_filters_more", o ? "0" : "1");
+      } catch {
+        /* navigation privée */
+      }
+      return !o;
+    });
+  };
   const clearAll = () => {
     const p = new URLSearchParams();
     if (get("q")) p.set("q", get("q"));
@@ -250,24 +277,11 @@ export function SearchPage() {
       </div>
 
       <div className="field">
-        <span className="label">Étendre à la livraison</span>
-        <label className="checkbox">
-          <input type="checkbox" checked={get("delivery_anywhere") === "true"} onChange={(e) => setParams({ delivery_anywhere: e.target.checked ? "true" : undefined })} />
-          Ajouter les annonces livrables partout en France
-        </label>
-        <span className="hint">{hasPlace ? `En plus des annonces autour de ${placeLabel}.` : "Utile quand une localisation est choisie : les annonces livrables s'ajoutent aux annonces proches."}</span>
-      </div>
-
-      <div className="field">
         <span className="label">Prix</span>
         <div className="form-row">
           <input className="input" type="number" min={0} placeholder="Minimum" defaultValue={get("price_min")} key={"min" + get("price_min")} onBlur={(e) => setParams({ price_min: e.target.value || undefined })} aria-label="Prix minimum" />
           <input className="input" type="number" min={0} placeholder="Maximum" defaultValue={get("price_max")} key={"max" + get("price_max")} onBlur={(e) => setParams({ price_max: e.target.value || undefined })} aria-label="Prix maximum" />
         </div>
-        <label className="checkbox" style={{ marginTop: 8 }}>
-          <input type="checkbox" checked={get("price_type") === "gratuit"} onChange={(e) => setParams({ price_type: e.target.checked ? "gratuit" : undefined })} />
-          Dons uniquement
-        </label>
       </div>
 
       <fieldset className={styles.group}>
@@ -280,66 +294,78 @@ export function SearchPage() {
         ))}
       </fieldset>
 
-      <fieldset className={styles.group}>
-        <legend className="label">Type de vendeurs</legend>
-        <label className="checkbox">
-          <input type="checkbox" checked={sellerChecked("particulier")} onChange={() => toggleSeller("particulier")} />
-          Particuliers {facets && <span className="muted">({facets.particulier})</span>}
-        </label>
-        <label className="checkbox">
-          <input type="checkbox" checked={sellerChecked("professionnel")} onChange={() => toggleSeller("professionnel")} />
-          Professionnels {facets && <span className="muted">({facets.professionnel})</span>}
-        </label>
-      </fieldset>
+      {/* Filtres avancés : masqués par défaut, dépliés par « Plus de filtres », puis section par section */}
+      <button type="button" className="btn btn-outline btn-block" style={{ marginBottom: 8 }} aria-expanded={moreOpen} aria-controls="more-filters" onClick={toggleMore} data-testid="more-filters">
+        {moreOpen ? "Moins de filtres" : `Plus de filtres${advancedCount > 0 ? ` (${advancedCount} actif${advancedCount > 1 ? "s" : ""})` : ""}`}
+      </button>
+      <div className="accordion-body" data-open={moreOpen} id="more-filters" aria-hidden={!moreOpen}>
+        <div>
+          <FilterSection id="livraison" title="Livraison" activeCount={["delivery", "delivery_anywhere"].filter((k) => get(k)).length}>
+            <label className="checkbox"><input type="checkbox" checked={get("delivery") === "true"} onChange={(e) => setParams({ delivery: e.target.checked ? "true" : undefined, ...(e.target.checked ? {} : { delivery_anywhere: undefined }) })} /> Livraison possible</label>
+            <span className="label" style={{ display: "block", marginTop: 10 }}>Étendre à la livraison</span>
+            <label className="checkbox">
+              <input type="checkbox" checked={get("delivery_anywhere") === "true"} onChange={(e) => setParams({ delivery_anywhere: e.target.checked ? "true" : undefined })} />
+              Ajouter les annonces livrables partout en France
+            </label>
+            <span className="hint">{hasPlace ? `En plus des annonces autour de ${placeLabel}.` : "Utile quand une localisation est choisie : les annonces livrables s'ajoutent aux annonces proches."}</span>
+          </FilterSection>
 
-      <div className="field">
-        <span className="label">Annonces urgentes</span>
-        <label className="checkbox"><input type="checkbox" checked={get("urgent") === "true"} onChange={(e) => setParams({ urgent: e.target.checked ? "true" : undefined })} /> Annonces urgentes uniquement</label>
-      </div>
+          <FilterSection id="dons" title="Dons et type d'annonce" activeCount={get("price_type") ? 1 : 0}>
+            <label className="checkbox">
+              <input type="checkbox" checked={get("price_type") === "gratuit"} onChange={(e) => setParams({ price_type: e.target.checked ? "gratuit" : undefined })} />
+              Dons uniquement
+            </label>
+            <div className="field" style={{ marginTop: 10, marginBottom: 0 }}>
+              <label htmlFor="f-price-type">Type d&apos;annonce</label>
+              <select id="f-price-type" className="select" value={get("price_type")} onChange={(e) => setParams({ price_type: e.target.value || undefined })}>
+                <option value="">Toutes</option>
+                <option value="gratuit">Dons (gratuit)</option>
+                <option value="echange">Échanges</option>
+                <option value="fixe">Prix fixe</option>
+                <option value="negociable">Prix négociable</option>
+                <option value="sur_demande">Prix sur demande</option>
+              </select>
+            </div>
+          </FilterSection>
 
-      <hr className="divider" />
+          <FilterSection id="vendeurs" title="Type de vendeurs" activeCount={sellerType ? 1 : 0}>
+            <label className="checkbox">
+              <input type="checkbox" checked={sellerChecked("particulier")} onChange={() => toggleSeller("particulier")} />
+              Particuliers {facets && <span className="muted">({facets.particulier})</span>}
+            </label>
+            <label className="checkbox">
+              <input type="checkbox" checked={sellerChecked("professionnel")} onChange={() => toggleSeller("professionnel")} />
+              Professionnels {facets && <span className="muted">({facets.professionnel})</span>}
+            </label>
+          </FilterSection>
 
-      <div className="field">
-        <span className="label">Options</span>
-        <label className="checkbox"><input type="checkbox" checked={get("delivery") === "true"} onChange={(e) => setParams({ delivery: e.target.checked ? "true" : undefined, ...(e.target.checked ? {} : { delivery_anywhere: undefined }) })} /> Livraison possible</label>
-        <label className="checkbox"><input type="checkbox" checked={get("with_photo") === "true"} onChange={(e) => setParams({ with_photo: e.target.checked ? "true" : undefined })} /> Avec photo uniquement</label>
-      </div>
+          <FilterSection id="urgentes" title="Annonces urgentes" activeCount={get("urgent") ? 1 : 0}>
+            <label className="checkbox"><input type="checkbox" checked={get("urgent") === "true"} onChange={(e) => setParams({ urgent: e.target.checked ? "true" : undefined })} /> Annonces urgentes uniquement</label>
+          </FilterSection>
 
-      <div className="field">
-        <label htmlFor="f-price-type">Type d&apos;annonce</label>
-        <select id="f-price-type" className="select" value={get("price_type")} onChange={(e) => setParams({ price_type: e.target.value || undefined })}>
-          <option value="">Toutes</option>
-          <option value="gratuit">Dons (gratuit)</option>
-          <option value="echange">Échanges</option>
-          <option value="fixe">Prix fixe</option>
-          <option value="negociable">Prix négociable</option>
-          <option value="sur_demande">Prix sur demande</option>
-        </select>
-      </div>
+          <FilterSection id="etat" title="État et photos" activeCount={(get("condition") ? 1 : 0) + (get("with_photo") ? 1 : 0)}>
+            {Object.entries(CONDITION_LABELS).map(([k, label]) => (
+              <label key={k} className="checkbox">
+                <input type="checkbox" checked={conditions.includes(k)} onChange={() => toggleCondition(k)} /> {label}
+              </label>
+            ))}
+            <label className="checkbox" style={{ marginTop: 6 }}><input type="checkbox" checked={get("with_photo") === "true"} onChange={(e) => setParams({ with_photo: e.target.checked ? "true" : undefined })} /> Avec photo uniquement</label>
+          </FilterSection>
 
-      <div className="field">
-        <span className="label">État</span>
-        {Object.entries(CONDITION_LABELS).map(([k, label]) => (
-          <label key={k} className="checkbox">
-            <input type="checkbox" checked={conditions.includes(k)} onChange={() => toggleCondition(k)} /> {label}
-          </label>
-        ))}
-      </div>
-
-      <div className="field">
-        <label htmlFor="f-since">Publiée depuis</label>
-        <select id="f-since" className="select" value={get("since_days")} onChange={(e) => setParams({ since_days: e.target.value || undefined })}>
-          <option value="">Toujours</option>
-          <option value="1">24 heures</option>
-          <option value="7">7 jours</option>
-          <option value="30">30 jours</option>
-        </select>
+          <FilterSection id="date" title="Date de publication" activeCount={get("since_days") ? 1 : 0}>
+            <label htmlFor="f-since" className="label">Publiée depuis</label>
+            <select id="f-since" className="select" value={get("since_days")} onChange={(e) => setParams({ since_days: e.target.value || undefined })}>
+              <option value="">Toujours</option>
+              <option value="1">24 heures</option>
+              <option value="7">7 jours</option>
+              <option value="30">30 jours</option>
+            </select>
+          </FilterSection>
+        </div>
       </div>
 
       {schema.length > 0 && (
-        <>
-          <hr className="divider" />
-          <strong style={{ display: "block", marginBottom: 10 }}>Caractéristiques {currentCategory?.child?.name || currentCategory?.root.name}</strong>
+        <FilterSection id={`caracteristiques-${category}`} title={`Caractéristiques ${currentCategory?.child?.name || currentCategory?.root.name || ""}`} defaultOpen activeCount={[...params.keys()].filter((k) => k.startsWith("attr.") && get(k)).length}>
           {schema.map((f) => (
             <div className="field" key={f.key}>
               <label htmlFor={`attr-${f.key}`}>{f.label}{f.unit ? ` (${f.unit})` : ""}</label>
@@ -375,7 +401,7 @@ export function SearchPage() {
               )}
             </div>
           ))}
-        </>
+        </FilterSection>
       )}
     </>
   );
@@ -461,9 +487,9 @@ export function SearchPage() {
           </aside>
         )}
 
-        {isMobile && filtersOpen && (
-          <div className={styles.drawerOverlay} onClick={() => setFiltersOpen(false)} role="presentation">
-            <div className={styles.drawer} role="dialog" aria-modal="true" aria-label="Tous les filtres" onClick={(e) => e.stopPropagation()}>
+        {isMobile && drawer.mounted && (
+          <div className={`${styles.drawerOverlay} ${drawer.leaving ? styles.drawerLeave : ""}`} onClick={() => setFiltersOpen(false)} role="presentation">
+            <div className={`${styles.drawer} ${drawer.leaving ? styles.drawerOut : ""}`} role="dialog" aria-modal="true" aria-label="Tous les filtres" onClick={(e) => e.stopPropagation()}>
               <div className={styles.drawerHead}>
                 <strong>Tous les filtres</strong>
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => setFiltersOpen(false)} aria-label="Fermer les filtres">✕</button>
