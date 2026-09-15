@@ -21,14 +21,17 @@ test('profil particulier : annonces dépliées, avis repliés, ouverture au clav
   await expect(annonces.getByRole('link', { name: seed.listings.vtt.title, exact: true }).first()).toBeVisible();
   const avisBtn = avis.getByRole('button', { name: /^Avis reçus \(\d+\)$/ });
   await expect(avisBtn).toHaveAttribute('aria-expanded', 'false');
-  await expect(avis.getByText(/Pas encore d'avis|Membre/).first()).toBeHidden();
+  // Le contenu replié est invisible (et non focusable), qu'il y ait des avis (scénario 05 joué avant) ou non
+  const avisBody = avis.locator('.filter-section-body');
+  await expect(avisBody).toBeHidden();
   await expect(page.getByTestId('filter-section-boutique')).toHaveCount(0); // pas d'informations de boutique pour un particulier
 
   // Clavier : Entrée sur l'en-tête ouvre la section, Espace la referme
   await avisBtn.focus();
   await page.keyboard.press('Enter');
   await expect(avisBtn).toHaveAttribute('aria-expanded', 'true');
-  await expect(avis.getByText(/Pas encore d'avis|Membre/).first()).toBeVisible();
+  await expect(avisBody).toBeVisible();
+  await expect(avisBody).toContainText(/Pas encore d'avis|\d{1,2}\/\d{1,2}\/\d{4}|\d{4}/);
   const results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
   expect(results.violations.map((v) => `${v.id} → ${v.nodes.slice(0, 2).map((n) => n.target.join(' ')).join(' | ')}`)).toEqual([]);
   await page.keyboard.press('Space');
