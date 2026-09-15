@@ -1078,3 +1078,27 @@ n'étant pas encore acheté, rien n'a été changé côté e-mail de production 
   requête lit les nouvelles colonnes sans erreur, donc la migration est passée) ;
   `POST /auth/login/2fa` avec un jeton bidon → 401 « Délai dépassé » ; `POST /auth/2fa/setup` et
   `POST /auth/email/change` sans session → 401 ; `trocoin.vercel.app/connexion` → 200.
+
+### 19.5 Contrôle qualité des nouveaux écrans — 15 septembre 2026 (fin d'après-midi)
+
+Passage sur les écrans ajoutés (QR code et codes de récupération, désactivation, connexion en
+deux temps, changement d'adresse, sous-menu des arrondissements, « Récents », champ Modèle
+dépendant, page de confirmation en erreur) à **360, 375 et 414 px**, avec la même règle que le
+premier brief : aucun texte, bloc, champ, bouton, image ou code à moins de 12 px du bord, pas de
+défilement horizontal ; couleurs de fond et de texte relevées par script (33 contrôles, tous
+conformes après corrections).
+- **Marges** : deux défauts trouvés et corrigés — dans la boîte de dialogue « Activer la double
+  authentification », le titre long rejetait le bouton ✕ sous lui sur mobile (en-tête des boîtes
+  de dialogue : titre sur deux lignes, bouton toujours à droite, valable pour toutes les boîtes du
+  site) ; dans Paramètres → Identifiants, l'adresse e-mail était coupée au milieu à 360 px
+  (libellés au-dessus des valeurs sous 480 px, l'adresse garde toute la largeur).
+- **Vocabulaire** : phrases raccourcies et concrètes (« Ouvrez l'application sur votre téléphone
+  et scannez ce QR code pour ajouter Trocoin », « Notez ces codes et gardez-les en lieu sûr. Si
+  vous perdez votre téléphone… », présentation de la double authentification en deux phrases).
+  Aucun terme technique (jeton, TOTP, HMAC, challenge) n'apparaît à l'écran ni dans les e-mails.
+- **Couleurs** : panneaux et boîtes de dialogue blancs, texte `#1f2937`, texte secondaire
+  `#5f6b78`, fond des blocs de code `#f6f8f7`, étiquettes et encarts dans les teintes claires déjà
+  utilisées (ocre, vert, bleu clair) ; aucun fond sombre. Le voile derrière une boîte de dialogue
+  est le même qu'ailleurs sur le site.
+- Suites rejouées après corrections : 26 scénarios navigateur (05, 07 axe, 08, 11 marges, 12)
+  verts ; contrôle des marges à 360 / 375 / 414 px : 33 / 33.

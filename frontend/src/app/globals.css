@@ -685,3 +685,17 @@ h2 {
     scroll-behavior: auto !important;
   }
 }
+
+/* Paramètres → Identifiants : sur petit écran, libellé au-dessus de la valeur (l'e-mail garde toute la largeur) */
+@media (max-width: 480px) {
+  .identifiants-list {
+    grid-template-columns: 1fr !important;
+    gap: 2px 0 !important;
+  }
+  .identifiants-list dt {
+    margin-top: 8px;
+  }
+  .identifiants-list dt:first-child {
+    margin-top: 0;
+  }
+}

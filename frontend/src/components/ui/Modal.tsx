@@ -59,8 +59,9 @@ export function Modal({ open, onClose, title, children, width = 520 }: { open: b
         className="panel modal-panel"
         style={{ width: "100%", maxWidth: width, maxHeight: "90vh", overflow: "auto", boxShadow: "var(--shadow-lg)" }}
       >
-        <div className="row spread" style={{ marginBottom: 16 }}>
-          <h2 id={titleId} style={{ margin: 0, fontSize: "1.15rem" }}>{title}</h2>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "nowrap", marginBottom: 16 }}>
+          {/* Le titre peut passer sur deux lignes sur mobile ; le bouton de fermeture reste à droite */}
+          <h2 id={titleId} style={{ margin: 0, fontSize: "1.15rem", flex: "1 1 auto", minWidth: 0 }}>{title}</h2>
           <button type="button" className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Fermer">
             ✕
           </button>

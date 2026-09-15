@@ -92,7 +92,7 @@ export function TwoFactorSection() {
     <section className="panel" id="double-authentification">
       <h2 className="h3">Double authentification</h2>
       <p className="small muted">
-        Facultatif. À chaque connexion, un code changeant toutes les 30 secondes vous sera demandé en plus du mot de passe, depuis une application d&apos;authentification gratuite (Google Authenticator, Aegis, Authy, Microsoft Authenticator…).
+        Facultatif. En plus du mot de passe, un code à 6 chiffres vous sera demandé à chaque connexion. Ce code s&apos;affiche dans une application gratuite sur votre téléphone (Google Authenticator, Aegis, Authy…).
       </p>
       <div className="row" style={{ gap: 12, flexWrap: "wrap", alignItems: "center" }}>
         {enabled ? (
@@ -111,7 +111,7 @@ export function TwoFactorSection() {
         {setup && !recoveryCodes && (
           <form onSubmit={enable}>
             <ol className="small" style={{ paddingLeft: 18, margin: "0 0 12px" }}>
-              <li>Ouvrez votre application d&apos;authentification et ajoutez un compte en scannant ce QR code.</li>
+              <li>Ouvrez l&apos;application sur votre téléphone et scannez ce QR code pour ajouter Trocoin.</li>
               <li>Saisissez ci-dessous le code à 6 chiffres qu&apos;elle affiche pour Trocoin.</li>
             </ol>
             <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-start" }}>
@@ -137,7 +137,7 @@ export function TwoFactorSection() {
           <div>
             <div className="alert alert-success" role="status">La double authentification est activée.</div>
             <p className="small">
-              Conservez ces codes de récupération en lieu sûr : chacun permet de vous connecter <strong>une seule fois</strong> si vous perdez l&apos;accès à votre application. Ils ne seront plus affichés.
+              Notez ces codes et gardez-les en lieu sûr. Si vous perdez votre téléphone, chaque code vous permet de vous connecter <strong>une seule fois</strong>. Ils ne seront plus affichés.
             </p>
             <ul data-testid="recovery-codes" style={{ columns: 2, listStyle: "none", padding: 12, margin: "0 0 12px", background: "var(--bg)", borderRadius: 8, fontFamily: "ui-monospace, monospace", fontSize: "0.95rem" }}>
               {recoveryCodes.map((c) => <li key={c}>{c}</li>)}
