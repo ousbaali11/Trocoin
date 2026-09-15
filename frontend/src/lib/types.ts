@@ -26,6 +26,17 @@ export interface FieldSchema {
   max?: number;
   maxLength?: number;
   filterable?: boolean;
+  /** Liste dépendante : options = optionsByParent[valeur du champ dependsOn] (ex. modèles d'une marque). */
+  dependsOn?: string;
+  optionsByParent?: Record<string, string[]>;
+}
+
+/** Options d'un champ select, en tenant compte d'une liste dépendante (modèles filtrés par la marque choisie). */
+export function fieldOptions(field: FieldSchema, values: Record<string, unknown>): string[] {
+  if (!field.dependsOn || !field.optionsByParent) return field.options ?? [];
+  const parent = values[field.dependsOn];
+  if (typeof parent === "string" && field.optionsByParent[parent]) return field.optionsByParent[parent];
+  return [];
 }
 
 export interface SellerSummary {
@@ -128,6 +139,8 @@ export interface Me {
   /** Adresse confirmée via le lien reçu par e-mail. */
   emailVerified?: boolean;
   emailVerifiedAt?: string | null;
+  /** Double authentification (application d'authentification) activée. */
+  twoFactorEnabled?: boolean;
   firstName?: string | null;
   lastName?: string | null;
   username?: string | null;
@@ -155,6 +168,8 @@ export interface Me {
   notifySms: boolean;
   /** Préférences effectives par famille d'évènement et canal (voir Paramètres → Notifications). */
   notificationPrefs?: NotificationPrefs;
+  /** Dernières localisations utilisées (5 au plus), partagées entre appareils. */
+  recentLocations?: Array<{ city: string; postalCode?: string; latitude?: number; longitude?: number }>;
   createdAt: string;
   suspendedAt?: string | null;
 }

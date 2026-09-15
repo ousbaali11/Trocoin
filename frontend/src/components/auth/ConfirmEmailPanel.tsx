@@ -11,15 +11,15 @@ export function ConfirmEmailPanel() {
   const params = useSearchParams();
   const token = params.get("token") || "";
   const { user, refresh } = useAuth();
-  const [state, setState] = useState<{ status: "pending" | "ok" | "error"; email?: string; message?: string }>({ status: "pending" });
+  const [state, setState] = useState<{ status: "pending" | "ok" | "error"; email?: string; changed?: boolean; message?: string }>({ status: "pending" });
   const sent = useRef(false);
 
   useEffect(() => {
     if (!token || sent.current) return;
     sent.current = true;
-    api<{ ok: true; email: string }>("/auth/email/verify", { method: "POST", body: { token }, token: null })
+    api<{ ok: true; email: string; changed?: boolean }>("/auth/email/verify", { method: "POST", body: { token }, token: null })
       .then(async (res) => {
-        setState({ status: "ok", email: res.email });
+        setState({ status: "ok", email: res.email, changed: !!res.changed });
         await refresh().catch(() => undefined);
       })
       .catch((err) => setState({ status: "error", message: err instanceof ApiError ? err.message : "Confirmation impossible pour le moment. Réessayez plus tard." }));
@@ -42,7 +42,9 @@ export function ConfirmEmailPanel() {
       {state.status === "pending" && <p className="muted" aria-live="polite">Vérification en cours…</p>}
       {state.status === "ok" && (
         <>
-          <div className="alert alert-success" role="status">Votre adresse {state.email} est confirmée. Merci !</div>
+          <div className="alert alert-success" role="status">
+            {state.changed ? <>Votre nouvelle adresse {state.email} est enregistrée et confirmée. Utilisez-la désormais pour vous connecter.</> : <>Votre adresse {state.email} est confirmée. Merci !</>}
+          </div>
           <p>
             {user ? <Link className="btn btn-primary" href="/compte">Aller à mon compte</Link> : <Link className="btn btn-primary" href="/connexion?next=/compte">Se connecter</Link>}
           </p>

@@ -1,13 +1,16 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { getBrowserPosition, suggestCities, type GeoSuggestion } from "@/lib/geo";
+import { arrondissementsOf, getBrowserPosition, groupSuggestions, suggestCities, type GeoSuggestion, type GroupedSuggestion } from "@/lib/geo";
+import { useRecentLocations } from "@/lib/recent-locations";
 
 /**
  * Sélecteur de localisation calqué sur leboncoin (relevé des 14 et 15 septembre 2026) :
  *  - un seul champ (« Ajouter une localisation » à l'ouverture) ;
- *  - suggestions : « Autour de moi » puis « Toute la France », puis les communes
- *    (villages et villes, référentiel adresse.data.gouv.fr) ;
+ *  - suggestions : « Autour de moi » puis « Toute la France », puis les dernières communes
+ *    utilisées (« Récents », 5 au plus), puis les communes (villages et villes, référentiel
+ *    adresse.data.gouv.fr) ; Paris, Lyon et Marseille regroupent leurs arrondissements dans un
+ *    sous-menu à déplier ;
  *  - une fois un lieu choisi, LE PANNEAU RESTE OUVERT et propose en bas le rayon :
  *    « Dans un rayon de X km », curseur à 9 positions exactement comme leboncoin
  *    (0, 1, 5, 10, 20, 30, 50, 100, 200 km), **5 km sélectionné par défaut**,
@@ -29,6 +32,8 @@ export function locationLabel(v: LocationValue, withRadius = false): string {
   return withRadius ? `${base} · ${v.radius} km` : base;
 }
 
+const itemBtn: React.CSSProperties = { width: "100%", justifyContent: "flex-start", gap: 8 };
+
 export function LocationPicker({
   value,
   onChange,
@@ -41,11 +46,14 @@ export function LocationPicker({
   placeholder?: string;
 }) {
   const panelId = useId();
+  const { recent, remember } = useRecentLocations();
   const [text, setText] = useState(value.mode === "all" ? "" : locationLabel(value, true));
   // « Toute la France » choisi explicitement : affiché dans le champ comme le serait une commune
   // (la valeur reste { mode: "all" } ; sans choix explicite, le champ garde son texte d'invite).
   const [chosenAll, setChosenAll] = useState(false);
   const [items, setItems] = useState<GeoSuggestion[]>([]);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [arrondissements, setArrondissements] = useState<Record<string, GeoSuggestion[]>>({});
   const [open, setOpen] = useState(false);
   const [locating, setLocating] = useState(false);
   const [geoError, setGeoError] = useState<string | null>(null);
@@ -59,6 +67,7 @@ export function LocationPicker({
   /** Ferme le panneau en remettant le libellé du lieu choisi dans le champ (le panneau garde le focus dans le champ pendant les clics). */
   const close = () => {
     setOpen(false);
+    setExpanded(null);
     if (value.mode !== "all") setText(locationLabel(value, true));
     else if (chosenAll) setText(ALL_FRANCE);
     (root.current?.querySelector("input") as HTMLInputElement | null)?.blur();
@@ -78,6 +87,7 @@ export function LocationPicker({
   const onInput = (t: string) => {
     setText(t);
     setGeoError(null);
+    setExpanded(null);
     abort.current?.abort();
     const ctrl = new AbortController();
     abort.current = ctrl;
@@ -118,16 +128,29 @@ export function LocationPicker({
     setOpen(true);
   };
 
-  const pickCity = (s: GeoSuggestion) => {
+  const pickCity = (s: { city: string; postcode?: string; latitude?: number; longitude?: number }) => {
     setItems([]);
+    setExpanded(null);
     setChosenAll(false);
+    remember({ city: s.city, postalCode: s.postcode, latitude: s.latitude, longitude: s.longitude });
     onChange({ mode: "city", city: s.city, postalCode: s.postcode, latitude: s.latitude, longitude: s.longitude, radius: DEFAULT_RADIUS });
     setOpen(true); // reste ouvert pour proposer le rayon
+  };
+
+  /** Déplie (ou replie) les arrondissements d'une grande ville ; la liste est chargée à la première ouverture. */
+  const toggleArrondissements = async (city: string) => {
+    if (expanded === city) return setExpanded(null);
+    setExpanded(city);
+    if (!arrondissements[city]) {
+      const list = await arrondissementsOf(city);
+      setArrondissements((a) => ({ ...a, [city]: list }));
+    }
   };
 
   const clear = () => {
     setText("");
     setItems([]);
+    setExpanded(null);
     setChosenAll(false);
     onChange({ mode: "all" });
   };
@@ -137,6 +160,8 @@ export function LocationPicker({
   const hasLabel = hasPlace || chosenAll;
   const currentLabel = () => (hasPlace ? locationLabel(value, true) : ALL_FRANCE);
   const stepIndex = hasPlace ? Math.max(0, RADIUS_STEPS.indexOf(value.radius as (typeof RADIUS_STEPS)[number])) : 2;
+  const grouped: GroupedSuggestion[] = groupSuggestions(items);
+  const showRecent = !text.trim() && recent.length > 0;
 
   return (
     <div style={{ position: "relative" }} ref={root} onKeyDown={(e) => { if (e.key === "Escape" && open) { e.preventDefault(); e.stopPropagation(); close(); } }}>
@@ -171,23 +196,62 @@ export function LocationPicker({
       </div>
       {open && (
         <div role="dialog" id={panelId} aria-label="Menu des localisations" onMouseDown={(e) => e.preventDefault()} style={{ position: "absolute", zIndex: 30, left: 0, right: 0, top: "100%", marginTop: 4, padding: 6, background: "var(--white)", border: "1px solid var(--line-soft)", borderRadius: "var(--radius-sm)", boxShadow: "var(--shadow-lg)", minWidth: 280 }}>
-          <ul aria-label="Suggestions de localisation" style={{ margin: 0, padding: 0, listStyle: "none", maxHeight: 260, overflowY: "auto" }}>
+          <ul aria-label="Suggestions de localisation" style={{ margin: 0, padding: 0, listStyle: "none", maxHeight: 300, overflowY: "auto" }}>
             {!text.trim() && <li className="small muted" style={{ padding: "6px 10px 2px" }}>Suggestions</li>}
             <li>
-              <button type="button" onClick={pickAround} aria-pressed={value.mode === "around"} className="btn btn-ghost btn-sm" style={{ width: "100%", justifyContent: "flex-start", gap: 8 }}>
+              <button type="button" onClick={pickAround} aria-pressed={value.mode === "around"} className="btn btn-ghost btn-sm" style={itemBtn}>
                 <TargetIcon /> {AROUND_ME}
               </button>
             </li>
             <li>
-              <button type="button" onClick={pickAll} aria-pressed={value.mode === "all"} className="btn btn-ghost btn-sm" style={{ width: "100%", justifyContent: "flex-start", gap: 8 }}>
+              <button type="button" onClick={pickAll} aria-pressed={value.mode === "all"} className="btn btn-ghost btn-sm" style={itemBtn}>
                 <PinIcon /> {ALL_FRANCE}
               </button>
             </li>
-            {items.map((s) => (
-              <li key={s.label + s.postcode}>
-                <button type="button" onClick={() => pickCity(s)} className="btn btn-ghost btn-sm" style={{ width: "100%", justifyContent: "flex-start", gap: 8 }}>
-                  <PinIcon /> {s.label}
-                </button>
+            {showRecent && (
+              <>
+                <li className="small muted" style={{ padding: "8px 10px 2px", borderTop: "1px solid var(--line-soft)", marginTop: 4 }}>Récents</li>
+                {recent.map((r) => (
+                  <li key={`recent-${r.city}-${r.postalCode ?? ""}`}>
+                    <button type="button" onClick={() => pickCity({ city: r.city, postcode: r.postalCode, latitude: r.latitude, longitude: r.longitude })} className="btn btn-ghost btn-sm" style={itemBtn} data-testid="recent-location">
+                      <ClockIcon /> {r.city}{r.postalCode ? ` (${r.postalCode})` : ""}
+                    </button>
+                  </li>
+                ))}
+              </>
+            )}
+            {grouped.map((g) => (
+              <li key={g.main.label + g.main.postcode}>
+                <div style={{ display: "flex", alignItems: "stretch", gap: 2 }}>
+                  <button type="button" onClick={() => pickCity(g.main)} className="btn btn-ghost btn-sm" style={{ ...itemBtn, flex: 1 }}>
+                    <PinIcon /> {g.main.label}
+                  </button>
+                  {g.arrondissementsOf && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      aria-expanded={expanded === g.arrondissementsOf}
+                      aria-label={`Arrondissements de ${g.arrondissementsOf}`}
+                      title={`Arrondissements de ${g.arrondissementsOf}`}
+                      onClick={() => toggleArrondissements(g.arrondissementsOf!)}
+                      style={{ minWidth: 44 }}
+                    >
+                      <ChevronIcon open={expanded === g.arrondissementsOf} />
+                    </button>
+                  )}
+                </div>
+                {g.arrondissementsOf && expanded === g.arrondissementsOf && (
+                  <ul aria-label={`Arrondissements de ${g.arrondissementsOf}`} style={{ margin: "2px 0 4px", padding: "0 0 0 18px", listStyle: "none", borderLeft: "2px solid var(--line-soft)", marginLeft: 14 }}>
+                    {!arrondissements[g.arrondissementsOf] && <li className="small muted" style={{ padding: "4px 10px" }}>Chargement…</li>}
+                    {arrondissements[g.arrondissementsOf]?.map((a) => (
+                      <li key={a.postcode}>
+                        <button type="button" onClick={() => pickCity(a)} className="btn btn-ghost btn-sm" style={itemBtn}>
+                          {a.label}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </li>
             ))}
           </ul>
@@ -251,6 +315,23 @@ function TargetIcon() {
       <circle cx="12" cy="12" r="7" />
       <circle cx="12" cy="12" r="2" />
       <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+    </svg>
+  );
+}
+
+function ClockIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </svg>
+  );
+}
+
+function ChevronIcon({ open }: { open: boolean }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ transform: open ? "rotate(180deg)" : undefined, transition: "transform 0.15s" }}>
+      <path d="M6 9l6 6 6-6" />
     </svg>
   );
 }

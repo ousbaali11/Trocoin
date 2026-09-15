@@ -51,10 +51,12 @@ Statuts : **présent** (déjà là avant ce tour) · **ajouté** (dans ce tour) 
 
 ## 3. Écarts volontairement non repris
 
-- Listes constructeur marque → modèle → finition (véhicules) : référentiel propriétaire.
+- Finition / version constructeur (véhicules) : référentiel propriétaire ; marque → modèle est
+  désormais couvert par une liste statique (§5.2).
 - Type d'annonce « Demande » : Trocoin ne gère que des offres.
 - Accessibilité « renfort de contraste » : les contrastes Trocoin sont conformes AA par défaut.
-- Historique des localisations recherchées : pas de traçage côté client.
+- Recherche par dates d'arrivée / départ (locations de vacances) : relève d'un moteur de
+  réservation, hors périmètre d'un site d'annonces.
 
 ## 4. Ce que ce tour a ajouté ou corrigé
 
@@ -63,3 +65,55 @@ Statuts : **présent** (déjà là avant ce tour) · **ajouté** (dans ce tour) 
 3. Affichage de **« Toute la France »** dans le champ de localisation quand il est choisi.
 4. Marges mobiles, cartes compactes, en-tête sur une ligne, fluidité (transitions, squelettes
    de chargement, retours tactiles) : voir `AUDIT.md` §16 et §17.
+
+## 5. Les six familles restantes, le menu « Partager » et les items « confort » — 15 septembre 2026 (après-midi)
+
+### 5.1 Conditions du relevé
+
+Le relevé des panneaux de filtres sur leboncoin.fr (bureau, cookies refusés) a permis d'ouvrir le
+menu « Tous les filtres » d'une famille et la liste de ses sous-catégories (Matériel professionnel :
+Tracteurs, Matériel agricole, BTP - Chantier gros-oeuvre, Poids lourds, Manutention - Levage,
+Équipements industriels, Équipements pour restaurants & hôtels, Équipements & Fournitures de bureau,
+Équipements pour commerces & marchés, Matériel médical ; les treize familles du menu, dont
+« Locations de vacances », « Animaux », « Services », « Famille », « Loisirs »). Au premier choix
+d'une sous-catégorie, le site a répondu « Accès temporairement restreint » (protection
+anti-robot), encore actif une heure plus tard. Aucun contournement n'a été tenté, conformément à la
+règle du projet. **Les filtres détaillés ci-dessous n'ont donc pas été observés ce jour** : ils
+reposent sur la connaissance générale du site et sont à confirmer lors d'un passage manuel
+(≈ 15 minutes depuis un navigateur normal, une sous-catégorie à la fois).
+
+**Une exception, observée pour de bon** : deux heures plus tard, la page de résultats de la
+famille Animaux s'est ouverte et son menu « Tous les filtres » a pu être lu en entier — Prix,
+**Type d'animal** (Tout, Chiens, Chats, Nouveaux animaux de compagnie, Equidés, Animaux de la
+ferme, Oiseaux, Poissons, avec le nombre d'annonces de chaque valeur), Tri, Type d'annonces
+(Offres / Demandes), Type de vendeurs, Annonces urgentes. Le blocage est revenu au clic suivant.
+La liste « Animal » de Trocoin a été alignée sur ces valeurs.
+
+### 5.2 Statut par famille
+
+| Famille | Filtres attendus sur leboncoin (à confirmer) | Trocoin avant ce tour | Ajouté ce tour | Statut |
+|---|---|---|---|---|
+| Matériel professionnel | Par sous-catégorie : type de matériel, marque, année, heures, puissance (tracteurs), PTAC (poids lourds) | Marque et année à la racine seulement (non hérités par BTP et Agricole), type + heures | BTP et Agricole : marque, année, heures filtrables, types étendus (poids lourds, manutention, semis, fenaison, pulvérisation), puissance (ch) ; Restauration : types étendus, marque ; Fournitures de bureau : type, marque, quantité | ajouté |
+| Famille | Équipement bébé : produit, type, marque, couleur ; mobilier enfant : type ; vêtements bébé : taille, type, univers, marque | Type de produit, marque, couleur (puériculture) ; taille + marque (vêtements) | Puériculture : 5 types de plus ; mobilier : types étendus, marque, couleur ; vêtements : type de vêtement, fille / garçon / mixte, marque filtrable | ajouté |
+| Loisirs | Sport : univers, activité (liste), produit, marque ; instruments : type, niveau ; vélos : type, taille de cadre, roues, matériau, marque ; livres : genre, format ; jouets : âge, type | Discipline en texte libre, type d'instrument, type de vélo, genre | Sport : activité en liste (19 entrées) + univers ; vélos : taille de cadre en liste, taille des roues, matériau ; livres : genres étendus + format ; jouets et collection : filtres activés, marque | ajouté |
+| Locations de vacances | Type de logement, capacité, chambres, environnement, classement (étoiles), équipements (piscine, jardin, wifi, climatisation, parking, TV, lave-linge, barbecue), animaux acceptés ; dates | Type, voyageurs, piscine, jardin, animaux, wifi, climatisation, parking, chambres | Types : mobil-homes, hôtels, insolites ; environnement ; classement ; TV, lave-linge, barbecue ; wifi / climatisation / parking / chambres filtrables | ajouté (dates : non pertinent, §3) |
+| Services | Cours : matière (liste), niveau ; prestations : type ; services animaux : type, animal, tarif ; entraide : type d'aide | Matière en texte libre ; sous-catégories Services animaux et Entraide sans champs propres | Matière en liste (17 entrées), niveau filtrable, événementiel filtrable ; schémas propres pour Services animaux et Entraide entre voisins | ajouté |
+| Animaux | **Observé** : Type d'animal (Chiens, Chats, Nouveaux animaux de compagnie, Equidés, Animaux de la ferme, Oiseaux, Poissons), Offres / Demandes ; attendus par sous-catégorie : race, âge, sexe, vacciné, identifié, LOF ; accessoires : animal concerné, type | Type (9 valeurs dont Rongeur, Reptile, Cheval), race, âge en texte libre, sexe, identification, vacciné, LOF | Liste « Animal » alignée sur les 7 valeurs observées + Autre ; âge en tranches filtrable, race et sexe filtrables (vente / don), sexe ajouté aux dons ; accessoires : animal concerné, types étendus, marque | ajouté (Demandes : non pertinent, §3) |
+
+### 5.3 Menu « Partager »
+
+Le menu de partage d'une annonce leboncoin n'a pas pu être ouvert (même blocage). D'après la
+connaissance générale du site, il propose : copier le lien, WhatsApp, Messenger, e-mail, Facebook,
+et le partage natif du téléphone sur mobile. Trocoin propose : partage natif du téléphone (quand
+il existe), copier le lien, WhatsApp, e-mail, Facebook, X. **Équivalent** : seul Messenger manque,
+et il exige une clé d'application Facebook — non repris. Aucun changement ce tour.
+
+### 5.4 Items « confort » livrés (AUDIT.md §19)
+
+| Fonctionnalité | Trocoin | Statut |
+|---|---|---|
+| Listes marque → modèle (voitures, motos, utilitaires) | Listes dépendantes : 57 marques de voitures, 31 de motos, 17 d'utilitaires, « Autre » toujours possible ; le modèle se filtre selon la marque au dépôt comme en recherche ; validé côté serveur | ajouté |
+| Historique des localisations | 5 dernières communes proposées avant la saisie (« Récents ») dans la recherche et le dépôt ; navigateur + compte quand connecté (partagé entre appareils) | ajouté |
+| Arrondissements groupés | Paris, Lyon, Marseille : une entrée « toute la ville » et un sous-menu dépliable des arrondissements (1er à 20e, 1er à 9e, 1er à 16e), libellés « Paris 11e (75011) » | ajouté |
+| Changement d'e-mail avec confirmation | Mot de passe exigé, lien envoyé à la nouvelle adresse (24 h), avertissement à l'ancienne à la demande et à la confirmation | ajouté |
+| Double authentification | TOTP (Google Authenticator, Aegis, Authy…), QR code, 8 codes de récupération à usage unique, désactivation avec mot de passe + code ; facultative | ajouté |

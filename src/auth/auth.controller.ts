@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, HttpCode, Post, Req, UseGuards } from '@
 import { Throttle } from '@nestjs/throttler';
 import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { AuthService } from './auth.service';
-import { ChangePasswordDto, ForgotPasswordDto, LoginDto, RegisterDto, ResetPasswordDto, VerifyEmailDto } from './dto/register.dto';
+import { ChangeEmailDto, ChangePasswordDto, DisableTwoFactorDto, ForgotPasswordDto, LoginDto, RegisterDto, ResetPasswordDto, TwoFactorCodeDto, TwoFactorLoginDto, VerifyEmailDto } from './dto/register.dto';
 import { RegisterPhoneDto } from './dto/register-phone.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
@@ -87,6 +87,50 @@ export class AuthController {
   @Throttle({ default: { limit: 3, ttl: 3_600_000 } })
   resendVerification(@Req() req: any) {
     return this.authService.resendEmailVerification(req.user.userId);
+  }
+
+  /** Seconde étape de la connexion quand la double authentification est activée : 10 essais / 10 min / IP. */
+  @Post('login/2fa')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 600_000 } })
+  loginTwoFactor(@Req() req: any, @Body() dto: TwoFactorLoginDto) {
+    return this.authService.completeTwoFactorLogin(dto.challengeToken, dto.code, this.meta(req));
+  }
+
+  /** Double authentification : secret + QR code (connecté). */
+  @UseGuards(JwtAuthGuard)
+  @Post('2fa/setup')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 900_000 } })
+  setupTwoFactor(@Req() req: any) {
+    return this.authService.setupTwoFactor(req.user.userId);
+  }
+
+  /** Activation : le code de l'application confirme le secret, les codes de récupération sont renvoyés une seule fois. */
+  @UseGuards(JwtAuthGuard)
+  @Post('2fa/enable')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 900_000 } })
+  enableTwoFactor(@Req() req: any, @Body() dto: TwoFactorCodeDto) {
+    return this.authService.enableTwoFactor(req.user.userId, dto.code);
+  }
+
+  /** Désactivation : mot de passe + code de l'application ou code de récupération. */
+  @UseGuards(JwtAuthGuard)
+  @Post('2fa/disable')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 900_000 } })
+  disableTwoFactor(@Req() req: any, @Body() dto: DisableTwoFactorDto) {
+    return this.authService.disableTwoFactor(req.user.userId, dto.password, dto.code);
+  }
+
+  /** Changement d'adresse e-mail : mot de passe exigé, lien envoyé à la nouvelle adresse (5 demandes / h / IP). */
+  @UseGuards(JwtAuthGuard)
+  @Post('email/change')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 3_600_000 } })
+  changeEmail(@Req() req: any, @Body() dto: ChangeEmailDto) {
+    return this.authService.requestEmailChange(req.user.userId, dto.newEmail, dto.password);
   }
 
   /** Rotation du refresh token. */

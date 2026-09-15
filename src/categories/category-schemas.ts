@@ -5,6 +5,8 @@
  *  - côté front (GET /categories/:slug/schema) pour générer le formulaire
  *    de dépôt et les filtres spécifiques.
  */
+import { marquesOf, MODELES_MOTOS, MODELES_UTILITAIRES, MODELES_VOITURES, tousModelesOf } from './vehicle-models';
+
 export type FieldType = 'select' | 'number' | 'text' | 'boolean';
 
 export interface FieldSchema {
@@ -18,6 +20,12 @@ export interface FieldSchema {
   max?: number;
   maxLength?: number;
   filterable?: boolean; // proposé comme filtre de recherche
+  /**
+   * Liste dépendante (select) : les options proposées sont `optionsByParent[valeur du champ dependsOn]`
+   * (ex. modèles d'une marque). Sans valeur parente, toutes les options de toutes les listes sont acceptées.
+   */
+  dependsOn?: string;
+  optionsByParent?: Record<string, string[]>;
 }
 
 const COULEURS = ['Noir', 'Blanc', 'Gris', 'Argent', 'Bleu', 'Rouge', 'Vert', 'Jaune', 'Orange', 'Beige', 'Marron', 'Bordeaux', 'Violet', 'Rose', 'Doré', 'Multicolore', 'Autre'];
@@ -27,14 +35,22 @@ const CARBURANTS = ['Essence', 'Diesel', 'Hybride', 'Hybride rechargeable', 'Él
 const BOITES = ['Manuelle', 'Automatique'];
 const DPE = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'Non soumis'];
 const UNIVERS = ['Femme', 'Homme', 'Fille', 'Garçon', 'Bébé', 'Unisexe'];
+const SPORTS = ['Fitness / Musculation', 'Running / Athlétisme', 'Football', 'Rugby', 'Basketball', 'Tennis / Padel / Badminton', 'Cyclisme', 'Natation / Plongée', 'Randonnée / Trekking', 'Ski / Snowboard', 'Sports de glisse (surf, skate)', 'Sports de combat / Arts martiaux', 'Golf', 'Équitation', 'Pêche / Chasse', 'Camping / Plein air', 'Danse / Gymnastique', 'Yoga / Pilates', 'Autre'];
+const MATIERES = ['Mathématiques', 'Français', 'Anglais', 'Espagnol', 'Allemand', 'Italien', 'Physique-chimie', 'SVT / Biologie', 'Histoire-géographie', 'Philosophie', 'Économie / Gestion', 'Informatique / Programmation', 'Musique', 'Arts plastiques', 'Soutien scolaire (toutes matières)', 'Préparation aux examens', 'Autre'];
+// Valeurs relevées sur leboncoin.fr le 15 septembre 2026 (filtre « Type d'animal » de la famille Animaux)
+const ANIMAUX = ['Chien', 'Chat', 'Nouvel animal de compagnie (rongeur, reptile, furet…)', 'Équidé', 'Animal de la ferme', 'Oiseau', 'Poisson', 'Autre'];
+const AGES_ANIMAL = ['Moins de 3 mois', '3 à 6 mois', '6 mois à 1 an', '1 à 3 ans', '3 à 8 ans', 'Plus de 8 ans'];
 const TAILLES = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', '34', '36', '38', '40', '42', '44', '46', '48', '50', '52', 'Unique'];
 
-const VEHICULE_BASE: FieldSchema[] = [
-  { key: 'marque', label: 'Marque', type: 'text', required: true, maxLength: 40, filterable: true },
-  { key: 'modele', label: 'Modèle', type: 'text', required: true, maxLength: 60, filterable: true },
-  { key: 'annee', label: 'Année de mise en circulation', type: 'number', required: true, min: 1900, max: 2027, filterable: true },
-  { key: 'kilometrage', label: 'Kilométrage', type: 'number', required: true, unit: 'km', min: 0, max: 2_000_000, filterable: true },
-];
+/** Marque et modèle en listes dépendantes (référentiel statique `vehicle-models.ts`), puis année et kilométrage. */
+function vehiculeBase(modeles: Record<string, string[]>): FieldSchema[] {
+  return [
+    { key: 'marque', label: 'Marque', type: 'select', required: true, options: marquesOf(modeles), filterable: true },
+    { key: 'modele', label: 'Modèle', type: 'select', required: true, dependsOn: 'marque', optionsByParent: modeles, filterable: true },
+    { key: 'annee', label: 'Année de mise en circulation', type: 'number', required: true, min: 1900, max: 2027, filterable: true },
+    { key: 'kilometrage', label: 'Kilométrage', type: 'number', required: true, unit: 'km', min: 0, max: 2_000_000, filterable: true },
+  ];
+}
 
 const IMMO_BASE: FieldSchema[] = [
   { key: 'type_bien', label: 'Type de bien', type: 'select', required: true, options: ['Appartement', 'Maison', 'Terrain', 'Parking / Box', 'Local commercial', 'Bureau', 'Immeuble', 'Autre'], filterable: true },
@@ -54,7 +70,7 @@ export const CATEGORY_SCHEMAS: Record<string, FieldSchema[]> = {
   // ---------- Véhicules ----------
   'vehicules': [],
   'voitures': [
-    ...VEHICULE_BASE,
+    ...vehiculeBase(MODELES_VOITURES),
     { key: 'type_vehicule', label: 'Type de véhicule', type: 'select', options: TYPES_VEHICULE, filterable: true },
     { key: 'carburant', label: 'Carburant', type: 'select', required: true, options: CARBURANTS, filterable: true },
     { key: 'boite', label: 'Boîte de vitesse', type: 'select', required: true, options: BOITES, filterable: true },
@@ -69,7 +85,7 @@ export const CATEGORY_SCHEMAS: Record<string, FieldSchema[]> = {
     { key: 'premiere_main', label: 'Première main', type: 'boolean' },
   ],
   'motos': [
-    ...VEHICULE_BASE,
+    ...vehiculeBase(MODELES_MOTOS),
     { key: 'cylindree', label: 'Cylindrée', type: 'number', required: true, unit: 'cm³', min: 49, max: 3000, filterable: true },
     { key: 'type_moto', label: 'Type', type: 'select', options: ['Roadster', 'Sportive', 'Trail', 'Custom', 'Routière', 'Scooter', '125', 'Cross / Enduro', 'Autre'] },
     { key: 'permis', label: 'Permis requis', type: 'select', options: ['AM', 'A1', 'A2', 'A', 'B'] },
@@ -77,7 +93,7 @@ export const CATEGORY_SCHEMAS: Record<string, FieldSchema[]> = {
     { key: 'couleur', label: 'Couleur', type: 'select', options: COULEURS, filterable: true },
   ],
   'utilitaires': [
-    ...VEHICULE_BASE,
+    ...vehiculeBase(MODELES_UTILITAIRES),
     { key: 'carburant', label: 'Carburant', type: 'select', required: true, options: CARBURANTS, filterable: true },
     { key: 'boite', label: 'Boîte de vitesse', type: 'select', options: BOITES },
     { key: 'ptac', label: 'PTAC', type: 'number', unit: 'kg', min: 500, max: 44_000 },
@@ -240,30 +256,35 @@ export const CATEGORY_SCHEMAS: Record<string, FieldSchema[]> = {
   // ---------- Loisirs ----------
   'loisirs': [],
   'livres': [
-    { key: 'genre', label: 'Genre', type: 'select', options: ['Roman', 'BD / Manga', 'Jeunesse', 'Scolaire', 'Beaux livres', 'Pratique', 'Autre'] },
+    { key: 'genre', label: 'Genre', type: 'select', options: ['Roman', 'Policier / Thriller', 'Science-fiction / Fantasy', 'BD / Manga', 'Jeunesse', 'Scolaire / Universitaire', 'Beaux livres', 'Pratique / Cuisine', 'Histoire / Biographie', 'Autre'], filterable: true },
     { key: 'auteur', label: 'Auteur', type: 'text', maxLength: 60 },
+    { key: 'format', label: 'Format', type: 'select', options: ['Poche', 'Grand format', 'Relié', 'Lot de livres'], filterable: true },
   ],
   'musique-instruments': [
-    { key: 'type_instrument', label: 'Type', type: 'select', options: ['Guitare', 'Piano / Clavier', 'Batterie / Percussions', 'Vent', 'Cordes', 'DJ / Studio', 'Vinyles / CD', 'Autre'] },
+    { key: 'type_instrument', label: 'Type', type: 'select', options: ['Guitare', 'Piano / Clavier', 'Batterie / Percussions', 'Vent', 'Cordes', 'DJ / Studio', 'Vinyles / CD', 'Autre'], filterable: true },
     { key: 'marque', label: 'Marque', type: 'text', maxLength: 40 },
     { key: 'niveau', label: 'Niveau', type: 'select', options: ['Débutant', 'Intermédiaire', 'Confirmé', 'Professionnel'], filterable: true },
   ],
   'sports-hobbies': [
-    { key: 'sport', label: 'Discipline', type: 'text', maxLength: 40, filterable: true },
-    { key: 'marque', label: 'Marque', type: 'text', maxLength: 40 },
+    { key: 'sport', label: 'Activité', type: 'select', options: SPORTS, filterable: true },
+    { key: 'univers', label: 'Univers', type: 'select', options: ['Homme', 'Femme', 'Enfant', 'Mixte'], filterable: true },
+    { key: 'marque', label: 'Marque', type: 'text', maxLength: 40, filterable: true },
     { key: 'type_produit', label: 'Produit', type: 'select', options: ['Matériel', 'Vêtement', 'Chaussures', 'Accessoire', 'Nutrition'], filterable: true },
   ],
   'velos': [
     { key: 'type_velo', label: 'Type', type: 'select', required: true, options: ['VTT', 'Route', 'Ville', 'Électrique', 'Enfant', 'Gravel', 'BMX', 'Pliant', 'Autre'], filterable: true },
-    { key: 'taille_cadre', label: 'Taille du cadre', type: 'text', maxLength: 10 },
-    { key: 'marque', label: 'Marque', type: 'text', maxLength: 40 },
+    { key: 'taille_cadre', label: 'Taille du cadre', type: 'select', options: ['XS', 'S', 'M', 'L', 'XL', 'Enfant'], filterable: true },
+    { key: 'roues', label: 'Taille des roues', type: 'select', options: ['12"', '14"', '16"', '20"', '24"', '26"', '27,5"', '28"', '29"'], filterable: true },
+    { key: 'materiau', label: 'Matériau du cadre', type: 'select', options: ['Aluminium', 'Carbone', 'Acier', 'Titane', 'Autre'] },
+    { key: 'marque', label: 'Marque', type: 'text', maxLength: 40, filterable: true },
   ],
   'jeux-jouets': [
-    { key: 'age', label: 'Âge conseillé', type: 'select', options: ['0-2 ans', '3-5 ans', '6-9 ans', '10 ans et plus'] },
-    { key: 'type_jouet', label: 'Type', type: 'select', options: ['Jeu de société', 'Puzzle', 'Poupée / Figurine', 'Construction', 'Éveil', 'Plein air', 'Autre'] },
+    { key: 'age', label: 'Âge conseillé', type: 'select', options: ['0-2 ans', '3-5 ans', '6-9 ans', '10 ans et plus'], filterable: true },
+    { key: 'type_jouet', label: 'Type', type: 'select', options: ['Jeu de société', 'Puzzle', 'Poupée / Figurine', 'Construction', 'Éveil', 'Plein air', 'Autre'], filterable: true },
+    { key: 'marque', label: 'Marque', type: 'text', maxLength: 40 },
   ],
   'collection': [
-    { key: 'type_collection', label: 'Type', type: 'select', options: ['Monnaies', 'Timbres', 'Cartes', 'Figurines', 'Militaria', 'Vintage', 'Autre'] },
+    { key: 'type_collection', label: 'Type', type: 'select', options: ['Monnaies', 'Timbres', 'Cartes', 'Figurines', 'Militaria', 'Vintage', 'Autre'], filterable: true },
   ],
 
   // ---------- Matériel professionnel ----------
@@ -272,17 +293,27 @@ export const CATEGORY_SCHEMAS: Record<string, FieldSchema[]> = {
     { key: 'annee', label: 'Année', type: 'number', min: 1900, max: 2027 },
   ],
   'btp': [
-    { key: 'type_materiel', label: 'Type', type: 'select', options: ['Engin de chantier', 'Échafaudage', 'Outillage', 'Matériaux', 'Autre'], filterable: true },
-    { key: 'heures', label: 'Heures de fonctionnement', type: 'number', min: 0, max: 100_000 },
+    { key: 'type_materiel', label: 'Type', type: 'select', options: ['Engin de chantier', 'Poids lourd / Camion', 'Manutention / Levage', 'Échafaudage', 'Outillage', 'Matériaux', 'Autre'], filterable: true },
+    { key: 'marque', label: 'Marque', type: 'text', maxLength: 40, filterable: true },
+    { key: 'annee', label: 'Année', type: 'number', min: 1900, max: 2027, filterable: true },
+    { key: 'heures', label: 'Heures de fonctionnement', type: 'number', min: 0, max: 100_000, filterable: true },
   ],
   'agricole': [
-    { key: 'type_materiel', label: 'Type', type: 'select', options: ['Tracteur', 'Remorque', 'Outil de travail du sol', 'Élevage', 'Autre'], filterable: true },
-    { key: 'heures', label: 'Heures de fonctionnement', type: 'number', min: 0, max: 100_000 },
+    { key: 'type_materiel', label: 'Type', type: 'select', options: ['Tracteur', 'Remorque', 'Outil de travail du sol', 'Semis / Récolte', 'Fenaison', 'Pulvérisation', 'Élevage', 'Autre'], filterable: true },
+    { key: 'marque', label: 'Marque', type: 'text', maxLength: 40, filterable: true },
+    { key: 'annee', label: 'Année', type: 'number', min: 1900, max: 2027, filterable: true },
+    { key: 'heures', label: 'Heures de fonctionnement', type: 'number', min: 0, max: 100_000, filterable: true },
+    { key: 'puissance', label: 'Puissance', type: 'number', unit: 'ch', min: 1, max: 1000, filterable: true },
   ],
   'restauration-hotellerie': [
-    { key: 'type_materiel', label: 'Type', type: 'select', options: ['Cuisson', 'Froid', 'Lavage', 'Mobilier', 'Bar / Café', 'Autre'] },
+    { key: 'type_materiel', label: 'Type', type: 'select', options: ['Cuisson', 'Froid', 'Lavage', 'Préparation', 'Mobilier', 'Bar / Café', 'Vaisselle', 'Autre'], filterable: true },
+    { key: 'marque', label: 'Marque', type: 'text', maxLength: 40 },
   ],
-  'fournitures-bureau': [],
+  'fournitures-bureau': [
+    { key: 'type_fourniture', label: 'Type', type: 'select', options: ['Mobilier de bureau', 'Informatique / Bureautique', 'Papeterie', 'Machines (photocopieur, plastifieuse…)', 'Aménagement de commerce', 'Autre'], filterable: true },
+    { key: 'marque', label: 'Marque', type: 'text', maxLength: 40 },
+    { key: 'quantite', label: 'Quantité', type: 'number', min: 1, max: 10_000 },
+  ],
 
   // ---------- Services ----------
   'services': [
@@ -290,8 +321,8 @@ export const CATEGORY_SCHEMAS: Record<string, FieldSchema[]> = {
     { key: 'zone', label: 'Zone d\'intervention', type: 'text', maxLength: 80 },
   ],
   'cours-particuliers': [
-    { key: 'matiere', label: 'Matière', type: 'text', required: true, maxLength: 40, filterable: true },
-    { key: 'niveau', label: 'Niveau', type: 'select', options: ['Primaire', 'Collège', 'Lycée', 'Supérieur', 'Adulte'] },
+    { key: 'matiere', label: 'Matière', type: 'select', required: true, options: MATIERES, filterable: true },
+    { key: 'niveau', label: 'Niveau', type: 'select', options: ['Primaire', 'Collège', 'Lycée', 'Supérieur', 'Adulte'], filterable: true },
     { key: 'a_distance', label: 'Cours à distance possible', type: 'boolean' },
   ],
   'jardinerie-bricolage': [
@@ -314,7 +345,7 @@ export const CATEGORY_SCHEMAS: Record<string, FieldSchema[]> = {
     { key: 'vehicule', label: 'Véhiculé', type: 'boolean' },
   ],
   'evenementiel': [
-    { key: 'type_prestation', label: 'Type', type: 'select', options: ['DJ / Musicien', 'Photographe', 'Traiteur', 'Location de matériel', 'Animation', 'Autre'] },
+    { key: 'type_prestation', label: 'Type', type: 'select', options: ['DJ / Musicien', 'Photographe', 'Traiteur', 'Location de matériel', 'Animation', 'Autre'], filterable: true },
   ],
   'artistes-musiciens': [
     { key: 'discipline', label: 'Discipline', type: 'select', options: ['Musicien', 'Chanteur', 'DJ', 'Comédien', 'Magicien', 'Peintre / Illustrateur', 'Autre'], filterable: true },
@@ -335,56 +366,76 @@ export const CATEGORY_SCHEMAS: Record<string, FieldSchema[]> = {
   'services-a-la-personne': [
     { key: 'type_service', label: 'Type', type: 'select', options: ['Garde d\'enfants', 'Aide à domicile', 'Ménage', 'Garde d\'animaux', 'Bricolage', 'Autre'], filterable: true },
   ],
+  'services-animaux': [
+    { key: 'type_service', label: 'Type', type: 'select', options: ['Garde à domicile', 'Pension', 'Promenade', 'Toilettage', 'Éducation / Dressage', 'Transport', 'Autre'], filterable: true },
+    { key: 'animal', label: 'Animal', type: 'select', options: ['Chien', 'Chat', 'Rongeur', 'Oiseau', 'Cheval', 'Autre'], filterable: true },
+    { key: 'tarif_type', label: 'Type de tarif', type: 'select', options: ['Horaire', 'Journée', 'Forfait', 'Sur devis'], filterable: true },
+  ],
+  'entraide-voisins': [
+    { key: 'type_aide', label: 'Type d\'aide', type: 'select', options: ['Courses', 'Bricolage', 'Jardinage', 'Informatique', 'Transport', 'Garde', 'Prêt de matériel', 'Autre'], filterable: true },
+  ],
 
   // ---------- Vacances ----------
   // Référence phase 2 : type d'hébergement (liste), caractéristiques et
   // nombre de voyageurs = champs du dépôt ET filtres de recherche.
   'vacances': [
-    { key: 'type_hebergement', label: 'Type d\'hébergement', type: 'select', required: true, options: ['Maisons et villas', 'Appartements', 'Chalets', 'Chambres d\'hôtes', 'Campings'], filterable: true },
+    { key: 'type_hebergement', label: 'Type d\'hébergement', type: 'select', required: true, options: ['Maisons et villas', 'Appartements', 'Chalets', 'Mobil-homes', 'Chambres d\'hôtes', 'Campings', 'Hôtels', 'Hébergements insolites'], filterable: true },
+    { key: 'environnement', label: 'Environnement', type: 'select', options: ['Mer', 'Montagne', 'Campagne', 'Ville', 'Lac / Rivière'], filterable: true },
+    { key: 'classement', label: 'Classement', type: 'select', options: ['Non classé', '1 étoile', '2 étoiles', '3 étoiles', '4 étoiles', '5 étoiles'], filterable: true },
     { key: 'voyageurs', label: 'Nombre de voyageurs', type: 'select', required: true, options: ['Solo', 'À deux', 'À quatre', 'À six', 'Plus de six'], filterable: true },
     { key: 'piscine', label: 'Piscine', type: 'boolean', filterable: true },
     { key: 'jardin', label: 'Jardin', type: 'boolean', filterable: true },
     { key: 'animaux_acceptes', label: 'Animaux acceptés', type: 'boolean', filterable: true },
-    { key: 'wifi', label: 'Wifi', type: 'boolean' },
-    { key: 'climatisation', label: 'Climatisation', type: 'boolean' },
-    { key: 'parking', label: 'Parking', type: 'boolean' },
-    { key: 'chambres', label: 'Chambres', type: 'number', min: 0, max: 30 },
+    { key: 'wifi', label: 'Wifi', type: 'boolean', filterable: true },
+    { key: 'climatisation', label: 'Climatisation', type: 'boolean', filterable: true },
+    { key: 'parking', label: 'Parking', type: 'boolean', filterable: true },
+    { key: 'tv', label: 'Télévision', type: 'boolean' },
+    { key: 'lave_linge', label: 'Lave-linge', type: 'boolean' },
+    { key: 'barbecue', label: 'Barbecue', type: 'boolean' },
+    { key: 'chambres', label: 'Chambres', type: 'number', min: 0, max: 30, filterable: true },
   ],
 
   // ---------- Famille ----------
   'famille': [],
   'puericulture': [
-    { key: 'type_produit', label: 'Type', type: 'select', options: ['Poussette', 'Siège auto', 'Porte-bébé', 'Chaise haute', 'Jouet d\'éveil', 'Autre'], filterable: true },
+    { key: 'type_produit', label: 'Type', type: 'select', options: ['Poussette', 'Siège auto', 'Porte-bébé', 'Chaise haute', 'Lit parapluie', 'Transat / Balancelle', 'Baignoire / Toilette', 'Repas / Biberons', 'Sécurité', 'Jouet d\'éveil', 'Autre'], filterable: true },
     { key: 'marque', label: 'Marque', type: 'text', maxLength: 40 },
     { key: 'couleur', label: 'Couleur', type: 'select', options: COULEURS, filterable: true },
   ],
   'mobilier-bebe': [
-    { key: 'type_meuble', label: 'Type', type: 'select', options: ['Lit', 'Commode', 'Table à langer', 'Parc', 'Autre'] },
+    { key: 'type_meuble', label: 'Type', type: 'select', options: ['Lit', 'Lit évolutif', 'Commode', 'Table à langer', 'Armoire', 'Bureau / Chaise enfant', 'Parc', 'Autre'], filterable: true },
+    { key: 'marque', label: 'Marque', type: 'text', maxLength: 40 },
+    { key: 'couleur', label: 'Couleur', type: 'select', options: COULEURS, filterable: true },
   ],
   'vetements-bebe': [
     { key: 'taille_bebe', label: 'Taille', type: 'select', required: true, options: ['Prématuré', 'Naissance', '1 mois', '3 mois', '6 mois', '9 mois', '12 mois', '18 mois', '24 mois', '36 mois'], filterable: true },
-    { key: 'marque', label: 'Marque', type: 'text', maxLength: 40 },
+    { key: 'type_vetement', label: 'Type', type: 'select', options: ['Body', 'Pyjama', 'Ensemble', 'Robe', 'Pantalon', 'Pull / Gilet', 'Manteau / Combinaison', 'Chaussures', 'Lot de vêtements', 'Autre'], filterable: true },
+    { key: 'sexe', label: 'Pour', type: 'select', options: ['Fille', 'Garçon', 'Mixte'], filterable: true },
+    { key: 'marque', label: 'Marque', type: 'text', maxLength: 40, filterable: true },
   ],
 
   // ---------- Animaux ----------
   'animaux': [],
   'animaux-vente-don': [
-    { key: 'type_animal', label: 'Animal', type: 'select', required: true, options: ['Chien', 'Chat', 'Rongeur', 'Oiseau', 'Poisson', 'Reptile', 'Cheval', 'Animal de ferme', 'Autre'], filterable: true },
-    { key: 'race', label: 'Race', type: 'text', maxLength: 40 },
-    { key: 'age', label: 'Âge', type: 'text', maxLength: 20 },
-    { key: 'sexe', label: 'Sexe', type: 'select', options: ['Mâle', 'Femelle', 'Non précisé'] },
+    { key: 'type_animal', label: 'Animal', type: 'select', required: true, options: ANIMAUX, filterable: true },
+    { key: 'race', label: 'Race', type: 'text', maxLength: 40, filterable: true },
+    { key: 'age', label: 'Âge', type: 'select', options: AGES_ANIMAL, filterable: true },
+    { key: 'sexe', label: 'Sexe', type: 'select', options: ['Mâle', 'Femelle', 'Non précisé'], filterable: true },
     // Obligation légale française (loi du 30 novembre 2021) pour chiens et chats
     { key: 'identification', label: 'N° d\'identification (I-CAD) ou SIREN de l\'éleveur', type: 'text', required: true, maxLength: 20 },
     { key: 'vaccine', label: 'Vacciné', type: 'boolean' },
     { key: 'lof', label: 'Inscrit au LOF / LOOF', type: 'boolean' },
   ],
   'accessoires-animaux': [
-    { key: 'type_accessoire', label: 'Type', type: 'select', options: ['Cage / Niche', 'Alimentation', 'Jouet', 'Transport', 'Toilettage', 'Autre'] },
+    { key: 'animal', label: 'Animal concerné', type: 'select', options: ['Chien', 'Chat', 'Rongeur', 'Oiseau', 'Poisson / Aquarium', 'Reptile / Terrarium', 'Cheval', 'Autre'], filterable: true },
+    { key: 'type_accessoire', label: 'Type', type: 'select', options: ['Cage / Niche / Enclos', 'Aquarium / Terrarium', 'Alimentation', 'Jouet', 'Transport', 'Toilettage / Soins', 'Sellerie / Équitation', 'Autre'], filterable: true },
+    { key: 'marque', label: 'Marque', type: 'text', maxLength: 40 },
   ],
   'animaux-dons': [
-    { key: 'type_animal', label: 'Animal', type: 'select', required: true, options: ['Chien', 'Chat', 'Rongeur', 'Oiseau', 'Poisson', 'Reptile', 'Cheval', 'Animal de ferme', 'Autre'], filterable: true },
-    { key: 'race', label: 'Race', type: 'text', maxLength: 40 },
-    { key: 'age', label: 'Âge', type: 'text', maxLength: 20 },
+    { key: 'type_animal', label: 'Animal', type: 'select', required: true, options: ANIMAUX, filterable: true },
+    { key: 'race', label: 'Race', type: 'text', maxLength: 40, filterable: true },
+    { key: 'age', label: 'Âge', type: 'select', options: AGES_ANIMAL, filterable: true },
+    { key: 'sexe', label: 'Sexe', type: 'select', options: ['Mâle', 'Femelle', 'Non précisé'], filterable: true },
     { key: 'identification', label: 'N° d\'identification (I-CAD) — obligatoire chiens et chats', type: 'text', required: true, maxLength: 20 },
     { key: 'vaccine', label: 'Vacciné', type: 'boolean' },
   ],
@@ -397,6 +448,17 @@ export const CATEGORY_SCHEMAS: Record<string, FieldSchema[]> = {
   ],
   'animaux-autres': [],
 };
+
+/**
+ * Options acceptées pour un select : liste fixe, ou liste dépendante de la valeur d'un autre champ
+ * (modèles de la marque choisie ; toutes les listes si la marque est absente ou inconnue).
+ */
+export function allowedOptions(field: FieldSchema, input: Record<string, unknown>): string[] {
+  if (!field.dependsOn || !field.optionsByParent) return field.options ?? [];
+  const parent = input[field.dependsOn];
+  if (typeof parent === 'string' && field.optionsByParent[parent]) return field.optionsByParent[parent];
+  return tousModelesOf(field.optionsByParent);
+}
 
 export function getSchemaForSlugs(slug: string, parentSlug?: string): FieldSchema[] {
   const own = CATEGORY_SCHEMAS[slug];
@@ -443,7 +505,8 @@ export function validateAttributes(
         break;
       }
       case 'select': {
-        if (typeof value !== 'string' || !field.options?.includes(value)) {
+        const allowed = allowedOptions(field, input);
+        if (typeof value !== 'string' || !allowed.includes(value)) {
           errors.push(`"${field.label}" doit être l'une des valeurs proposées.`);
         } else clean[field.key] = value;
         break;

@@ -1,4 +1,6 @@
-import { BadRequestException, ForbiddenException, Injectable, Logger, UnauthorizedException, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, UnauthorizedException, ServiceUnavailableException } from '@nestjs/common';
+import * as QRCode from 'qrcode';
+import { generateRecoveryCodes, generateTotpSecret, normalizeRecoveryCode, otpauthUrl, verifyTotp } from './totp';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash, randomBytes, randomUUID } from 'crypto';
@@ -45,6 +47,11 @@ function hashToken(raw: string): string {
   return createHash('sha256').update(raw).digest('hex');
 }
 
+/** « jean.dupont@exemple.fr » → « je…@exemple.fr » (avertissements envoyés à l'ancienne adresse). */
+function maskEmail(email: string): string {
+  return email.replace(/^(.{2}).*(@.*)$/, '$1…$2');
+}
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger('Auth');
@@ -88,6 +95,7 @@ export class AuthService {
     if (user?.deletedAt) throw new ForbiddenException('Ce compte a été supprimé.');
     if (user?.suspendedAt) throw new ForbiddenException('Ce compte est suspendu. Contactez le support.');
     if (!user) user = await this.usersService.createFromPhone(normalized);
+    if (user.twoFactorEnabled) return this.twoFactorChallenge(user);
 
     const tokens = await this.openSession(user, randomUUID(), meta);
     return {
@@ -158,19 +166,31 @@ export class AuthService {
    * Confirmation de l'adresse via le jeton reçu : usage unique, expiré après 24 h, et l'adresse
    * doit encore être celle du compte (un changement d'adresse invalide les anciens liens).
    */
-  async verifyEmail(rawToken: string): Promise<{ ok: true; email: string }> {
+  async verifyEmail(rawToken: string): Promise<{ ok: true; email: string; changed: boolean }> {
     const stored = await this.verificationRepo.findOne({ where: { tokenHash: hashToken(rawToken) } });
     if (!stored || stored.usedAt || stored.expiresAt.getTime() < Date.now()) {
       throw new BadRequestException(INVALID_VERIFICATION_LINK);
     }
     const user = await this.usersService.findById(stored.userId);
-    if (!user || user.deletedAt || !user.email || user.email.toLowerCase() !== stored.email) {
-      throw new BadRequestException(INVALID_VERIFICATION_LINK);
+    if (!user || user.deletedAt) throw new BadRequestException(INVALID_VERIFICATION_LINK);
+    const now = new Date();
+    if (user.email && user.email.toLowerCase() === stored.email) {
+      // Confirmation de l'adresse actuelle (inscription ou renvoi)
+      await this.verificationRepo.update(stored.id, { usedAt: now });
+      if (!user.emailVerified) await this.usersService.markEmailVerified(user.id);
+      this.logger.log(`Adresse e-mail confirmée pour ${user.id}`);
+      return { ok: true, email: user.email, changed: false };
     }
-    await this.verificationRepo.update(stored.id, { usedAt: new Date() });
-    if (!user.emailVerified) await this.usersService.markEmailVerified(user.id);
-    this.logger.log(`Adresse e-mail confirmée pour ${user.id}`);
-    return { ok: true, email: user.email };
+    // Changement d'adresse : la nouvelle doit être encore libre au moment du clic
+    const other = await this.usersService.findByEmail(stored.email);
+    if (other && other.id !== user.id) throw new BadRequestException(INVALID_VERIFICATION_LINK);
+    const previous = user.email;
+    await this.usersService.setEmail(user.id, stored.email);
+    // Tous les autres liens en attente de ce compte (ancienne adresse comprise) cessent de valoir
+    await this.verificationRepo.update({ userId: user.id }, { usedAt: now });
+    if (previous) await this.emailService.sendEmailChangeNotice(previous, user.firstName || user.displayName, maskEmail(stored.email), 'effectue');
+    this.logger.log(`Adresse e-mail remplacée pour ${user.id}`);
+    return { ok: true, email: stored.email, changed: true };
   }
 
   /** Renvoi manuel (paramètres du compte) : refusé si déjà confirmé, 60 s minimum entre deux envois. */
@@ -199,8 +219,137 @@ export class AuthService {
     }
     if (user.deletedAt) throw new UnauthorizedException('Identifiant ou mot de passe incorrect.');
     if (user.suspendedAt) throw new ForbiddenException('Ce compte est suspendu. Contactez le support.');
+    // Double authentification activée : pas de session avant le code de l'application
+    if (user.twoFactorEnabled) return this.twoFactorChallenge(user);
     const tokens = await this.openSession(user, randomUUID(), meta);
     return { ...tokens, user: this.sessionUser(user) };
+  }
+
+  // ------------------------------------------------------------------
+  // Double authentification (TOTP, application d'authentification)
+  // ------------------------------------------------------------------
+
+  /** Jeton intermédiaire (5 min) : prouve que le mot de passe est bon, n'ouvre aucune session. */
+  private async twoFactorChallenge(user: User) {
+    const challengeToken = await this.jwtService.signAsync({ sub: user.id, purpose: 'two-factor' }, { expiresIn: '5m' });
+    return { twoFactorRequired: true as const, challengeToken, expiresIn: '5m' };
+  }
+
+  /** Seconde étape de la connexion : code de l'application (ou code de récupération) → session. */
+  async completeTwoFactorLogin(challengeToken: string, code: string, meta: { userAgent?: string; ip?: string } = {}) {
+    let payload: { sub?: string; purpose?: string };
+    try {
+      payload = await this.jwtService.verifyAsync(challengeToken);
+    } catch {
+      throw new UnauthorizedException('Délai dépassé : recommencez la connexion.');
+    }
+    if (payload.purpose !== 'two-factor' || !payload.sub) throw new UnauthorizedException('Délai dépassé : recommencez la connexion.');
+    const user = await this.usersService.findWithSecrets(payload.sub);
+    if (!user || user.deletedAt || !user.twoFactorEnabled || !user.totpSecret) throw new UnauthorizedException('Délai dépassé : recommencez la connexion.');
+    if (user.suspendedAt) throw new ForbiddenException('Ce compte est suspendu. Contactez le support.');
+    await this.checkSecondFactor(user, code);
+    const tokens = await this.openSession(user, randomUUID(), meta);
+    this.logger.log(`Connexion avec second facteur pour ${user.id}`);
+    return { ...tokens, user: this.sessionUser(user) };
+  }
+
+  /**
+   * Accepte un code TOTP (tolérance ± 30 s, jamais rejoué) ou un code de récupération (consommé).
+   * `user` doit avoir été chargé avec ses secrets.
+   */
+  private async checkSecondFactor(user: User, rawCode: string): Promise<void> {
+    const code = rawCode.trim();
+    if (!user.totpSecret) throw new BadRequestException("La double authentification n'est pas activée.");
+    const step = verifyTotp(user.totpSecret, code, { notBeforeStep: user.totpLastStep ?? null });
+    if (step !== null) {
+      await this.usersService.setTotpLastStep(user.id, step);
+      return;
+    }
+    const normalized = normalizeRecoveryCode(code);
+    if (normalized.length >= 8) {
+      let hashes: string[] = [];
+      try {
+        hashes = user.totpRecoveryCodes ? (JSON.parse(user.totpRecoveryCodes) as string[]) : [];
+      } catch {
+        hashes = [];
+      }
+      const h = hashToken(normalized);
+      if (hashes.includes(h)) {
+        await this.usersService.setRecoveryCodeHashes(user.id, hashes.filter((x) => x !== h));
+        this.logger.warn(`Code de récupération utilisé pour ${user.id} (${hashes.length - 1} restant(s))`);
+        return;
+      }
+    }
+    throw new UnauthorizedException("Code incorrect. Vérifiez l'heure de votre téléphone ou utilisez un code de récupération.");
+  }
+
+  /** Étape 1 de l'activation : secret + QR code à scanner. Rien n'est exigé tant que le code n'est pas confirmé. */
+  async setupTwoFactor(userId: string): Promise<{ secret: string; otpauthUrl: string; qrCodeDataUrl: string }> {
+    const user = await this.usersService.findById(userId);
+    if (!user || user.deletedAt) throw new UnauthorizedException('Connexion requise.');
+    if (user.twoFactorEnabled) throw new BadRequestException('La double authentification est déjà activée.');
+    const secret = generateTotpSecret();
+    await this.usersService.setPendingTotpSecret(user.id, secret);
+    const url = otpauthUrl(secret, user.email || user.username || user.phoneNumber);
+    const qrCodeDataUrl = await QRCode.toDataURL(url, { margin: 1, width: 220 });
+    return { secret, otpauthUrl: url, qrCodeDataUrl };
+  }
+
+  /** Étape 2 : le code de l'application prouve que le secret a bien été enregistré → activation + codes de récupération (affichés une seule fois). */
+  async enableTwoFactor(userId: string, code: string): Promise<{ ok: true; recoveryCodes: string[] }> {
+    const user = await this.usersService.findWithSecrets(userId);
+    if (!user || user.deletedAt) throw new UnauthorizedException('Connexion requise.');
+    if (user.twoFactorEnabled) throw new BadRequestException('La double authentification est déjà activée.');
+    if (!user.totpSecret) throw new BadRequestException("Commencez par afficher le QR code, puis saisissez le code de l'application.");
+    const step = verifyTotp(user.totpSecret, code);
+    if (step === null) throw new BadRequestException("Code incorrect. Vérifiez l'heure de votre téléphone et réessayez.");
+    const recoveryCodes = generateRecoveryCodes();
+    await this.usersService.enableTwoFactor(user.id, recoveryCodes.map((c) => hashToken(normalizeRecoveryCode(c))), step);
+    this.logger.log(`Double authentification activée pour ${user.id}`);
+    return { ok: true, recoveryCodes };
+  }
+
+  /** Désactivation : mot de passe + code de l'application (ou code de récupération). */
+  async disableTwoFactor(userId: string, password: string, code: string): Promise<{ ok: true }> {
+    const user = await this.usersService.findWithSecrets(userId);
+    if (!user || user.deletedAt) throw new UnauthorizedException('Connexion requise.');
+    if (!user.twoFactorEnabled) throw new BadRequestException("La double authentification n'est pas activée.");
+    if (!user.passwordHash || !(await verifyPassword(password, user.passwordHash))) throw new BadRequestException('Mot de passe incorrect.');
+    await this.checkSecondFactor(user, code);
+    await this.usersService.disableTwoFactor(user.id);
+    this.logger.log(`Double authentification désactivée pour ${user.id}`);
+    return { ok: true };
+  }
+
+  // ------------------------------------------------------------------
+  // Changement d'adresse e-mail (confirmé depuis la nouvelle adresse)
+  // ------------------------------------------------------------------
+
+  /**
+   * Demande de changement : mot de passe exigé, nouvelle adresse libre, lien de confirmation envoyé
+   * à la NOUVELLE adresse (même jeton que l'inscription), avertissement à l'adresse actuelle.
+   * L'adresse du compte ne change qu'au clic sur le lien.
+   */
+  async requestEmailChange(userId: string, newEmail: string, password: string): Promise<{ ok: true; email: string }> {
+    const user = await this.usersService.findWithPasswordHash(userId);
+    if (!user || user.deletedAt) throw new UnauthorizedException('Connexion requise.');
+    if (!user.passwordHash) {
+      throw new BadRequestException("Ce compte n'a pas de mot de passe : définissez-en un via « Mot de passe oublié » avant de changer d'adresse.");
+    }
+    if (!(await verifyPassword(password, user.passwordHash))) throw new BadRequestException('Mot de passe incorrect.');
+    const email = newEmail.trim().toLowerCase();
+    if (user.email && user.email.toLowerCase() === email) throw new BadRequestException('Cette adresse est déjà celle de votre compte.');
+    const other = await this.usersService.findByEmail(email);
+    if (other && other.id !== user.id) throw new ConflictException('Cette adresse e-mail est déjà utilisée par un autre compte.');
+    const raw = randomBytes(32).toString('base64url');
+    await this.verificationRepo.save(
+      this.verificationRepo.create({ userId: user.id, email, tokenHash: hashToken(raw), expiresAt: new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS) }),
+    );
+    const link = `${this.emailService.siteUrl()}/confirmer-email?token=${raw}`;
+    await this.emailService.sendEmailVerification(email, link, user.firstName || user.displayName, 'changement');
+    if (user.email) await this.emailService.sendEmailChangeNotice(user.email, user.firstName || user.displayName, maskEmail(email), 'demande');
+    this.logger.log(`Changement d'adresse demandé pour ${user.id}`);
+    return { ok: true, email };
   }
 
   /**
@@ -283,6 +432,7 @@ export class AuthService {
       phoneVerified: user.phoneVerified,
       email: user.email,
       emailVerified: !!user.emailVerified,
+      twoFactorEnabled: !!user.twoFactorEnabled,
       displayName: user.displayName,
       username: user.username,
       accountType: user.accountType,

@@ -175,6 +175,41 @@ export class UsersService {
     return this.usersRepo.createQueryBuilder('u').addSelect('u.passwordHash').where('u.id = :id', { id }).getOne();
   }
 
+  /** Charge aussi les secrets de double authentification (select:false) : connexion et paramètres 2FA. */
+  findWithSecrets(id: string): Promise<User | null> {
+    return this.usersRepo
+      .createQueryBuilder('u')
+      .addSelect(['u.passwordHash', 'u.totpSecret', 'u.totpRecoveryCodes', 'u.totpLastStep'])
+      .where('u.id = :id', { id })
+      .getOne();
+  }
+
+  /** Nouveau secret TOTP en attente de confirmation (le second facteur n'est pas encore exigé). */
+  async setPendingTotpSecret(id: string, secret: string): Promise<void> {
+    await this.usersRepo.update(id, { totpSecret: secret, twoFactorEnabled: false, totpRecoveryCodes: null, totpLastStep: null });
+  }
+
+  async enableTwoFactor(id: string, recoveryCodeHashes: string[], lastStep: number): Promise<void> {
+    await this.usersRepo.update(id, { twoFactorEnabled: true, twoFactorEnabledAt: new Date(), totpRecoveryCodes: JSON.stringify(recoveryCodeHashes), totpLastStep: lastStep });
+  }
+
+  async disableTwoFactor(id: string): Promise<void> {
+    await this.usersRepo.update(id, { twoFactorEnabled: false, twoFactorEnabledAt: null, totpSecret: null, totpRecoveryCodes: null, totpLastStep: null });
+  }
+
+  async setTotpLastStep(id: string, step: number): Promise<void> {
+    await this.usersRepo.update(id, { totpLastStep: step });
+  }
+
+  async setRecoveryCodeHashes(id: string, hashes: string[]): Promise<void> {
+    await this.usersRepo.update(id, { totpRecoveryCodes: JSON.stringify(hashes) });
+  }
+
+  /** Nouvelle adresse e-mail confirmée par lien (changement d'adresse). */
+  async setEmail(id: string, email: string): Promise<void> {
+    await this.usersRepo.update(id, { email: email.trim().toLowerCase(), emailVerified: true, emailVerifiedAt: new Date() });
+  }
+
   async setPasswordHash(id: string, passwordHash: string): Promise<void> {
     await this.usersRepo.update(id, { passwordHash });
   }
@@ -192,7 +227,7 @@ export class UsersService {
     return this.usersRepo.save(user);
   }
 
-  async updateProfile(id: string, patch: Partial<Omit<User, 'notificationPrefs'>> & { notificationPrefs?: unknown }): Promise<User> {
+  async updateProfile(id: string, patch: Partial<Omit<User, 'notificationPrefs' | 'recentLocations'>> & { notificationPrefs?: unknown; recentLocations?: unknown }): Promise<User> {
     const clean: Record<string, unknown> = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
     if (clean.notificationPrefs !== undefined) {
       try {
@@ -200,6 +235,9 @@ export class UsersService {
       } catch (e) {
         throw new BadRequestException((e as Error).message);
       }
+    }
+    if (clean.recentLocations !== undefined) {
+      clean.recentLocations = JSON.stringify(sanitizeRecentLocations(clean.recentLocations));
     }
     if (Object.keys(clean).length > 0) await this.usersRepo.update(id, clean);
     return this.findById(id) as Promise<User>;
@@ -438,4 +476,31 @@ export class UsersService {
   async setStripeAccount(userId: string, stripeAccountId: string, complete: boolean) {
     await this.usersRepo.update(userId, { stripeAccountId, stripeOnboardingComplete: complete });
   }
+}
+
+export interface RecentLocation {
+  city: string;
+  postalCode?: string;
+  latitude?: number;
+  longitude?: number;
+}
+
+/** Historique des localisations : 5 entrées au plus, ville obligatoire, coordonnées valides, sans doublon. */
+export function sanitizeRecentLocations(raw: unknown): RecentLocation[] {
+  if (!Array.isArray(raw)) throw new BadRequestException('Historique des localisations invalide.');
+  const out: RecentLocation[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const o = item as Record<string, unknown>;
+    const city = typeof o.city === 'string' ? o.city.trim().slice(0, 100) : '';
+    if (!city || /[<>]/.test(city)) continue;
+    const postalCode = typeof o.postalCode === 'string' && /^\d{5}$/.test(o.postalCode) ? o.postalCode : undefined;
+    const latitude = typeof o.latitude === 'number' && Number.isFinite(o.latitude) && Math.abs(o.latitude) <= 90 ? o.latitude : undefined;
+    const longitude = typeof o.longitude === 'number' && Number.isFinite(o.longitude) && Math.abs(o.longitude) <= 180 ? o.longitude : undefined;
+    const key = `${city.toLowerCase()}|${postalCode ?? ''}`;
+    if (out.some((e) => `${e.city.toLowerCase()}|${e.postalCode ?? ''}` === key)) continue;
+    out.push({ city, postalCode, latitude, longitude });
+    if (out.length >= 5) break;
+  }
+  return out;
 }

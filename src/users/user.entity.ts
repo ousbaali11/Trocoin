@@ -53,6 +53,26 @@ export class User {
   @Column({ nullable: true, select: false })
   passwordHash?: string;
 
+  // ----- Double authentification (TOTP, application d'authentification) -----
+  /** Second facteur exigé à la connexion (activé depuis les paramètres, facultatif). */
+  @Column({ default: false })
+  twoFactorEnabled: boolean;
+
+  @Column({ type: DATE_TYPE, nullable: true })
+  twoFactorEnabledAt?: Date | null;
+
+  /** Secret TOTP en base32 (en attente tant que twoFactorEnabled est faux). Jamais sérialisé. */
+  @Column({ type: 'text', nullable: true, select: false })
+  totpSecret?: string | null;
+
+  /** Codes de récupération restants : JSON des hash SHA-256 (chaque code ne sert qu'une fois). */
+  @Column({ type: 'text', nullable: true, select: false })
+  totpRecoveryCodes?: string | null;
+
+  /** Dernier pas de temps TOTP accepté : un même code ne peut pas être rejoué. */
+  @Column({ type: 'integer', nullable: true, select: false })
+  totpLastStep?: number | null;
+
   /** Raison sociale (compte professionnel). */
   @Column({ nullable: true })
   companyName?: string;
@@ -129,6 +149,10 @@ export class User {
   /** Préférences granulaires (famille × canal), JSON sérialisé ; null = défauts. Voir notifications/notification-prefs.ts. */
   @Column({ type: 'text', nullable: true })
   notificationPrefs?: string | null;
+
+  /** Dernières localisations utilisées (recherche ou dépôt), JSON sérialisé, 5 au plus, la plus récente en premier. */
+  @Column({ type: 'text', nullable: true })
+  recentLocations?: string | null;
 
   @CreateDateColumn({ type: DATE_TYPE })
   createdAt: Date;

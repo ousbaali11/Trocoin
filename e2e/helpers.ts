@@ -41,16 +41,21 @@ export function uniquePhone(): string {
  * api-adresse.data.gouv.fr depuis le navigateur ; en test on répond localement, sans réseau.
  */
 export async function mockGeo(page: Page) {
+  // Même forme que l'API réelle : un arrondissement est une « commune » dont city vaut « Paris 11e Arrondissement »
   const cities = [
-    { label: 'Lyon (69003)', name: 'Lyon 3e Arrondissement', city: 'Lyon', postcode: '69003', lat: 45.764, lon: 4.8357 },
+    { label: 'Lyon (69003)', name: 'Lyon 3e Arrondissement', city: 'Lyon 3e Arrondissement', postcode: '69003', lat: 45.764, lon: 4.8357 },
+    { label: 'Lyon', name: 'Lyon', city: 'Lyon', postcode: '69001', lat: 45.7578, lon: 4.832 },
     { label: 'Villeurbanne (69100)', name: 'Villeurbanne', city: 'Villeurbanne', postcode: '69100', lat: 45.7719, lon: 4.8902 },
     { label: 'Annecy (74000)', name: 'Annecy', city: 'Annecy', postcode: '74000', lat: 45.8992, lon: 6.1294 },
-    { label: 'Paris (75011)', name: 'Paris 11e Arrondissement', city: 'Paris', postcode: '75011', lat: 48.8566, lon: 2.3522 },
+    { label: 'Paris', name: 'Paris', city: 'Paris', postcode: '75001', lat: 48.8566, lon: 2.3522 },
+    { label: 'Paris 11e Arrondissement', name: 'Paris 11e Arrondissement', city: 'Paris 11e Arrondissement', postcode: '75011', lat: 48.859, lon: 2.38 },
+    { label: 'Paris 1er Arrondissement', name: 'Paris 1er Arrondissement', city: 'Paris 1er Arrondissement', postcode: '75001', lat: 48.8625, lon: 2.336 },
+    { label: 'Paris 20e Arrondissement', name: 'Paris 20e Arrondissement', city: 'Paris 20e Arrondissement', postcode: '75020', lat: 48.8635, lon: 2.401 },
   ];
   await page.route('https://api-adresse.data.gouv.fr/**', (route: Route) => {
     const q = decodeURIComponent(new URL(route.request().url()).searchParams.get('q') || '').toLowerCase();
     const features = cities
-      .filter((c) => c.city.toLowerCase().startsWith(q.slice(0, 3)) || c.postcode.startsWith(q))
+      .filter((c) => (q.endsWith(' arrondissement') ? c.city.toLowerCase().startsWith(q.replace(' arrondissement', '')) && /arrondissement/i.test(c.city) : c.city.toLowerCase().startsWith(q.slice(0, 3)) || c.postcode.startsWith(q)))
       .map((c) => ({ properties: { label: c.label, name: c.name, city: c.city, postcode: c.postcode }, geometry: { coordinates: [c.lon, c.lat] } }));
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ features }) });
   });

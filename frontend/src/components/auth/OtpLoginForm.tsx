@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { TwoFactorStep } from "./TwoFactorStep";
 
 function safeNext(raw: string | null): string {
   // Uniquement des chemins internes (pas d'open redirect)
@@ -25,6 +26,7 @@ export function OtpLoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [cooldown, setCooldown] = useState(0);
+  const [challenge, setChallenge] = useState<string | null>(null);
   const [devHint, setDevHint] = useState<string | null>(null);
   const codeRef = useRef<HTMLInputElement>(null);
 
@@ -67,7 +69,12 @@ export function OtpLoginForm() {
     setError(null);
     setBusy(true);
     try {
-      const res = await api<{ accessToken: string; refreshToken: string }>("/auth/otp/verify", { method: "POST", body: { phoneNumber: normalized, code }, token: null });
+      const res = await api<{ accessToken: string; refreshToken: string } | { twoFactorRequired: true; challengeToken: string }>("/auth/otp/verify", { method: "POST", body: { phoneNumber: normalized, code }, token: null });
+      if ("twoFactorRequired" in res) {
+        // Double authentification activée sur ce compte : code de l'application avant la session
+        setChallenge(res.challengeToken);
+        return;
+      }
       await login(res.accessToken, res.refreshToken);
       router.replace(next);
     } catch (err) {
@@ -78,6 +85,16 @@ export function OtpLoginForm() {
       setBusy(false);
     }
   };
+
+  if (challenge) {
+    return (
+      <div className="panel">
+        <p className="eyebrow">Connexion par code SMS</p>
+        <h1 style={{ fontSize: "1.8rem" }}>Double authentification</h1>
+        <TwoFactorStep challengeToken={challenge} onSuccess={async (t) => { await login(t.accessToken, t.refreshToken); router.replace(next); }} onCancel={() => setChallenge(null)} />
+      </div>
+    );
+  }
 
   return (
     <div className="panel">

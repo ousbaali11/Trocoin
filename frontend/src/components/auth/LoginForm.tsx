@@ -6,10 +6,11 @@ import { useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { PasswordInput } from "@/components/ui/PasswordInput";
+import { TwoFactorStep } from "./TwoFactorStep";
 
 function safeNext(raw: string | null): string {
-  // Uniquement des chemins internes (pas d'open redirect)
-  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "/compte";
+  if (!raw) return "/compte";
+  if (!raw.startsWith("/") || raw.startsWith("//")) return "/compte";
   return raw;
 }
 
@@ -24,21 +25,27 @@ export function identifierProblem(raw: string): string | null {
   return null;
 }
 
-/** Connexion par e-mail, nom d'utilisateur ou numéro de mobile + mot de passe. */
+type LoginResponse = { accessToken: string; refreshToken: string } | { twoFactorRequired: true; challengeToken: string };
+
 export function LoginForm() {
   const { login, user, loading } = useAuth();
   const router = useRouter();
   const params = useSearchParams();
   const next = safeNext(params.get("next"));
-
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [challenge, setChallenge] = useState<string | null>(null);
 
   useEffect(() => {
     if (!loading && user) router.replace(next);
   }, [loading, user, next, router]);
+
+  const finish = async (tokens: { accessToken: string; refreshToken: string }) => {
+    await login(tokens.accessToken, tokens.refreshToken);
+    router.replace(next);
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,15 +57,30 @@ export function LoginForm() {
     }
     setBusy(true);
     try {
-      const res = await api<{ accessToken: string; refreshToken: string }>("/auth/login", { method: "POST", body: { identifier: identifier.trim(), password }, token: null });
-      await login(res.accessToken, res.refreshToken);
-      router.replace(next);
+      const res = await api<LoginResponse>("/auth/login", { method: "POST", body: { identifier: identifier.trim(), password }, token: null });
+      if ("twoFactorRequired" in res) {
+        // Mot de passe accepté : le code de l'application est demandé avant d'ouvrir la session
+        setChallenge(res.challengeToken);
+        setPassword("");
+        return;
+      }
+      await finish(res);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Connexion impossible pour le moment.");
     } finally {
       setBusy(false);
     }
   };
+
+  if (challenge) {
+    return (
+      <div className="panel">
+        <p className="eyebrow">Connexion</p>
+        <h1 style={{ fontSize: "1.8rem" }}>Double authentification</h1>
+        <TwoFactorStep challengeToken={challenge} onSuccess={finish} onCancel={() => setChallenge(null)} />
+      </div>
+    );
+  }
 
   return (
     <div className="panel">

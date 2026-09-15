@@ -36,9 +36,9 @@ cd frontend && npm install && cp .env.example .env.local && npm run dev -- -p 30
 ## Tests
 
 ```bash
-npm test                 # 107 tests e2e (API, supertest)
+npm test                 # 112 tests e2e (API, supertest)
 npm run e2e:build        # construit l'API (dist/) et le front (next build) pour les tests navigateur
-npm run e2e              # 56 scénarios Playwright dans Chromium (desktop 1280 px + mobile 375 px) : parcours, accessibilité (axe) site + back-office, clavier, SEO
+npm run e2e              # 60 scénarios Playwright dans Chromium (desktop 1280 px + mobile 375 px) : parcours, accessibilité (axe) site + back-office, clavier, SEO
 node scripts/charge.js --api https://trocoin.onrender.com --front https://trocoin.vercel.app --vus 10 --minutes 3   # test de charge léger (lectures publiques)
 SOURCE_DATABASE_URL=… TARGET_DATABASE_URL=… node scripts/migrer-base.js   # copie intégrale d'une base Postgres vers une autre, preuve par comptages + empreintes (DEPLOIEMENT.md §6b) (Jest + supertest, SQLite en mémoire)
 # Les mêmes tests sur PostgreSQL (schéma créé par les migrations) :
@@ -57,7 +57,7 @@ manuel : Playwright démarre et arrête les deux serveurs (`e2e/start-api.js`, `
 ```bash
 npx playwright install chromium   # une fois
 npm run e2e:build                 # API + front (≈ 2 min)
-npm run e2e                       # 56 scénarios (≈ 3 min 30)
+npm run e2e                       # 60 scénarios (≈ 3 min 30)
 npx playwright show-report        # rapport HTML, traces et captures des échecs
 npm run e2e:ui                    # mode interactif pas à pas
 ```
@@ -78,6 +78,8 @@ la construction ET l'exécution (l'URL de l'API est figée dans le build du fron
 | `e2e/09-admin-accessibilite.spec.ts` | back-office : axe sur les 10 pages de la console (files alimentées par l'API), suspension puis réactivation d'un compte au clavier seul avec la boîte de confirmation, trace dans le journal | desktop |
 | `e2e/10-seo.spec.ts` | sitemap (familles, sous-catégories, aide, légal, annonces ; rien de privé), robots.txt, titre + description uniques par page et `noindex` des pages privées, JSON-LD Product + fil d'Ariane et WebSite | desktop |
 | `e2e/08-clavier.spec.ts` | clavier seul : lien d'évitement, recherche avec commune et rayon aux flèches, menu du compte et déconnexion, boîte de dialogue (focus confiné, Échap, retour du focus), dépôt (radios aux flèches, champ fichier atteignable) | desktop |
+| `e2e/11-marges-mobile.spec.ts` | marges ≥ 12 px et absence de débordement sur les pages publiques et du compte à 375 px | mobile |
+| `e2e/12-securite.spec.ts` | changement d'adresse e-mail (mot de passe, lien à la nouvelle adresse, avertissement à l'ancienne, effectif au clic) ; double authentification (QR code, activation, connexion en deux temps, code de récupération à usage unique, désactivation) | desktop |
 
 Les pages d'inscription et de recherche vérifient en plus l'absence de défilement horizontal
 (`expectNoHorizontalOverflow`) : c'est la régression trouvée lors du tour de polish. Les données
@@ -141,6 +143,9 @@ libération), journal d'audit.
 - **Dépôt** : exemple de titre par catégorie (`title-examples.ts`), description auto-extensible (`AutoTextarea`), champs ajoutés d'après les annonces leboncoin (sellerie, salles d'eau, couleur puériculture).
 - **Images** : toute photo/avatar/logo est ré-encodée par `sharp` (orientation appliquée, EXIF/GPS/ICC supprimés, ≤ 1600 px, format d'origine) ; un fichier corrompu est rejeté. L'image envoyée n'est jamais servie telle quelle.
 - **Mot de passe** : `POST /auth/password/change` (ancien mot de passe requis, autres sessions révoquées), section « Mot de passe » dans Paramètres.
+- **Changement d'adresse e-mail** (AUDIT.md §19) : `POST /auth/email/change` (mot de passe exigé) → lien 24 h envoyé à la nouvelle adresse, avertissement à l'ancienne ; effectif au clic (`POST /auth/email/verify` renvoie `changed: true`).
+- **Double authentification** (AUDIT.md §19, facultative) : TOTP RFC 6238 sans dépendance (`src/auth/totp.ts`), QR code (`qrcode`). `POST /auth/2fa/setup` → secret + QR, `POST /auth/2fa/enable { code }` → 8 codes de récupération (affichés une fois, hash en base), `POST /auth/2fa/disable { password, code }`. Connexion : `POST /auth/login` renvoie `{ twoFactorRequired, challengeToken }` (JWT 5 min, refusé comme session), puis `POST /auth/login/2fa { challengeToken, code }` ; un code TOTP ne sert qu'une fois (`totpLastStep`), un code de récupération non plus.
+- **Véhicules** : marque et modèle en listes dépendantes (`src/categories/vehicle-models.ts`, fichier statique : 57 marques de voitures, 31 de motos, 17 d'utilitaires, « Autre » partout) ; `FieldSchema.dependsOn` / `optionsByParent`, validés côté serveur. **Localisation** : 5 dernières communes (« Récents », localStorage + `recentLocations` sur le compte) ; arrondissements de Paris, Lyon, Marseille regroupés sous « toute la ville » (`frontend/src/lib/geo.ts`).
 - **Confirmation de l'adresse e-mail** (AUDIT.md §18) : à l'inscription, e-mail avec lien à usage unique (24 h) vers `/confirmer-email?token=…` → `POST /auth/email/verify` → `emailVerified` sur `/users/me`. Renvoi depuis Paramètres : `POST /auth/email/resend` (60 s entre deux envois, 3/h/IP). Compte non confirmé : usage normal + rappel dans l'espace compte. En dev : lien via `/dev/last-verification-link/:email`.
 
 ## Phase 8 (barre d'accueil épurée, panneau de rayon, plein texte, plafond photos)
@@ -211,7 +216,7 @@ npm run migration:run
 ## Principales routes API
 
 ```
-POST /auth/register · POST /auth/email/verify · POST /auth/email/resend · POST /auth/login · POST /auth/password/forgot · POST /auth/password/reset · POST /auth/register/phone · POST /auth/otp/verify · POST /auth/refresh · POST /auth/logout · /auth/sessions
+POST /auth/register · POST /auth/email/verify · POST /auth/email/resend · POST /auth/email/change · POST /auth/login · POST /auth/login/2fa · POST /auth/2fa/setup · POST /auth/2fa/enable · POST /auth/2fa/disable · POST /auth/password/forgot · POST /auth/password/reset · POST /auth/register/phone · POST /auth/otp/verify · POST /auth/refresh · POST /auth/logout · /auth/sessions
 GET  /health
 GET  /users/me · PATCH /users/me · POST /users/me/become-pro · GET /users/:id/profile
 GET  /users/me/export · DELETE /users/me · /users/me/blocks · /users/me/saved-searches

@@ -146,8 +146,14 @@ export class UsersController {
   /** Données visibles par l'utilisateur sur lui-même (jamais le SIRET masqué ni les IDs Stripe internes). */
   private sanitizeSelf(user: User | null) {
     if (!user) return user;
-    const { stripeAccountId, notificationPrefs, ...safe } = user;
+    const { stripeAccountId, notificationPrefs, recentLocations, ...safe } = user;
     void notificationPrefs;
-    return { ...safe, stripeConnected: !!stripeAccountId, notificationPrefs: UsersService.prefsOf(user) };
+    let recent: unknown[] = [];
+    try {
+      recent = recentLocations ? JSON.parse(recentLocations) : [];
+    } catch {
+      recent = [];
+    }
+    return { ...safe, stripeConnected: !!stripeAccountId, notificationPrefs: UsersService.prefsOf(user), recentLocations: recent };
   }
 }

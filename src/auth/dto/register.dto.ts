@@ -53,6 +53,36 @@ export class VerifyEmailDto {
   token: string;
 }
 
+export class ChangeEmailDto {
+  @IsEmail({}, { message: 'Adresse e-mail invalide.' }) @MaxLength(120)
+  newEmail: string;
+
+  @IsString() @MinLength(1) @MaxLength(128)
+  password: string;
+}
+
+export class TwoFactorCodeDto {
+  /** Code à 6 chiffres de l'application, ou code de récupération (xxxxx-xxxxx). */
+  @IsString() @MinLength(6) @MaxLength(20)
+  code: string;
+}
+
+export class TwoFactorLoginDto {
+  @IsString() @MinLength(20) @MaxLength(2000)
+  challengeToken: string;
+
+  @IsString() @MinLength(6) @MaxLength(20)
+  code: string;
+}
+
+export class DisableTwoFactorDto {
+  @IsString() @MinLength(1) @MaxLength(128)
+  password: string;
+
+  @IsString() @MinLength(6) @MaxLength(20)
+  code: string;
+}
+
 export class LoginDto {
   /** E-mail ou nom d'utilisateur. */
   @IsString() @MinLength(3) @MaxLength(120)

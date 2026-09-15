@@ -690,6 +690,10 @@ Légende : ✅ présent avec le même esprit · ≈ présent sous une autre form
 **Non relevés ce jour** (à faire lors d'un prochain passage) : Matériel pro, Famille, Loisirs,
 Autres, Locations de vacances, Services, Animaux. Les schémas Trocoin existants pour ces
 familles (voir §2.2) restent ceux de l'analyse initiale.
+*Mise à jour du 15 septembre 2026 (après-midi)* : nouvelle tentative, même blocage (« Accès
+temporairement restreint ») dès la première sous-catégorie ouverte ; les six schémas ont été
+complétés d'après la connaissance générale du site, statut et réserves dans
+`docs/comparatif-leboncoin.md` §5 et `AUDIT.md` §19.
 
 ### 10.3 Écarts volontairement non traités
 

@@ -98,8 +98,8 @@ test.describe('Espace compte', () => {
     await page.getByLabel('Titre').fill('Voiture pour test axe');
     await page.getByLabel(/^Prix/).fill('1000');
     await page.getByLabel('Description').fill('Description suffisamment longue pour passer.');
-    await page.getByLabel('Marque *').fill('Renault');
-    await page.getByLabel('Modèle *').fill('Clio');
+    await page.getByLabel('Marque *').selectOption('Renault');
+    await page.getByLabel('Modèle *').selectOption('Clio');
     await page.getByLabel(/^Année/).fill('2018');
     await page.getByLabel(/^Kilométrage/).fill('90000');
     await page.getByLabel(/^Carburant/).selectOption('Essence');

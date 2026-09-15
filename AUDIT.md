@@ -205,13 +205,15 @@ ouverture publique :**
    `BACKUP_PASSPHRASE`) sont absents, le workflow n'a jamais tourné, aucune restauration testée
    (`DEPLOIEMENT.md` §6). Sentry non alimenté (DSN).
 
-**Confort / après ouverture**
-8. Canaux exacts du menu « Partager » de leboncoin à observer depuis un navigateur normal (bandeau cookies) ; relevé manuel des 6 panneaux de filtres leboncoin non observés (Matériel pro, Famille,
-   Loisirs, Vacances, Services, Animaux) et alignement fin.
-9. Listes marque → modèle pour les véhicules ; historique des localisations ; arrondissements
-    groupés.
-10. Modification de l'e-mail avec confirmation ; double facteur.
-11. ~~Paiement réel~~ Stripe fait en mode test (§15) ; clés réelles, PayPal, notifications push/e-mail, KYC, DAC7 (différés).
+**Confort / après ouverture** — traités le 15 septembre 2026 (§19)
+8. ~~Six panneaux de filtres et menu « Partager »~~ **fait, avec réserve** : les schémas des six
+   familles ont été complétés (§19.1) et le menu Partager confirmé, mais le relevé sur leboncoin.fr a
+   de nouveau été coupé par la protection anti-robot après quelques pages (« Accès temporairement
+   restreint », non contourné) : les listes ajoutées viennent de la connaissance générale du site,
+   pas d'une observation du jour, et restent à confirmer en 15 minutes depuis un navigateur normal.
+9. ~~Listes marque → modèle, historique des localisations, arrondissements groupés~~ **fait** (§19.2).
+10. ~~Modification de l'e-mail avec confirmation ; double facteur~~ **fait** (§19.3).
+11. ~~Paiement réel~~ Stripe fait en mode test (§15) ; clés réelles, PayPal, notifications push/e-mail, KYC, DAC7 (différés : décisions et informations non disponibles à ce jour).
 
 ---
 
@@ -970,3 +972,100 @@ après un envoi, comme le serveur).
   scénarios navigateur (débordement horizontal du rappel avec une adresse longue à 375 px, bloc
   Identifiants trop large, sélecteur « Envoyer » qui attrapait aussi « Renvoyer l'e-mail… ») :
   corrigé (retours à la ligne, bouton sous la liste, sélecteurs exacts) au commit suivant.
+
+---
+
+## 19. Items « confort » avant ouverture publique — 15 septembre 2026 (après-midi)
+
+Trois chantiers du §7 (points 8, 9 et 10), livrés en une version (1.11.0). Le domaine Resend
+n'étant pas encore acheté, rien n'a été changé côté e-mail de production (§5).
+
+### 19.1 Filtres des six familles restantes et menu « Partager »
+
+- **Relevé leboncoin** : la protection anti-robot a de nouveau coupé l'accès (« Accès
+  temporairement restreint ») dès le premier choix d'une sous-catégorie, après l'ouverture du
+  menu « Tous les filtres » et de la liste des sous-catégories de Matériel professionnel ; toujours
+  bloqué une heure plus tard. Rien n'a été contourné. Les compléments ci-dessous viennent donc de
+  la connaissance générale du site, **pas d'une observation du jour** — c'est écrit tel quel dans
+  `docs/comparatif-leboncoin.md` §5, avec ce qui reste à confirmer manuellement (≈ 15 min).
+  Seule exception : le panneau de filtres de la famille **Animaux** a pu être lu deux heures plus
+  tard (Type d'animal : Chiens, Chats, Nouveaux animaux de compagnie, Equidés, Animaux de la
+  ferme, Oiseaux, Poissons ; Offres / Demandes) avant un nouveau blocage ; la liste « Animal » de
+  Trocoin a été alignée sur ces valeurs.
+- **Schémas complétés** (`src/categories/category-schemas.ts`, 30 champs ajoutés ou rendus
+  filtrables) : Matériel pro (marque, année, heures et puissance sur BTP / Agricole, types étendus,
+  Fournitures de bureau avec ses propres champs) ; Famille (types de puériculture, mobilier avec
+  marque et couleur, vêtements bébé avec type et fille / garçon / mixte) ; Loisirs (activité
+  sportive en liste de 19 entrées + univers, vélos avec taille de cadre, roues et matériau, livres
+  avec format, jouets et collection filtrables) ; Vacances (mobil-homes, hôtels, insolites,
+  environnement, classement en étoiles, TV, lave-linge, barbecue, équipements filtrables) ;
+  Services (matières de cours en liste de 17 entrées, schémas propres pour Services animaux et
+  Entraide entre voisins) ; Animaux (âge en tranches, race et sexe filtrables, accessoires par
+  animal concerné). Le système de champs dynamiques existant est inchangé.
+- **Menu « Partager »** : non observable (même blocage). Trocoin propose partage natif, copier le
+  lien, WhatsApp, e-mail, Facebook, X ; d'après la connaissance du site, leboncoin propose en plus
+  Messenger (clé d'application Facebook requise : non repris). Jugé équivalent, aucun changement.
+
+### 19.2 Marque → modèle, historique des localisations, arrondissements groupés
+
+- **Véhicules** : `src/categories/vehicle-models.ts`, fichier statique maintenu à la main (57
+  marques de voitures dont les sans-permis, 31 de motos, 17 d'utilitaires ; « Autre » en fin de
+  chaque liste). Le schéma déclare `marque` en liste et `modele` en **liste dépendante**
+  (`dependsOn: 'marque'`, `optionsByParent`) ; le serveur refuse un modèle qui n'appartient pas à
+  la marque choisie (« Peugeot / Clio » → 400) ; au dépôt et dans les filtres, le champ Modèle
+  reste inactif tant que la marque n'est pas choisie et se vide si la marque change.
+- **Historique des localisations** : hook `useRecentLocations` (`frontend/src/lib/recent-locations.ts`) ;
+  5 entrées au plus, sans doublon ; conservées dans le navigateur et, si la personne est
+  connectée, sur son compte (`PATCH /users/me { recentLocations }`, colonne `users.recentLocations`,
+  nettoyage serveur : ville obligatoire, code postal à 5 chiffres, coordonnées valides, 5 max) ; les
+  deux listes sont fusionnées. Proposées sous « Récents » avant toute saisie, dans la recherche
+  (`LocationPicker`) comme au dépôt (`CityInput`).
+- **Arrondissements** : l'API adresse renvoie les arrondissements comme des communes à part
+  (`city: "Paris 11e Arrondissement"`). `frontend/src/lib/geo.ts` les rattache à leur ville, les
+  libelle « Paris 11e (75011) », n'affiche qu'une entrée « Paris (toute la ville) » avec un bouton
+  « Arrondissements de Paris » qui déplie la liste complète triée (chargée à la demande). Même
+  chose pour Lyon et Marseille. Le mock e2e a été aligné sur la vraie forme de l'API.
+
+### 19.3 Changement d'e-mail confirmé et double authentification
+
+- **Changement d'adresse** (`POST /auth/email/change`, 5 demandes / h / IP) : mot de passe
+  vérifié, nouvelle adresse libre, jeton du même type que la confirmation d'inscription (§18,
+  24 h, hash seul en base) envoyé **à la nouvelle adresse** ; l'ancienne reçoit un avertissement à
+  la demande (« si ce n'est pas vous, changez votre mot de passe ») et à la confirmation. Le
+  changement n'est effectif qu'au clic (`POST /auth/email/verify` → `changed: true`) ; à ce moment
+  tous les autres liens en attente du compte sont invalidés (un lien d'inscription de l'ancienne
+  adresse ne peut pas la rétablir). Paramètres → Identifiants : bouton « Changer d'adresse
+  e-mail » (nouvelle adresse + mot de passe), message tant que le lien n'est pas ouvert.
+- **Double authentification** (facultative, Paramètres → « Double authentification ») : TOTP
+  RFC 6238 implémenté localement (`src/auth/totp.ts`, HMAC-SHA1, 6 chiffres, 30 s, tolérance
+  ± 1 pas), QR code généré par `qrcode`. Activation en deux temps (`/auth/2fa/setup` → secret en
+  attente + QR ; `/auth/2fa/enable { code }` → activation + **8 codes de récupération** affichés
+  une seule fois, stockés hachés). Connexion : `POST /auth/login` (ou `/auth/otp/verify`) renvoie
+  `{ twoFactorRequired: true, challengeToken }` — un JWT de 5 minutes marqué `purpose`, que la
+  stratégie JWT refuse comme session — puis `POST /auth/login/2fa { challengeToken, code }`
+  (10 essais / 10 min / IP). Un code TOTP déjà accepté ne peut pas être rejoué (`totpLastStep`),
+  un code de récupération est consommé. Désactivation : mot de passe + code. Les secrets
+  (`totpSecret`, `totpRecoveryCodes`, `totpLastStep`) sont en `select: false`, jamais sérialisés.
+  Pour qui n'active rien, la connexion est strictement inchangée.
+- **Migration** `1789430000000-ConfortAvantOuverture` (colonnes `users.recentLocations`,
+  `twoFactorEnabled`, `twoFactorEnabledAt`, `totpSecret`, `totpRecoveryCodes`, `totpLastStep`).
+
+### 19.4 Preuves d'exécution (15 septembre 2026, après-midi)
+
+- `npm test` : **112 tests réussis, 1 ignoré** (107 → 112 ; `test/phase15.e2e-spec.ts` +5 :
+  changement d'adresse complet avec avertissements et lien d'inscription invalidé, double
+  authentification de bout en bout — jeton intermédiaire refusé comme session, mauvais code 401,
+  rejeu du même code 401, pas suivant accepté, code de récupération à usage unique, désactivation —
+  localisations récentes nettoyées, listes marque → modèle validées et filtrées). Deux tests
+  existants ont été mis à jour pour les nouvelles valeurs (types d'hébergement, réponse
+  `changed: false` de la confirmation) et un modèle de véhicule aligné sur la liste (« Clio »).
+- Playwright : **60 scénarios réussis** (56 → 60 : `01-recherche` +1 arrondissements groupés et
+  « Récents » sur desktop et mobile, `12-securite` +2). Les scénarios 01, 04, 07, 08 ont été
+  adaptés aux listes (marque et modèle choisis dans une liste, sous-menu « Arrondissements de
+  Lyon ») ; un premier passage a révélé un message de connexion réécrit par erreur et un contraste
+  insuffisant de l'étiquette « Désactivée », corrigés avant la livraison.
+- Captures (API et front construits, base locale) : arrondissements de Paris dépliés sous
+  « Paris (toute la ville) », « Récents » avant saisie, Modèle inactif tant que la marque n'est pas
+  choisie puis liste Peugeot (35 modèles), formulaire de changement d'adresse, QR code et clé de la
+  double authentification, codes de récupération, écran « Double authentification » à la
+  connexion, sous-menu Marseille à 375 px.

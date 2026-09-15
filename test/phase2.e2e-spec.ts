@@ -141,7 +141,7 @@ describe('Phase 2 : monétisation désactivable, catégories, import, multi-util
     const schema = (await request(server).get('/categories/vacances/schema').expect(200)).body;
     const keys = schema.fields.map((f: any) => f.key);
     expect(keys).toEqual(expect.arrayContaining(['type_hebergement', 'voyageurs', 'piscine', 'jardin', 'animaux_acceptes']));
-    expect(schema.fields.find((f: any) => f.key === 'type_hebergement').options).toEqual(['Maisons et villas', 'Appartements', 'Chalets', 'Chambres d\'hôtes', 'Campings']);
+    expect(schema.fields.find((f: any) => f.key === 'type_hebergement').options).toEqual(['Maisons et villas', 'Appartements', 'Chalets', 'Mobil-homes', 'Chambres d\'hôtes', 'Campings', 'Hôtels', 'Hébergements insolites']);
     expect(schema.fields.filter((f: any) => f.filterable).map((f: any) => f.key)).toEqual(expect.arrayContaining(['piscine', 'jardin', 'animaux_acceptes', 'voyageurs', 'type_hebergement']));
   });
 

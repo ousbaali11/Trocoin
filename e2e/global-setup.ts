@@ -41,11 +41,13 @@ async function register(u: Omit<SeedUser, 'id' | 'displayName'> & { firstName: s
 
 /** Remplit les critères obligatoires d'une catégorie à partir de son schéma (première option, texte, nombre). */
 async function requiredAttributes(slug: string, overrides: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const schema = await call<{ fields: Array<{ key: string; type: string; required?: boolean; options?: string[]; min?: number }> }>(`/categories/${slug}/schema`, 'GET');
+  const schema = await call<{ fields: Array<{ key: string; type: string; required?: boolean; options?: string[]; min?: number; dependsOn?: string; optionsByParent?: Record<string, string[]> }> }>(`/categories/${slug}/schema`, 'GET');
   const attrs: Record<string, unknown> = {};
   for (const f of schema.fields) {
     if (!f.required) continue;
-    attrs[f.key] = f.type === 'select' ? f.options?.[0] : f.type === 'number' ? Math.max(f.min ?? 1, 2020) : f.type === 'boolean' ? true : 'Test';
+    // Liste dépendante (modèle selon la marque) : première option de la marque déjà choisie
+    const options = f.dependsOn && f.optionsByParent ? f.optionsByParent[String(attrs[f.dependsOn])] : f.options;
+    attrs[f.key] = f.type === 'select' ? options?.[0] : f.type === 'number' ? Math.max(f.min ?? 1, 2020) : f.type === 'boolean' ? true : 'Test';
   }
   return { ...attrs, ...overrides };
 }

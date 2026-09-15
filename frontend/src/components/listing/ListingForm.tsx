@@ -6,7 +6,7 @@ import { api, ApiError, mediaUrl } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast-context";
 import { CONDITION_LABELS, formatPrice, PRICE_TYPE_LABELS } from "@/lib/format";
-import type { CategoryNode, Condition, FieldSchema, ListingDetail, ListingPhoto, ManagedShop, PriceType } from "@/lib/types";
+import { fieldOptions, type CategoryNode, type Condition, type FieldSchema, type ListingDetail, type ListingPhoto, type ManagedShop, type PriceType } from "@/lib/types";
 import { CityInput, type CityValue } from "@/components/ui/CityInput";
 import { PhotoCropper } from "./PhotoCropper";
 import { PriceEstimate } from "./PriceEstimate";
@@ -311,9 +311,19 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
                   <div className="field" key={f.key} style={{ marginBottom: 6 }}>
                     <label htmlFor={`a-${f.key}`}>{f.label}{f.unit ? ` (${f.unit})` : ""}{f.required && " *"}</label>
                     {f.type === "select" ? (
-                      <select id={`a-${f.key}`} className="select" value={String(form.attributes[f.key] ?? "")} onChange={(e) => setAttr(f.key, e.target.value)}>
-                        <option value="">Choisir…</option>
-                        {f.options?.map((o) => <option key={o} value={o}>{o}</option>)}
+                      <select
+                        id={`a-${f.key}`}
+                        className="select"
+                        value={String(form.attributes[f.key] ?? "")}
+                        disabled={!!f.dependsOn && !form.attributes[f.dependsOn]}
+                        onChange={(e) => {
+                          setAttr(f.key, e.target.value);
+                          // Changer la marque remet le modèle à zéro : les listes sont dépendantes
+                          for (const child of schema) if (child.dependsOn === f.key) setAttr(child.key, undefined);
+                        }}
+                      >
+                        <option value="">{f.dependsOn && !form.attributes[f.dependsOn] ? `Choisir d'abord : ${schema.find((s) => s.key === f.dependsOn)?.label.toLowerCase() ?? f.dependsOn}` : "Choisir…"}</option>
+                        {fieldOptions(f, form.attributes).map((o) => <option key={o} value={o}>{o}</option>)}
                       </select>
                     ) : f.type === "number" ? (
                       <input id={`a-${f.key}`} className="input" type="number" min={f.min} max={f.max} value={form.attributes[f.key] === undefined ? "" : String(form.attributes[f.key])} onChange={(e) => setAttr(f.key, e.target.value === "" ? undefined : Number(e.target.value))} />

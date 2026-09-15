@@ -71,7 +71,7 @@ describe("Phase 14 : confirmation de l'adresse e-mail", () => {
 
     // Validation sans session (le lien peut être ouvert sur un autre appareil)
     const ok = await request(server).post('/auth/email/verify').send({ token }).expect(200);
-    expect(ok.body).toEqual({ ok: true, email: dto.email });
+    expect(ok.body).toEqual({ ok: true, email: dto.email, changed: false });
 
     const me1 = await request(server).get('/users/me').set(auth).expect(200);
     expect(me1.body.emailVerified).toBe(true);

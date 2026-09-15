@@ -10,6 +10,8 @@ import type { NotificationPrefs, SellerSummary } from "@/lib/types";
 import { Modal } from "@/components/ui/Modal";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { ResendVerificationButton } from "@/components/account/ResendVerificationButton";
+import { ChangeEmailForm } from "@/components/account/ChangeEmailForm";
+import { TwoFactorSection } from "@/components/account/TwoFactorSection";
 
 const NOTIF_ROWS: Array<{ key: keyof NotificationPrefs; label: string; help: string; sms: boolean }> = [
   { key: "message", label: "Messages", help: "Nouveau message, proposition de prix", sms: false },
@@ -190,7 +192,10 @@ export default function ParametresPage() {
             <span className="hint" style={{ display: "block", marginTop: 6 }}>Ouvrez le lien reçu par e-mail pour confirmer votre adresse. Pensez à vérifier vos courriers indésirables.</span>
           </div>
         )}
+        <ChangeEmailForm currentEmail={user.email} />
       </section>
+
+      <TwoFactorSection />
 
       <section className="panel" id="mot-de-passe">
         <h2 className="h3">Mot de passe</h2>

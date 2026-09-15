@@ -60,7 +60,10 @@ test('rayon en kilomètres autour de Lyon : 5 km inclut Villeurbanne, 1 km ne ga
   await page.goto('/');
   const where = page.getByPlaceholder('OÙ ?');
   await where.fill('Lyon');
-  await page.getByRole('button', { name: 'Lyon (69003)' }).click();
+  // Lyon regroupe ses arrondissements : « toute la ville » d'abord, puis le sous-menu déplié
+  await expect(page.getByRole('button', { name: 'Lyon (toute la ville)' })).toBeVisible();
+  await page.getByRole('button', { name: 'Arrondissements de Lyon' }).click();
+  await page.getByRole('button', { name: 'Lyon 3e (69003)' }).click();
   // Panneau de rayon à la leboncoin : 5 km par défaut, paliers exacts
   const panel = page.getByTestId('radius-panel');
   await expect(panel).toContainText('Dans un rayon de 5 km');
@@ -199,4 +202,31 @@ test('cartes réduites : au plus 200 px de large, 4 colonnes ou plus sur bureau,
   // Aucun texte ne déborde de sa carte
   const overflow = await card.evaluate((el) => [...el.querySelectorAll('a, span, div')].some((n) => n.scrollWidth > n.clientWidth + 1 && getComputedStyle(n).overflow === 'visible' && getComputedStyle(n).display !== '-webkit-box'));
   expect(overflow).toBe(false);
+});
+
+test('localisation : arrondissements de Paris regroupés sous « toute la ville », et communes récentes proposées avant la saisie', async ({ page }) => {
+  await page.goto('/');
+  const where = page.getByPlaceholder('OÙ ?');
+  await where.fill('Paris');
+  // Une seule entrée pour Paris, ses arrondissements dans un sous-menu (comme sur leboncoin)
+  await expect(page.getByRole('button', { name: 'Paris (toute la ville)' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Paris \d+e? \(750\d\d\)$/ })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Arrondissements de Paris' }).click();
+  const sub = page.getByRole('list', { name: 'Arrondissements de Paris' });
+  await expect(sub.getByRole('button')).toHaveText(['Paris 1er (75001)', 'Paris 11e (75011)', 'Paris 20e (75020)']);
+  await sub.getByRole('button', { name: 'Paris 11e (75011)' }).click();
+  await expect(page.getByTestId('radius-panel')).toContainText('Paris (75011)');
+  await page.getByTestId('radius-panel').getByRole('button', { name: 'Valider' }).click();
+  await page.getByRole('button', { name: 'Rechercher' }).click();
+  await expect(page).toHaveURL(/city_label=Paris/);
+
+  // Retour à l'accueil : la commune vient d'être utilisée, elle est proposée en « Récents » avant de taper
+  await page.goto('/');
+  await page.getByPlaceholder('OÙ ?').focus();
+  await expect(page.getByText('Récents')).toBeVisible();
+  const recent = page.getByTestId('recent-location');
+  await expect(recent).toHaveCount(1);
+  await expect(recent.first()).toHaveText(/Paris \(75011\)/);
+  await recent.first().click();
+  await expect(page.getByTestId('radius-panel')).toContainText('Paris (75011)');
 });

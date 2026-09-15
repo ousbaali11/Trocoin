@@ -31,8 +31,12 @@ test("lien d'évitement puis recherche complète au clavier : mots-clés, commun
   await page.keyboard.press('Tab');
   await expect(page.getByPlaceholder('OÙ ?')).toBeFocused();
   await page.keyboard.type('Lyon');
-  // Les suggestions sont des boutons atteignables au clavier
-  const option = page.getByRole('button', { name: 'Lyon (69003)' });
+  // Les suggestions sont des boutons atteignables au clavier ; le sous-menu des arrondissements aussi
+  const expand = page.getByRole('button', { name: 'Arrondissements de Lyon' });
+  await expect(expand).toBeVisible();
+  await expand.focus();
+  await page.keyboard.press('Enter');
+  const option = page.getByRole('button', { name: 'Lyon 3e (69003)' });
   await expect(option).toBeVisible();
   await option.focus();
   await page.keyboard.press('Enter');
@@ -130,7 +134,9 @@ test('dépôt : catégorie choisie aux flèches, étapes validées avec Entrée,
   await page.getByLabel('Titre').fill('Moto de test clavier');
   await page.getByLabel(/^Prix/).fill('2500');
   await page.getByLabel('Description').fill('Description assez longue pour la validation.');
-  for (const [label, value] of [['Marque *', 'Yamaha'], ['Modèle *', 'MT-07'], [/^Année/, '2020'], [/^Kilométrage/, '12000'], [/^Cylindrée/, '689']] as const) await page.getByLabel(label).fill(value);
+  await page.getByLabel('Marque *').selectOption('Yamaha');
+  await page.getByLabel('Modèle *').selectOption('MT-07');
+  for (const [label, value] of [[/^Année/, '2020'], [/^Kilométrage/, '12000'], [/^Cylindrée/, '689']] as const) await page.getByLabel(label).fill(value);
   await page.getByRole('button', { name: 'Continuer' }).focus();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('heading', { name: 'Ajoutez des photos' })).toBeVisible();

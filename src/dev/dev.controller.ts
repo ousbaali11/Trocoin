@@ -39,6 +39,15 @@ export class DevController {
     return { email: email.toLowerCase(), link };
   }
 
+  /** Sujet du dernier avertissement (changement d'adresse) envoyé à une adresse : tests de bout en bout. */
+  @Get('last-notice/:email')
+  getLastNotice(@Param('email') email: string) {
+    if (isProduction()) throw new NotFoundException();
+    const subject = this.emailService.getLastNoticeForDev(email);
+    if (!subject) throw new NotFoundException('Aucun avertissement récent pour cette adresse.');
+    return { email: email.toLowerCase(), subject };
+  }
+
   @Get('last-otp/:phone')
   getLastOtp(@Param('phone') phone: string) {
     if (isProduction()) throw new NotFoundException();

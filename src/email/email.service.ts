@@ -80,6 +80,7 @@ export class EmailService {
   private readonly isMock: boolean;
   private lastResetLinksForDev = new Map<string, string>();
   private lastVerificationLinksForDev = new Map<string, string>();
+  private lastNoticesForDev = new Map<string, string>();
 
   constructor(private config: ConfigService) {
     // Défaut : mock hors production, none en production (jamais de mock en prod, et pas de panne au déploiement si la variable manque)
@@ -136,13 +137,19 @@ export class EmailService {
    * Lève ServiceUnavailableException si aucun fournisseur n'est configuré ou si l'envoi échoue :
    * l'appelant décide s'il bloque (renvoi manuel) ou non (inscription, voir AuthService.register).
    */
-  async sendEmailVerification(to: string, link: string, displayName: string): Promise<void> {
+  async sendEmailVerification(to: string, link: string, displayName: string, mode: 'inscription' | 'changement' = 'inscription'): Promise<void> {
     if (!this.provider) {
       throw new ServiceUnavailableException("L'envoi d'e-mails n'est pas encore disponible. Réessayez plus tard.");
     }
-    const subject = 'Trocoin — confirmez votre adresse e-mail';
-    const text = `Bonjour ${displayName},\n\nMerci pour votre inscription sur Trocoin. Pour confirmer votre adresse e-mail, ouvrez ce lien (valable 24 heures) :\n${link}\n\nSi vous n'avez pas créé de compte sur Trocoin, ignorez cet e-mail.\n\nL'équipe Trocoin`;
-    const html = `<p>Bonjour ${escapeHtml(displayName)},</p><p>Merci pour votre inscription sur Trocoin. Pour confirmer votre adresse e-mail, cliquez sur ce lien (valable 24 heures) :</p><p><a href="${link}">${link}</a></p><p>Si vous n'avez pas créé de compte sur Trocoin, ignorez cet e-mail.</p><p>L'équipe Trocoin</p>`;
+    const subject = mode === 'changement' ? 'Trocoin — confirmez votre nouvelle adresse e-mail' : 'Trocoin — confirmez votre adresse e-mail';
+    const intro = mode === 'changement'
+      ? 'Vous avez demandé à utiliser cette adresse pour votre compte Trocoin. Pour la confirmer, ouvrez ce lien (valable 24 heures) :'
+      : 'Merci pour votre inscription sur Trocoin. Pour confirmer votre adresse e-mail, ouvrez ce lien (valable 24 heures) :';
+    const outro = mode === 'changement'
+      ? "Si vous n'êtes pas à l'origine de cette demande, ignorez cet e-mail : votre compte garde son adresse actuelle."
+      : "Si vous n'avez pas créé de compte sur Trocoin, ignorez cet e-mail.";
+    const text = `Bonjour ${displayName},\n\n${intro}\n${link}\n\n${outro}\n\nL'équipe Trocoin`;
+    const html = `<p>Bonjour ${escapeHtml(displayName)},</p><p>${escapeHtml(intro).replace('ouvrez ce lien', 'cliquez sur ce lien')}</p><p><a href="${link}">${link}</a></p><p>${escapeHtml(outro)}</p><p>L'équipe Trocoin</p>`;
     try {
       await withTimeout(this.provider.send({ to, subject, text, html }), 10_000);
     } catch (err) {
@@ -156,6 +163,34 @@ export class EmailService {
   getLastVerificationLinkForDev(email: string): string | undefined {
     if (isProduction()) return undefined;
     return this.lastVerificationLinksForDev.get(email.toLowerCase());
+  }
+
+  /**
+   * Avertissement envoyé à l'ADRESSE ACTUELLE quand un changement d'adresse est demandé
+   * (`demande`) puis confirmé (`effectue`) : la personne est prévenue même si ce n'est pas elle.
+   * Ne lève jamais : un échec est journalisé, le parcours continue.
+   */
+  async sendEmailChangeNotice(to: string, displayName: string, newEmailMasked: string, stage: 'demande' | 'effectue'): Promise<void> {
+    if (!this.provider) return;
+    const subject = stage === 'demande' ? "Trocoin — demande de changement d'adresse e-mail" : 'Trocoin — votre adresse e-mail a été changée';
+    const body = stage === 'demande'
+      ? `Une demande vient d'être faite pour remplacer l'adresse e-mail de votre compte Trocoin par ${newEmailMasked}. Le changement ne prendra effet qu'après confirmation depuis la nouvelle adresse.\n\nSi vous n'êtes pas à l'origine de cette demande, changez votre mot de passe dès maintenant depuis vos paramètres (toutes les autres sessions seront déconnectées) et contactez le support.`
+      : `L'adresse e-mail de votre compte Trocoin vient d'être remplacée par ${newEmailMasked}. Cette adresse ne recevra plus nos messages.\n\nSi vous n'êtes pas à l'origine de ce changement, contactez le support sans attendre.`;
+    const text = `Bonjour ${displayName},\n\n${body}\n\nL'équipe Trocoin`;
+    const html = `<p>Bonjour ${escapeHtml(displayName)},</p>${body.split('\n\n').map((p) => `<p>${escapeHtml(p)}</p>`).join('')}<p>L'équipe Trocoin</p>`;
+    try {
+      await withTimeout(this.provider.send({ to, subject, text, html }), 10_000);
+      if (!isProduction()) this.lastNoticesForDev.set(to.toLowerCase(), subject);
+    } catch (err) {
+      const reason = err instanceof EmailDeliveryError ? err.reason : (err as Error).message;
+      this.logger.error(`Avertissement de changement d'adresse non envoyé vers ${to.replace(/^(.{2}).*(@.*)$/, '$1…$2')} : ${reason}`);
+    }
+  }
+
+  /** Hors production : sujet du dernier avertissement envoyé à une adresse (tests). */
+  getLastNoticeForDev(email: string): string | undefined {
+    if (isProduction()) return undefined;
+    return this.lastNoticesForDev.get(email.toLowerCase());
   }
 }
 

@@ -1,4 +1,6 @@
 import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
   IsObject,
   IsOptional,
@@ -49,6 +51,10 @@ export class UpdateProfileDto {
   /** Préférences granulaires { message: { push, sms, email }, … } — validées dans UsersService. */
   @IsOptional() @IsObject()
   notificationPrefs?: Record<string, Record<string, boolean>>;
+
+  /** Dernières localisations (5 au plus) : { city, postalCode?, latitude?, longitude? } — validées dans UsersService. */
+  @IsOptional() @IsArray() @ArrayMaxSize(20)
+  recentLocations?: Array<Record<string, unknown>>;
 }
 
 export class BecomeProDto {

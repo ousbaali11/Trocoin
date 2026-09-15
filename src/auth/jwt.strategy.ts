@@ -26,7 +26,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
    * (accountType) vient de la base, jamais du token, pour qu'une
    * rétrogradation admin soit effective immédiatement.
    */
-  async validate(payload: { sub: string; phoneNumber: string }): Promise<AuthUser> {
+  async validate(payload: { sub: string; phoneNumber: string; purpose?: string }): Promise<AuthUser> {
+    // Les jetons intermédiaires (défi de double authentification) portent un `purpose` : jamais une session.
+    if (payload.purpose) throw new UnauthorizedException('Session invalide.');
     const user = await this.usersService.findById(payload.sub);
     if (!user || user.deletedAt) throw new UnauthorizedException('Session invalide.');
     if (user.suspendedAt) throw new ForbiddenException('Ce compte est suspendu.');

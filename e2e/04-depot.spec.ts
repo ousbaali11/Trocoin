@@ -34,8 +34,10 @@ test('voiture : critères obligatoires, deux photos, localisation par code posta
   await page.getByLabel('Description').fill('Peugeot 208 essence, boîte manuelle, entretien à jour, carnet et factures disponibles. Aucun frais à prévoir, contrôle technique récent.');
   await page.getByRole('button', { name: 'Continuer' }).click();
   await expect(errorAlert(page)).toContainText('Le champ « Marque » est obligatoire.');
-  await page.getByLabel('Marque *').fill('Peugeot');
-  await page.getByLabel('Modèle *').fill('208');
+  await page.getByLabel('Marque *').selectOption('Peugeot');
+  // Liste dépendante : le modèle n'est proposé qu'une fois la marque choisie
+  await expect(page.getByLabel('Modèle *')).toBeEnabled();
+  await page.getByLabel('Modèle *').selectOption('208');
   await page.getByLabel(/^Année/).fill('2019');
   await page.getByLabel(/^Kilométrage/).fill('58000');
   await page.getByLabel(/^Carburant/).selectOption('Essence');

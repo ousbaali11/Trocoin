@@ -7,7 +7,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast-context";
 import { CONDITION_LABELS } from "@/lib/format";
-import type { CategoryNode, FieldSchema, SearchResult } from "@/lib/types";
+import { fieldOptions, type CategoryNode, type FieldSchema, type SearchResult } from "@/lib/types";
 import { LocationPicker, type LocationValue } from "@/components/ui/LocationPicker";
 import { ListingsMapDynamic } from "@/components/ui/DynamicMap";
 import { ListingCard } from "@/components/ui/ListingCard";
@@ -290,9 +290,20 @@ export function SearchPage() {
                 <div className="field" key={f.key}>
                   <label htmlFor={`attr-${f.key}`}>{f.label}{f.unit ? ` (${f.unit})` : ""}</label>
                   {f.type === "select" ? (
-                    <select id={`attr-${f.key}`} className="select" value={get(`attr.${f.key}`)} onChange={(e) => setParams({ [`attr.${f.key}`]: e.target.value || undefined })}>
-                      <option value="">Indifférent</option>
-                      {f.options?.map((o) => <option key={o} value={o}>{o}</option>)}
+                    <select
+                      id={`attr-${f.key}`}
+                      className="select"
+                      value={get(`attr.${f.key}`)}
+                      disabled={!!f.dependsOn && !get(`attr.${f.dependsOn}`)}
+                      onChange={(e) => {
+                        // Liste dépendante : changer la marque efface le modèle choisi
+                        const patch: Record<string, string | undefined> = { [`attr.${f.key}`]: e.target.value || undefined };
+                        for (const child of schema) if (child.dependsOn === f.key) patch[`attr.${child.key}`] = undefined;
+                        setParams(patch);
+                      }}
+                    >
+                      <option value="">{f.dependsOn && !get(`attr.${f.dependsOn}`) ? `Choisir d'abord : ${schema.find((s) => s.key === f.dependsOn)?.label.toLowerCase() ?? f.dependsOn}` : "Indifférent"}</option>
+                      {fieldOptions(f, Object.fromEntries(schema.map((s) => [s.key, get(`attr.${s.key}`)]))).map((o) => <option key={o} value={o}>{o}</option>)}
                     </select>
                   ) : f.type === "number" ? (
                     <div className="form-row">
