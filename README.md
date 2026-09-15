@@ -36,7 +36,7 @@ cd frontend && npm install && cp .env.example .env.local && npm run dev -- -p 30
 ## Tests
 
 ```bash
-npm test                 # 105 tests e2e (API, supertest)
+npm test                 # 107 tests e2e (API, supertest)
 npm run e2e:build        # construit l'API (dist/) et le front (next build) pour les tests navigateur
 npm run e2e              # 56 scénarios Playwright dans Chromium (desktop 1280 px + mobile 375 px) : parcours, accessibilité (axe) site + back-office, clavier, SEO
 node scripts/charge.js --api https://trocoin.onrender.com --front https://trocoin.vercel.app --vus 10 --minutes 3   # test de charge léger (lectures publiques)
@@ -141,6 +141,7 @@ libération), journal d'audit.
 - **Dépôt** : exemple de titre par catégorie (`title-examples.ts`), description auto-extensible (`AutoTextarea`), champs ajoutés d'après les annonces leboncoin (sellerie, salles d'eau, couleur puériculture).
 - **Images** : toute photo/avatar/logo est ré-encodée par `sharp` (orientation appliquée, EXIF/GPS/ICC supprimés, ≤ 1600 px, format d'origine) ; un fichier corrompu est rejeté. L'image envoyée n'est jamais servie telle quelle.
 - **Mot de passe** : `POST /auth/password/change` (ancien mot de passe requis, autres sessions révoquées), section « Mot de passe » dans Paramètres.
+- **Confirmation de l'adresse e-mail** (AUDIT.md §18) : à l'inscription, e-mail avec lien à usage unique (24 h) vers `/confirmer-email?token=…` → `POST /auth/email/verify` → `emailVerified` sur `/users/me`. Renvoi depuis Paramètres : `POST /auth/email/resend` (60 s entre deux envois, 3/h/IP). Compte non confirmé : usage normal + rappel dans l'espace compte. En dev : lien via `/dev/last-verification-link/:email`.
 
 ## Phase 8 (barre d'accueil épurée, panneau de rayon, plein texte, plafond photos)
 
@@ -210,7 +211,7 @@ npm run migration:run
 ## Principales routes API
 
 ```
-POST /auth/register · POST /auth/login · POST /auth/password/forgot · POST /auth/password/reset · POST /auth/register/phone · POST /auth/otp/verify · POST /auth/refresh · POST /auth/logout · /auth/sessions
+POST /auth/register · POST /auth/email/verify · POST /auth/email/resend · POST /auth/login · POST /auth/password/forgot · POST /auth/password/reset · POST /auth/register/phone · POST /auth/otp/verify · POST /auth/refresh · POST /auth/logout · /auth/sessions
 GET  /health
 GET  /users/me · PATCH /users/me · POST /users/me/become-pro · GET /users/:id/profile
 GET  /users/me/export · DELETE /users/me · /users/me/blocks · /users/me/saved-searches

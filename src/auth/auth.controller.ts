@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, HttpCode, Post, Req, UseGuards } from '@
 import { Throttle } from '@nestjs/throttler';
 import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { AuthService } from './auth.service';
-import { ChangePasswordDto, ForgotPasswordDto, LoginDto, RegisterDto, ResetPasswordDto } from './dto/register.dto';
+import { ChangePasswordDto, ForgotPasswordDto, LoginDto, RegisterDto, ResetPasswordDto, VerifyEmailDto } from './dto/register.dto';
 import { RegisterPhoneDto } from './dto/register-phone.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
@@ -70,6 +70,23 @@ export class AuthController {
   @Throttle({ default: { limit: 10, ttl: 900_000 } })
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto.token, dto.password, dto.passwordConfirmation);
+  }
+
+  /** Confirmation de l'adresse e-mail avec le jeton reçu (lien de l'e-mail). Pas de session requise. */
+  @Post('email/verify')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 900_000 } })
+  verifyEmail(@Body() dto: VerifyEmailDto) {
+    return this.authService.verifyEmail(dto.token);
+  }
+
+  /** Renvoi de l'e-mail de confirmation (connecté) : 3 envois / heure / IP, et 60 s minimum entre deux envois par compte. */
+  @UseGuards(JwtAuthGuard)
+  @Post('email/resend')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 3, ttl: 3_600_000 } })
+  resendVerification(@Req() req: any) {
+    return this.authService.resendEmailVerification(req.user.userId);
   }
 
   /** Rotation du refresh token. */

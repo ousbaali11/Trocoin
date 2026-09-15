@@ -47,6 +47,12 @@ export class RegisterDto {
   siret?: string;
 }
 
+export class VerifyEmailDto {
+  /** Jeton reçu par e-mail (lien de confirmation). */
+  @IsString() @MinLength(20) @MaxLength(200)
+  token: string;
+}
+
 export class LoginDto {
   /** E-mail ou nom d'utilisateur. */
   @IsString() @MinLength(3) @MaxLength(120)

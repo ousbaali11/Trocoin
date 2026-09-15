@@ -31,6 +31,14 @@ export class DevController {
     return { email: email.toLowerCase(), link };
   }
 
+  @Get('last-verification-link/:email')
+  getLastVerificationLink(@Param('email') email: string) {
+    if (isProduction()) throw new NotFoundException();
+    const link = this.emailService.getLastVerificationLinkForDev(email);
+    if (!link) throw new NotFoundException('Aucun lien récent pour cette adresse.');
+    return { email: email.toLowerCase(), link };
+  }
+
   @Get('last-otp/:phone')
   getLastOtp(@Param('phone') phone: string) {
     if (isProduction()) throw new NotFoundException();

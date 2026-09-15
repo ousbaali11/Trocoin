@@ -79,6 +79,7 @@ export class EmailService {
   readonly providerName: string;
   private readonly isMock: boolean;
   private lastResetLinksForDev = new Map<string, string>();
+  private lastVerificationLinksForDev = new Map<string, string>();
 
   constructor(private config: ConfigService) {
     // Défaut : mock hors production, none en production (jamais de mock en prod, et pas de panne au déploiement si la variable manque)
@@ -128,6 +129,33 @@ export class EmailService {
   getLastResetLinkForDev(email: string): string | undefined {
     if (isProduction()) return undefined;
     return this.lastResetLinksForDev.get(email.toLowerCase());
+  }
+
+  /**
+   * E-mail de confirmation d'adresse (inscription ou renvoi depuis les paramètres).
+   * Lève ServiceUnavailableException si aucun fournisseur n'est configuré ou si l'envoi échoue :
+   * l'appelant décide s'il bloque (renvoi manuel) ou non (inscription, voir AuthService.register).
+   */
+  async sendEmailVerification(to: string, link: string, displayName: string): Promise<void> {
+    if (!this.provider) {
+      throw new ServiceUnavailableException("L'envoi d'e-mails n'est pas encore disponible. Réessayez plus tard.");
+    }
+    const subject = 'Trocoin — confirmez votre adresse e-mail';
+    const text = `Bonjour ${displayName},\n\nMerci pour votre inscription sur Trocoin. Pour confirmer votre adresse e-mail, ouvrez ce lien (valable 24 heures) :\n${link}\n\nSi vous n'avez pas créé de compte sur Trocoin, ignorez cet e-mail.\n\nL'équipe Trocoin`;
+    const html = `<p>Bonjour ${escapeHtml(displayName)},</p><p>Merci pour votre inscription sur Trocoin. Pour confirmer votre adresse e-mail, cliquez sur ce lien (valable 24 heures) :</p><p><a href="${link}">${link}</a></p><p>Si vous n'avez pas créé de compte sur Trocoin, ignorez cet e-mail.</p><p>L'équipe Trocoin</p>`;
+    try {
+      await withTimeout(this.provider.send({ to, subject, text, html }), 10_000);
+    } catch (err) {
+      const reason = err instanceof EmailDeliveryError ? err.reason : (err as Error).message;
+      this.logger.error(`Envoi e-mail impossible vers ${to.replace(/^(.{2}).*(@.*)$/, '$1…$2')} via ${this.providerName} : ${reason}`);
+      throw new ServiceUnavailableException("L'envoi de l'e-mail a échoué. Réessayez dans quelques instants.");
+    }
+    if (!isProduction()) this.lastVerificationLinksForDev.set(to.toLowerCase(), link);
+  }
+
+  getLastVerificationLinkForDev(email: string): string | undefined {
+    if (isProduction()) return undefined;
+    return this.lastVerificationLinksForDev.get(email.toLowerCase());
   }
 }
 

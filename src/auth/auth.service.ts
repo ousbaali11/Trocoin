@@ -11,6 +11,7 @@ import { hashPassword, verifyPassword } from './password';
 import { User } from '../users/user.entity';
 import { UsersService } from '../users/users.service';
 import { EmailService } from '../email/email.service';
+import { EmailVerificationToken } from './email-verification-token.entity';
 import { PasswordResetToken } from './password-reset-token.entity';
 import { RefreshToken } from './refresh-token.entity';
 
@@ -18,6 +19,11 @@ import { RefreshToken } from './refresh-token.entity';
 const DUMMY_HASH = 'scrypt$32768$8$1$AAAAAAAAAAAAAAAAAAAAAA==$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==';
 
 export const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
+/** Lien de confirmation d'e-mail : 24 h. */
+export const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
+/** Délai minimum entre deux renvois de l'e-mail de confirmation pour un même compte. */
+export const EMAIL_VERIFICATION_RESEND_INTERVAL_MS = 60 * 1000;
+const INVALID_VERIFICATION_LINK = 'Ce lien de confirmation est invalide ou expiré. Demandez un nouvel e-mail depuis vos paramètres.';
 
 /** Mot de passe temporaire lisible (sans caractères ambigus), 12 caractères, entropie ≈ 62 bits. */
 function generateTemporaryPassword(): string {
@@ -49,6 +55,7 @@ export class AuthService {
     private jwtService: JwtService,
     @InjectRepository(RefreshToken) private refreshRepo: Repository<RefreshToken>,
     @InjectRepository(PasswordResetToken) private resetRepo: Repository<PasswordResetToken>,
+    @InjectRepository(EmailVerificationToken) private verificationRepo: Repository<EmailVerificationToken>,
     private emailService: EmailService,
   ) {}
 
@@ -117,8 +124,67 @@ export class AuthService {
       siret: dto.siret,
     });
     this.logger.log(`Inscription ${dto.accountType} ${user.id} (téléphone non vérifié : SMS désactivé, phase 5)`);
+    // Preuve de possession de l'adresse : lien à usage unique (24 h). Un échec d'envoi ne bloque
+    // pas l'inscription (compte utilisable, bandeau de rappel + bouton « Renvoyer » dans les paramètres).
+    const emailSent = await this.issueEmailVerification(user).then(
+      () => true,
+      (err) => {
+        this.logger.warn(`E-mail de confirmation non envoyé à l'inscription de ${user.id} : ${(err as Error).message}`);
+        return false;
+      },
+    );
     const tokens = await this.openSession(user, randomUUID(), meta);
-    return { ...tokens, user: this.sessionUser(user) };
+    return { ...tokens, user: this.sessionUser(user), verificationEmailSent: emailSent };
+  }
+
+  /** Crée un jeton de confirmation (24 h) pour l'adresse actuelle de l'utilisateur et envoie l'e-mail. */
+  private async issueEmailVerification(user: User): Promise<void> {
+    if (!user.email) throw new BadRequestException("Aucune adresse e-mail n'est associée à ce compte.");
+    const raw = randomBytes(32).toString('base64url');
+    await this.verificationRepo.save(
+      this.verificationRepo.create({
+        userId: user.id,
+        email: user.email.toLowerCase(),
+        tokenHash: hashToken(raw),
+        expiresAt: new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS),
+      }),
+    );
+    const link = `${this.emailService.siteUrl()}/confirmer-email?token=${raw}`;
+    await this.emailService.sendEmailVerification(user.email, link, user.firstName || user.displayName);
+    this.logger.log(`E-mail de confirmation envoyé pour ${user.id}`);
+  }
+
+  /**
+   * Confirmation de l'adresse via le jeton reçu : usage unique, expiré après 24 h, et l'adresse
+   * doit encore être celle du compte (un changement d'adresse invalide les anciens liens).
+   */
+  async verifyEmail(rawToken: string): Promise<{ ok: true; email: string }> {
+    const stored = await this.verificationRepo.findOne({ where: { tokenHash: hashToken(rawToken) } });
+    if (!stored || stored.usedAt || stored.expiresAt.getTime() < Date.now()) {
+      throw new BadRequestException(INVALID_VERIFICATION_LINK);
+    }
+    const user = await this.usersService.findById(stored.userId);
+    if (!user || user.deletedAt || !user.email || user.email.toLowerCase() !== stored.email) {
+      throw new BadRequestException(INVALID_VERIFICATION_LINK);
+    }
+    await this.verificationRepo.update(stored.id, { usedAt: new Date() });
+    if (!user.emailVerified) await this.usersService.markEmailVerified(user.id);
+    this.logger.log(`Adresse e-mail confirmée pour ${user.id}`);
+    return { ok: true, email: user.email };
+  }
+
+  /** Renvoi manuel (paramètres du compte) : refusé si déjà confirmé, 60 s minimum entre deux envois. */
+  async resendEmailVerification(userId: string): Promise<{ ok: true; email: string }> {
+    const user = await this.usersService.findById(userId);
+    if (!user || user.deletedAt) throw new UnauthorizedException('Connexion requise.');
+    if (!user.email) throw new BadRequestException("Aucune adresse e-mail n'est associée à ce compte.");
+    if (user.emailVerified) throw new BadRequestException('Votre adresse e-mail est déjà confirmée.');
+    const last = await this.verificationRepo.findOne({ where: { userId }, order: { createdAt: 'DESC' } });
+    if (last && Date.now() - last.createdAt.getTime() < EMAIL_VERIFICATION_RESEND_INTERVAL_MS) {
+      throw new BadRequestException('Un e-mail vient de vous être envoyé. Patientez une minute avant de redemander.');
+    }
+    await this.issueEmailVerification(user);
+    return { ok: true, email: user.email };
   }
 
   /** Connexion e-mail ou nom d'utilisateur + mot de passe. Même message quel que soit le champ erroné. */
@@ -211,7 +277,16 @@ export class AuthService {
   }
 
   private sessionUser(user: User) {
-    return { id: user.id, phoneNumber: user.phoneNumber, phoneVerified: user.phoneVerified, displayName: user.displayName, username: user.username, accountType: user.accountType };
+    return {
+      id: user.id,
+      phoneNumber: user.phoneNumber,
+      phoneVerified: user.phoneVerified,
+      email: user.email,
+      emailVerified: !!user.emailVerified,
+      displayName: user.displayName,
+      username: user.username,
+      accountType: user.accountType,
+    };
   }
 
   private async openSession(user: User, familyId: string, meta: { userAgent?: string; ip?: string }): Promise<SessionTokens> {

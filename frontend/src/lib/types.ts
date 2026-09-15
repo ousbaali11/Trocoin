@@ -125,6 +125,9 @@ export interface Me {
   phoneNumber: string;
   phoneVerified: boolean;
   email?: string | null;
+  /** Adresse confirmée via le lien reçu par e-mail. */
+  emailVerified?: boolean;
+  emailVerifiedAt?: string | null;
   firstName?: string | null;
   lastName?: string | null;
   username?: string | null;

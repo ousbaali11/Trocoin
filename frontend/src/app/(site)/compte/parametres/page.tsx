@@ -9,6 +9,7 @@ import { useToast } from "@/lib/toast-context";
 import type { NotificationPrefs, SellerSummary } from "@/lib/types";
 import { Modal } from "@/components/ui/Modal";
 import { PasswordInput } from "@/components/ui/PasswordInput";
+import { ResendVerificationButton } from "@/components/account/ResendVerificationButton";
 
 const NOTIF_ROWS: Array<{ key: keyof NotificationPrefs; label: string; help: string; sms: boolean }> = [
   { key: "message", label: "Messages", help: "Nouveau message, proposition de prix", sms: false },
@@ -164,7 +165,27 @@ export default function ParametresPage() {
         <p className="small muted">Ces informations ne sont jamais affichées publiquement. Le numéro de mobile identifie le compte et ne se modifie pas.</p>
         <dl className="small" style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "6px 16px", margin: 0 }}>
           <dt className="muted">Numéro de mobile</dt><dd style={{ margin: 0 }}>{phone}</dd>
-          <dt className="muted">E-mail</dt><dd style={{ margin: 0 }}>{user.email || <span className="muted">Aucune adresse enregistrée (compte créé par SMS)</span>}</dd>
+          <dt className="muted">E-mail</dt>
+          <dd style={{ margin: 0 }}>
+            {user.email ? (
+              <>
+                {user.email}{" "}
+                {user.emailVerified ? (
+                  <span className="pill pill-green" data-testid="email-status">Adresse confirmée</span>
+                ) : (
+                  <span className="pill pill-ochre" data-testid="email-status">Adresse non confirmée</span>
+                )}
+                {!user.emailVerified && (
+                  <div style={{ marginTop: 8 }}>
+                    <ResendVerificationButton size="sm" />
+                    <span className="hint" style={{ display: "block", marginTop: 6 }}>Ouvrez le lien reçu par e-mail pour confirmer votre adresse. Pensez à vérifier vos courriers indésirables.</span>
+                  </div>
+                )}
+              </>
+            ) : (
+              <span className="muted">Aucune adresse enregistrée (compte créé par SMS)</span>
+            )}
+          </dd>
           <dt className="muted">Nom d&apos;utilisateur</dt><dd style={{ margin: 0 }}>{user.username || <span className="muted">—</span>}</dd>
           {(user.firstName || user.lastName) && <><dt className="muted">Nom</dt><dd style={{ margin: 0 }}>{[user.firstName, user.lastName].filter(Boolean).join(" ")}</dd></>}
           {user.companyName && <><dt className="muted">Raison sociale</dt><dd style={{ margin: 0 }}>{user.companyName}</dd></>}

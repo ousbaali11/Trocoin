@@ -24,6 +24,13 @@ export class User {
   @Column({ nullable: true, unique: true })
   email?: string;
 
+  /** Adresse e-mail confirmée par le lien reçu à l'inscription (ou renvoyé depuis les paramètres). */
+  @Column({ default: false })
+  emailVerified: boolean;
+
+  @Column({ type: DATE_TYPE, nullable: true })
+  emailVerifiedAt?: Date;
+
   @Column()
   displayName: string;
 

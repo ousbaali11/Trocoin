@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { errorAlert, expectNoHorizontalOverflow, logout, uniq, uniquePhone } from './helpers';
+import { api, errorAlert, expectNoHorizontalOverflow, logout, uniq, uniquePhone } from './helpers';
 
 /**
  * Inscription particulier (formulaire complet, mot de passe, doublon refusé) et
@@ -37,6 +37,35 @@ test('particulier : inscription complète puis doublon d\'e-mail et de télépho
   await expect(page).toHaveURL(/\/compte$/);
   await expect(page.getByRole('heading', { name: /Bonjour Léa M\./ })).toBeVisible();
   await expectNoHorizontalOverflow(page);
+
+  // Adresse pas encore confirmée : rappel visible, compte utilisable, statut et bouton dans les paramètres
+  const banner = page.getByTestId('email-verification-banner');
+  await expect(banner).toBeVisible();
+  await expect(banner).toContainText(u.email);
+  await page.goto('/compte/parametres');
+  await expect(page.getByTestId('email-status')).toHaveText('Adresse non confirmée');
+  await page.getByRole('button', { name: "Renvoyer l'e-mail de confirmation" }).click();
+  // Moins d'une minute après l'e-mail d'inscription : le serveur refuse, le bouton se met en attente
+  await expect(page.getByText(/Patientez une minute/)).toBeVisible();
+  await expect(page.getByRole('button', { name: /Renvoyer dans \d+ s/ })).toBeDisabled();
+
+  // Lien reçu par e-mail (fournisseur simulé en e2e : l'API hors production expose le dernier lien envoyé)
+  const { link } = await api<{ link: string }>(`/dev/last-verification-link/${encodeURIComponent(u.email)}`);
+  expect(link).toContain('/confirmer-email?token=');
+  const linkUrl = new URL(link);
+  await page.goto(linkUrl.pathname + linkUrl.search);
+  await expect(page.getByText(`Votre adresse ${u.email} est confirmée`)).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await page.getByRole('link', { name: 'Aller à mon compte' }).click();
+  await expect(page).toHaveURL(/\/compte$/);
+  await expect(page.getByTestId('email-verification-banner')).toHaveCount(0);
+  await page.goto('/compte/parametres');
+  await expect(page.getByTestId('email-status')).toHaveText('Adresse confirmée');
+  await expect(page.getByRole('button', { name: "Renvoyer l'e-mail de confirmation" })).toHaveCount(0);
+
+  // Le lien ne sert qu'une fois
+  await page.goto(linkUrl.pathname + linkUrl.search);
+  await expect(errorAlert(page)).toContainText('invalide ou expiré');
   await logout(page);
 
   // Doublon : même e-mail

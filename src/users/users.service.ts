@@ -179,6 +179,10 @@ export class UsersService {
     await this.usersRepo.update(id, { passwordHash });
   }
 
+  async markEmailVerified(id: string): Promise<void> {
+    await this.usersRepo.update(id, { emailVerified: true, emailVerifiedAt: new Date() });
+  }
+
   async createFromPhone(phoneNumber: string): Promise<User> {
     const user = this.usersRepo.create({
       phoneNumber,

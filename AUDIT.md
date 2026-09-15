@@ -138,17 +138,21 @@ Un relevé manuel des 6 panneaux manquants prend 15 minutes depuis un navigateur
 
 ---
 
-## 5. Comptes et clés — mode d'emploi quand vous déciderez de les activer
+## 5. Comptes et clés — état vérifié en production le 15 septembre 2026
 
-| Besoin | Pourquoi | Variables exactes (Render) | Guide |
-|---|---|---|---|
-| ~~Auto-deploy Render~~ | **Fait le 14 septembre** : secret `RENDER_DEPLOY_HOOK` en place, preuve automatique par `/health` (§8) | — | `DEPLOIEMENT.md` §2b |
-| E-mail transactionnel — **fait le 14 septembre (§15)** | Mot de passe oublié autonome | `EMAIL_PROVIDER=resend` + `RESEND_API_KEY` + `EMAIL_FROM`, `SITE_URL` | `DEPLOIEMENT.md` §5b ; appel HTTP réel implémenté et testé ; domaine à vérifier chez Resend pour écrire à d'autres adresses que celle du compte |
-| Stockage des photos — **fait le 14 septembre (§15)** | Disque Render éphémère | `STORAGE_PROVIDER=s3`, `S3_ENDPOINT`, `S3_REGION=auto`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` (+ `S3_PUBLIC_URL` facultative) | `DEPLOIEMENT.md` « Fichiers envoyés » ; testé contre le bucket R2 réel |
-| Base en Europe — **préparée le 14 septembre (§15)** | RGPD | Nouvelle `DATABASE_URL` Neon Frankfurt | `DEPLOIEMENT.md` §6b — schéma migré, script de copie prouvé ; copie réelle dès réception de l'URL US |
-| Paiement Stripe — **fait le 14 septembre, mode test (§15)** | Paiement sécurisé réel | `PAYMENT_PROVIDER=stripe`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `SITE_URL` | `DEPLOIEMENT.md` §5c ; webhook créé sur le compte Stripe |
-| Redis (plus tard) | Dès la 2ᵉ instance | `REDIS_URL` (Upstash gratuit) | `DEPLOIEMENT.md` §8b ; code testé avec un Redis simulé |
-| Sentry (facultatif) | Erreurs 500 remontées | `SENTRY_DSN` | `DEPLOIEMENT.md` §7 |
+Chaque ligne a été contrôlée par une exécution réelle contre `https://trocoin.onrender.com`
+(version 1.9.0 au moment du contrôle), pas d'après la configuration déclarée.
+
+| Besoin | Statut | Preuve du 15 septembre | Variables (Render) | Guide |
+|---|---|---|---|---|
+| Auto-deploy Render | **Fait** (14 septembre) | Chaque `git push` déclenche le déploiement ; `/health` renvoie la version attendue (§8) | secret GitHub `RENDER_DEPLOY_HOOK` | `DEPLOIEMENT.md` §2b |
+| Stockage des photos (Cloudflare R2) | **Fait** | Objet déposé dans le bucket, puis `GET /uploads/<nom>.jpg` sur l'API de production → 200 `image/jpeg` ; après suppression de l'objet → 404. Les photos passent donc bien par R2 et non par le disque Render | `STORAGE_PROVIDER=s3`, `S3_ENDPOINT`, `S3_REGION=auto`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` (+ `S3_PUBLIC_URL` facultative) | `DEPLOIEMENT.md` « Fichiers envoyés » |
+| Paiement Stripe (mode test) | **Fait** | Événement signé envoyé à `POST /transactions/webhook/stripe` → 200 `{"received":true,"handled":"ignored"}` ; même événement avec une mauvaise signature → 400. Le secret de webhook en place sur Render est donc le bon | `PAYMENT_PROVIDER=stripe`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `SITE_URL` | `DEPLOIEMENT.md` §5c |
+| Base Neon en Europe | **Fait, ménage restant** | `/health` → `databaseRegion: "eu-central-1"`, écritures constatées à Frankfurt (§15.1). **L'ancien projet Neon US (us-east-2) existe toujours** : connexion encore possible, 2 comptes dedans (copie figée du 14 septembre). À supprimer depuis le tableau de bord Neon une fois que vous n'en voulez plus : rien ne le lit, mais c'est une copie de données personnelles hors Europe | `DATABASE_URL` (Frankfurt) | `DEPLOIEMENT.md` §6b |
+| E-mail transactionnel (Resend) | **Partiel** | Le fournisseur est bien actif (l'API ne répond plus « non configuré ») mais **l'envoi échoue** : `POST /auth/password/forgot` pour une adresse réelle → 503 « L'envoi de l'e-mail a échoué ». Cause vérifiée directement auprès de Resend : l'expéditeur `onboarding@resend.dev` est un bac à sable qui n'accepte qu'une seule adresse de destination (celle du compte Resend, `trocoin2026@gmail.com`). Tant qu'aucun domaine n'est vérifié chez Resend et renseigné dans `EMAIL_FROM` (par exemple `Trocoin <no-reply@votre-domaine>`), aucun autre destinataire ne reçoit d'e-mail. Un envoi réel vers `trocoin2026@gmail.com` a été exécuté (§18) et fonctionne : le code est prêt, c'est la configuration Resend qui bloque | `EMAIL_PROVIDER=resend`, `RESEND_API_KEY`, `EMAIL_FROM`, `SITE_URL` | `DEPLOIEMENT.md` §5b |
+| Sauvegarde chiffrée automatisée | **Pas fait** | `gh secret list` sur le dépôt : seul `RENDER_DEPLOY_HOOK` existe. Les secrets `DATABASE_URL_BACKUP` et `BACKUP_PASSPHRASE` sont absents, le workflow n'a donc jamais tourné et aucune restauration n'a été testée | secrets GitHub `DATABASE_URL_BACKUP`, `BACKUP_PASSPHRASE` | `DEPLOIEMENT.md` §6 |
+| Redis (plus tard) | Différé | Dès la 2ᵉ instance | `REDIS_URL` (Upstash gratuit) | `DEPLOIEMENT.md` §8b |
+| Sentry (facultatif) | Différé | Erreurs 500 remontées | `SENTRY_DSN` | `DEPLOIEMENT.md` §7 |
 
 ---
 
@@ -183,15 +187,23 @@ ouverture publique :**
   l'admin dépanne les mots de passe oubliés, les photos sont volatiles en connaissance de cause.
 
 **Non bloquant pour la bêta fermée, à traiter avant l'ouverture publique (différés par choix, §6)**
-1. ~~E-mail transactionnel~~ fait (§15) — reste : domaine vérifié chez Resend.
-2. ~~Stockage objet des photos~~ fait (§15) — reste : variables dans Render.
-3. ~~Base Neon en Europe~~ fait (§15.1) : copie, bascule et test de charge exécutés ; reste : supprimer le projet US et activer la sauvegarde avec la nouvelle URL.
-4. Vérification du téléphone par SMS (différé §6) ou, à défaut, un e-mail de confirmation
-   dès que l'e-mail est branché : aujourd'hui rien ne prouve qu'un contact appartient à l'inscrit.
+— état contrôlé en production le 15 septembre 2026 (détail et preuves en §5) :
+1. E-mail transactionnel : **partiel**. Fournisseur actif sur Render, mais les envois échouent pour
+   tout destinataire autre que l'adresse du compte Resend (expéditeur bac à sable). Reste, entre vos
+   mains : vérifier un domaine chez Resend puis mettre `EMAIL_FROM` sur ce domaine. Sans cela, ni le
+   mot de passe oublié ni la confirmation d'adresse (§18) n'atteignent les inscrits.
+2. ~~Stockage objet des photos~~ **fait** : variables en place, relais R2 prouvé en production.
+3. Base Neon en Europe : **fait** (bascule prouvée). Reste : supprimer l'ancien projet US, qui
+   existe toujours avec une copie des données du 14 septembre.
+4. ~~E-mail de confirmation à l'inscription~~ **fait le 15 septembre (§18)** : lien à usage unique
+   (24 h), statut visible dans le compte, renvoi limité. La vérification du téléphone par SMS reste
+   différée (§6).
 5. Textes légaux validés par un juriste ; information sur la collecte du téléphone non vérifié.
 6. Instance Render payante (fin de la mise en veille : premier appel jusqu'à 1 minute) et Redis
    dès la deuxième instance.
-7. Sauvegarde automatisée : workflow prêt, à activer avec deux secrets (`DEPLOIEMENT.md` §6) ; test de restauration à faire une fois ; Sentry alimenté (DSN).
+7. Sauvegarde automatisée : **pas fait**. Les deux secrets GitHub (`DATABASE_URL_BACKUP`,
+   `BACKUP_PASSPHRASE`) sont absents, le workflow n'a jamais tourné, aucune restauration testée
+   (`DEPLOIEMENT.md` §6). Sentry non alimenté (DSN).
 
 **Confort / après ouverture**
 8. Canaux exacts du menu « Partager » de leboncoin à observer depuis un navigateur normal (bandeau cookies) ; relevé manuel des 6 panneaux de filtres leboncoin non observés (Matériel pro, Famille,
@@ -879,3 +891,73 @@ audit bugs et sécurité. Traité dans l'ordre recommandé, un commit par sectio
 
 **Suites** : 105 tests API, 56 scénarios navigateur (11-marges-mobile +5, 01 +0). Déploiement
 vérifié par la CI (`/health`) et Vercel.
+
+---
+
+## 18. Confirmation de l'adresse e-mail à l'inscription — 15 septembre 2026
+
+**Objectif** : prouver qu'une adresse appartient bien à la personne qui s'inscrit, avec le même
+mécanisme que le mot de passe oublié (jeton aléatoire envoyé par e-mail, seul son hash en base,
+usage unique). Le téléphone reste non vérifié (SMS différé, §6).
+
+**Fonctionnement**
+- `POST /auth/register` crée le compte avec `emailVerified = false`, puis envoie un e-mail
+  « Trocoin — confirmez votre adresse e-mail » contenant `SITE_URL/confirmer-email?token=…`.
+  Jeton : 32 octets aléatoires en base64url (43 caractères, non devinable) ; la table
+  `email_verification_tokens` ne stocke que son SHA-256, l'adresse visée, l'expiration (**24 h**)
+  et la date d'utilisation. Un échec d'envoi est journalisé et **ne bloque pas l'inscription**
+  (`verificationEmailSent: false` dans la réponse) : la personne peut redemander l'e-mail plus tard.
+- `POST /auth/email/verify { token }` (sans session : le lien peut être ouvert sur un autre appareil)
+  refuse tout jeton inconnu, déjà utilisé, expiré, ou dont l'adresse n'est plus celle du compte,
+  avec un seul message : « Ce lien de confirmation est invalide ou expiré. Demandez un nouvel e-mail
+  depuis vos paramètres. » Sinon : jeton consommé, `emailVerified = true`, `emailVerifiedAt` renseigné.
+- `POST /auth/email/resend` (connecté) : refusé si l'adresse est déjà confirmée, **60 s minimum
+  entre deux envois par compte**, et 3 demandes par heure et par IP (throttler). `verify` est
+  limité à 10 essais par 15 min et par IP.
+- Le statut est exposé dans la réponse d'inscription / connexion et sur `GET /users/me`
+  (`emailVerified`, `emailVerifiedAt`). Migration Postgres `1789420000000-EmailVerification`.
+
+**Politique pour les comptes non confirmés (choix le moins bloquant)** : usage normal du site
+(déposer, chercher, écrire, acheter) sans aucune restriction ; un rappel visible dans tout l'espace
+compte (« Confirmez votre adresse e-mail. Un lien vous a été envoyé à … ») avec le bouton
+« Renvoyer l'e-mail de confirmation », et dans Paramètres → Identifiants une étiquette « Adresse
+confirmée » / « Adresse non confirmée ». Raison : l'e-mail n'est pas l'identifiant du compte (c'est le
+mobile), et bloquer des fonctions au lancement ferait perdre des inscrits alors que Resend n'atteint
+pas encore tous les destinataires (§5). Si vous souhaitez plus tard conditionner une action (par
+exemple le dépôt d'annonce) à l'adresse confirmée, le champ `emailVerified` est déjà là.
+
+**Écrans** : page `/confirmer-email` (vérification automatique à l'ouverture, message de succès avec
+retour au compte, message d'erreur avec renvoi vers les paramètres, « Lien incomplet » sans jeton) ;
+rappel dans `compte/layout` ; statut + bouton dans Paramètres (le bouton se met en attente 60 s
+après un envoi, comme le serveur).
+
+**Tests**
+- API `test/phase14.e2e-spec.ts` (+2, fournisseur d'e-mail simulé) : inscription → lien exposé par
+  `/dev/last-verification-link` → jeton de 43 caractères, hash en base ≠ jeton, expiration ≈ 24 h →
+  jetons inconnu / trop court refusés → validation sans session → `/users/me.emailVerified = true`
+  → réutilisation refusée → renvoi refusé (déjà confirmée) → connexion expose le statut ; second
+  test : jeton expiré (expiration reculée en base) refusé, renvoi trop rapproché refusé, renvoi après
+  délai émet un nouveau jeton différent qui fonctionne, renvoi sans session → 401.
+- Navigateur `e2e/02-inscription.spec.ts` (desktop et mobile 375 px) : après inscription, rappel
+  visible avec l'adresse, statut « Adresse non confirmée », bouton « Renvoyer » → message
+  « Patientez une minute » et bouton en attente, ouverture du lien reçu → « Votre adresse … est
+  confirmée », rappel disparu, statut « Adresse confirmée », bouton absent, second passage sur le lien
+  → « invalide ou expiré ».
+
+**Preuves d'exécution (15 septembre 2026)**
+- `npm test` : **107 tests réussis, 1 ignoré** (105 → 107, phase 14 +2). `tsc` API et front : 0 erreur.
+- Playwright `02-inscription` : **4 réussis** (2 scénarios × desktop 1280 px et mobile 375 px) avec
+  le parcours de confirmation ci-dessus.
+- **Envoi réel via Resend** (API locale, fournisseur `resend`, expéditeur bac à sable, destinataire
+  autorisé `trocoin2026@gmail.com`) : `POST /auth/register` → 201 avec `emailVerified: false` et
+  `verificationEmailSent: true` ; journal `Email(resend) Envoyé à tr…@gmail.com (id
+  893441ba-0de2-42ff-9858-d699f93ae9e1)` ; lien reçu par le serveur identique à celui envoyé ; ouverture
+  du lien dans le navigateur → « Votre adresse trocoin2026@gmail.com est confirmée » ; `/users/me`
+  passe de `emailVerified: false` à `true` avec `emailVerifiedAt: 2026-09-15T10:02:20Z` ; second
+  `POST /auth/email/verify` avec le même jeton → 400 « invalide ou expiré ». La réception dans la
+  boîte `trocoin2026@gmail.com` reste à confirmer de votre côté (la clé Resend est « envoi seul », elle
+  ne permet pas de relire les e-mails) ; Resend a accepté le message (id ci-dessus).
+- **Limite en production** : avec l'expéditeur bac à sable, seul `trocoin2026@gmail.com` peut recevoir
+  ces e-mails (§5). Pour toute autre adresse, l'inscription réussit quand même mais avec
+  `verificationEmailSent: false` (journal d'erreur côté serveur) : vérifier un domaine chez Resend et
+  mettre `EMAIL_FROM` dessus est la seule action restante pour que tous les inscrits reçoivent le lien.
