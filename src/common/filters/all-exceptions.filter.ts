@@ -32,7 +32,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
       }
       // Limite de débit : message en français pour l'utilisateur (jamais le libellé technique du garde)
       if (status === 429) {
-        return res.status(429).json({ statusCode: 429, message: 'Trop de tentatives en peu de temps. Patientez une minute puis réessayez.' });
+        // Le renvoi de l'e-mail de confirmation est limité à 3 par heure : « patientez une minute » serait faux
+        const message = /^\/auth\/email\/resend\b/.test(req.url)
+          ? "Trop de demandes : au plus 3 e-mails de confirmation par heure. Vérifiez votre boîte et vos courriers indésirables, puis réessayez plus tard."
+          : 'Trop de tentatives en peu de temps. Patientez une minute puis réessayez.';
+        return res.status(429).json({ statusCode: 429, message });
       }
       // Messages par défaut de NestJS (« Unauthorized », « Not Found », « Cannot GET … ») traduits
       if (typeof body === 'string') return res.status(status).json({ statusCode: status, message: translateDefaultMessage(body) });

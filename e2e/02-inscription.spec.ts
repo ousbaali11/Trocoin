@@ -46,8 +46,12 @@ test('particulier : inscription complète puis doublon d\'e-mail et de télépho
   await expect(page.getByTestId('email-status')).toHaveText('Adresse non confirmée');
   await page.getByRole('button', { name: "Renvoyer l'e-mail de confirmation" }).click();
   // Moins d'une minute après l'e-mail d'inscription : le serveur refuse, le bouton se met en attente
-  await expect(page.getByText(/Patientez une minute/)).toBeVisible();
+  await expect(page.getByText(/Patientez une minute/).first()).toBeVisible();
   await expect(page.getByRole('button', { name: /Renvoyer dans \d+ s/ })).toBeDisabled();
+  // La raison du refus reste affichée sous le bouton après la disparition du message furtif (4,5 s)
+  await expect(page.getByTestId('resend-status')).toContainText('Patientez une minute');
+  await page.waitForTimeout(5500);
+  await expect(page.getByTestId('resend-status')).toContainText('Patientez une minute');
 
   // Lien reçu par e-mail (fournisseur simulé en e2e : l'API hors production expose le dernier lien envoyé)
   const { link } = await api<{ link: string }>(`/dev/last-verification-link/${encodeURIComponent(u.email)}`);
