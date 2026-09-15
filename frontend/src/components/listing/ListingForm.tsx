@@ -28,6 +28,11 @@ interface FormState {
   attributes: Record<string, string | number | boolean>;
   location: CityValue;
   deliveryAvailable: boolean;
+  /** Colis pour l'envoi (facultatif) : grammes et centimètres, en chaînes de saisie */
+  weightGrams: string;
+  lengthCm: string;
+  widthCm: string;
+  heightCm: string;
   onBehalfOf: string;
 }
 
@@ -67,6 +72,10 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
     attributes: (existing?.attributes as Record<string, string | number | boolean>) ?? {},
     location: { city: existing?.city ?? undefined, postalCode: existing?.postalCode ?? undefined, latitude: existing?.latitude ?? undefined, longitude: existing?.longitude ?? undefined },
     deliveryAvailable: existing?.deliveryAvailable ?? false,
+    weightGrams: existing?.weightGrams ? String(existing.weightGrams) : "",
+    lengthCm: existing?.lengthCm ? String(existing.lengthCm) : "",
+    widthCm: existing?.widthCm ? String(existing.widthCm) : "",
+    heightCm: existing?.heightCm ? String(existing.heightCm) : "",
     onBehalfOf: "",
   });
 
@@ -171,6 +180,10 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
     latitude: form.location.latitude,
     longitude: form.location.longitude,
     deliveryAvailable: deliveryAllowed && form.deliveryAvailable,
+    weightGrams: deliveryAllowed && form.deliveryAvailable && form.weightGrams ? Number(form.weightGrams) : undefined,
+    lengthCm: deliveryAllowed && form.deliveryAvailable && form.lengthCm ? Number(form.lengthCm) : undefined,
+    widthCm: deliveryAllowed && form.deliveryAvailable && form.widthCm ? Number(form.widthCm) : undefined,
+    heightCm: deliveryAllowed && form.deliveryAvailable && form.heightCm ? Number(form.heightCm) : undefined,
     ...(existing ? {} : { draft, onBehalfOf: form.onBehalfOf || undefined }),
   });
 
@@ -455,6 +468,17 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
             <label className="checkbox" style={{ marginBottom: 16 }}>
               <input type="checkbox" checked={form.deliveryAvailable} onChange={(e) => set("deliveryAvailable", e.target.checked)} /> J&apos;accepte d&apos;expédier (Colissimo, Mondial Relay) — l&apos;annonce apparaît dans les recherches « livraison possible »
             </label>
+          )}
+          {deliveryAllowed && form.deliveryAvailable && (
+            <div className="panel" style={{ padding: 14, marginBottom: 16 }} data-testid="parcel-fields">
+              <p className="small" style={{ margin: "0 0 8px" }}><strong>Colis</strong> <span className="muted">(facultatif : sert à calculer le tarif de l&apos;étiquette ; 1 kg et petit colis si vide)</span></p>
+              <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+                <div className="field" style={{ marginBottom: 0, width: 140 }}><label htmlFor="weightGrams">Poids (g)</label><input id="weightGrams" className="input" inputMode="numeric" placeholder="1000" value={form.weightGrams} onChange={(e) => set("weightGrams", e.target.value.replace(/\D/g, ""))} /></div>
+                <div className="field" style={{ marginBottom: 0, width: 110 }}><label htmlFor="lengthCm">Long. (cm)</label><input id="lengthCm" className="input" inputMode="numeric" placeholder="30" value={form.lengthCm} onChange={(e) => set("lengthCm", e.target.value.replace(/\D/g, ""))} /></div>
+                <div className="field" style={{ marginBottom: 0, width: 110 }}><label htmlFor="widthCm">Larg. (cm)</label><input id="widthCm" className="input" inputMode="numeric" placeholder="20" value={form.widthCm} onChange={(e) => set("widthCm", e.target.value.replace(/\D/g, ""))} /></div>
+                <div className="field" style={{ marginBottom: 0, width: 110 }}><label htmlFor="heightCm">Haut. (cm)</label><input id="heightCm" className="input" inputMode="numeric" placeholder="10" value={form.heightCm} onChange={(e) => set("heightCm", e.target.value.replace(/\D/g, ""))} /></div>
+              </div>
+            </div>
           )}
         </div>
       )}

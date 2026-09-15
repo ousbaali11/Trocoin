@@ -27,8 +27,8 @@ export class ShippingController {
   }
 
   @Get(':id/shipment/relay-points')
-  relayPoints(@Req() req: any, @Param('id', ParseUUIDPipe) id: string, @Query('postalCode') postalCode?: string) {
-    return this.shipping.relayPoints(id, req.user.userId, (postalCode || '').trim());
+  relayPoints(@Req() req: any, @Param('id', ParseUUIDPipe) id: string, @Query('postalCode') postalCode?: string, @Query('city') city?: string) {
+    return this.shipping.relayPoints(id, req.user.userId, (postalCode || '').trim(), (city || '').trim().slice(0, 80) || undefined);
   }
 
   @Post(':id/shipment')

@@ -34,16 +34,16 @@ export class ShippingService {
     const carrier = tx.deliveryMethod as ShippingCarrier;
     const [seller, buyer] = await Promise.all([this.users.findOne({ where: { id: tx.sellerId } }), this.users.findOne({ where: { id: tx.buyerId } })]);
     const fromPostalCode = dto.fromPostalCode || seller?.postalCode;
-    const toPostalCode = dto.toPostalCode || buyer?.postalCode;
+    const toPostalCode = dto.toPostalCode || tx.shippingAddress?.postalCode || buyer?.postalCode;
     if (!fromPostalCode || !toPostalCode) throw new BadRequestException('Codes postaux de départ et d\'arrivée requis.');
-    const rates = await this.call(() => this.provider.quote({ carrier, parcel: dto.parcel, fromPostalCode, toPostalCode }));
+    const rates = await this.call(() => this.provider.quote({ carrier, parcel: dto.parcel, fromPostalCode, toPostalCode, fromCity: dto.fromCity || seller?.city, toCity: dto.toCity || tx.shippingAddress?.city || buyer?.city }));
     return { carrier, rates };
   }
 
-  async relayPoints(transactionId: string, sellerId: string, postalCode: string): Promise<RelayPoint[]> {
+  async relayPoints(transactionId: string, sellerId: string, postalCode: string, city?: string): Promise<RelayPoint[]> {
     const tx = await this.sellerTransaction(transactionId, sellerId);
     if (!/^\d{5}$/.test(postalCode)) throw new BadRequestException('Code postal à 5 chiffres requis.');
-    return this.call(() => this.provider.searchRelayPoints(tx.deliveryMethod as ShippingCarrier, postalCode));
+    return this.call(() => this.provider.searchRelayPoints(tx.deliveryMethod as ShippingCarrier, postalCode, city));
   }
 
   /**
@@ -77,7 +77,7 @@ export class ShippingService {
     await this.shipments.save(shipment);
 
     try {
-      const rates = await this.provider.quote({ carrier, parcel: dto.parcel, fromPostalCode: shipment.sender.postalCode, toPostalCode: shipment.recipient.postalCode });
+      const rates = await this.provider.quote({ carrier, parcel: dto.parcel, fromPostalCode: shipment.sender.postalCode, toPostalCode: shipment.recipient.postalCode, fromCity: shipment.sender.city, toCity: shipment.recipient.city });
       const rate = rates.find((r) => r.mode === dto.mode);
       if (!rate) throw new ShippingProviderError(this.provider.name, 'transporteur_indisponible', 'aucune offre pour ce colis et ce mode');
       const label = await this.provider.createLabel({
@@ -139,7 +139,7 @@ export class ShippingService {
       // Numéro saisi à la main : pas de suivi automatique, seulement le numéro
       return { state: 'pris_en_charge', events: [], trackingNumber };
     }
-    const info = await this.call(() => this.provider.track(shipment.carrier, trackingNumber));
+    const info = await this.call(() => this.provider.track(shipment.carrier, trackingNumber, shipment.providerRef));
     return { ...info, trackingNumber, trackingUrl: shipment.trackingUrl };
   }
 

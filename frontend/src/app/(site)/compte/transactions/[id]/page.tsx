@@ -9,6 +9,8 @@ import { useConfirm } from "@/lib/confirm-context";
 import { DELIVERY_LABELS, formatDateTime, formatEuros, TX_STATUS_LABELS } from "@/lib/format";
 import type { Review, Transaction } from "@/lib/types";
 import { Modal } from "@/components/ui/Modal";
+import { ShipmentPanel } from "@/components/transactions/ShipmentPanel";
+import { ShipmentStatus } from "@/components/transactions/ShipmentStatus";
 
 export default function TransactionPage() {
   const { id } = useParams<{ id: string }>();
@@ -119,6 +121,9 @@ export default function TransactionPage() {
 
       <section className="panel">
         <h2 className="h3">Que faire maintenant ?</h2>
+        {tx.deliveryMethod !== "main_propre" && ["sequestre", "livree", "confirme", "litige"].includes(tx.status) && (buyer || tx.status !== "sequestre") && (
+          <ShipmentStatus transactionId={tx.id} manualTracking={tx.deliveryTrackingNumber} />
+        )}
         {tx.status === "en_attente" && (
           <div className="alert" data-testid="pending-payment" role="status">
             <strong>Paiement en attente.</strong>{" "}
@@ -133,14 +138,15 @@ export default function TransactionPage() {
         {tx.status === "sequestre" && !buyer && (
           <div className="stack">
             <p className="small muted" style={{ margin: 0 }}>Les fonds de l&apos;acheteur sont bloqués. {tx.deliveryMethod === "main_propre" ? "Convenez d'un rendez-vous par messagerie, puis confirmez que vous êtes prêt." : "Expédiez l'article et renseignez le numéro de suivi."}</p>
+            {tx.deliveryMethod !== "main_propre" && <ShipmentPanel tx={tx} onChanged={load} />}
             {tx.deliveryMethod !== "main_propre" && (
               <div className="field" style={{ maxWidth: 360 }}>
-                <label htmlFor="tracking">Numéro de suivi</label>
+                <label htmlFor="tracking">Numéro de suivi{tx.deliveryTrackingNumber ? " (rempli par l'étiquette)" : ""}</label>
                 <input id="tracking" className="input" value={tracking} onChange={(e) => setTracking(e.target.value)} placeholder="Ex. 6A12345678901" />
               </div>
             )}
             <div className="row">
-              <button className="btn btn-primary" disabled={busy || (tx.deliveryMethod !== "main_propre" && tracking.trim().length < 4)} onClick={() => run(() => api(`/transactions/${tx.id}/ship`, { method: "POST", body: { trackingNumber: tracking.trim() || undefined } }), tx.deliveryMethod === "main_propre" ? "Acheteur prévenu." : "Expédition enregistrée.")}>
+              <button className="btn btn-primary" disabled={busy || (tx.deliveryMethod !== "main_propre" && (tracking.trim() || tx.deliveryTrackingNumber || "").length < 4)} onClick={() => run(() => api(`/transactions/${tx.id}/ship`, { method: "POST", body: { trackingNumber: tracking.trim() || undefined } }), tx.deliveryMethod === "main_propre" ? "Acheteur prévenu." : "Expédition enregistrée.")}>
                 {tx.deliveryMethod === "main_propre" ? "Je suis prêt pour la remise" : "Confirmer l'expédition"}
               </button>
               <button className="btn btn-ghost" disabled={busy} onClick={async () => (await confirm({ title: "Annuler la vente ?", text: "L'acheteur sera intégralement remboursé et l'annonce restera en ligne.", confirmLabel: "Annuler la vente", danger: true })) && run(() => api(`/transactions/${tx.id}/cancel`, { method: "POST" }), "Vente annulée, acheteur remboursé.")}>Article indisponible : annuler</button>

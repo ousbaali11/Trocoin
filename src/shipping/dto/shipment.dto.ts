@@ -81,6 +81,16 @@ export class QuoteShipmentDto {
   @IsOptional()
   @Matches(/^\d{5}$/)
   toPostalCode?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  fromCity?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  toCity?: string;
 }
 
 export class CreateShipmentDto {

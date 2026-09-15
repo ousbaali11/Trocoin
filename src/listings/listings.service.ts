@@ -207,6 +207,10 @@ export class ListingsService {
       latitude: coords.latitude,
       longitude: coords.longitude,
       deliveryAvailable: !!dto.deliveryAvailable && !NO_DELIVERY_ROOTS.includes(root.slug),
+      weightGrams: dto.weightGrams ?? null,
+      lengthCm: dto.lengthCm ?? null,
+      widthCm: dto.widthCm ?? null,
+      heightCm: dto.heightCm ?? null,
       status,
       moderationReason: reason,
       publishedAt: status === 'en_ligne' ? now : undefined,
@@ -276,7 +280,7 @@ export class ListingsService {
     if (dto.price !== undefined) patch.price = dto.price;
     if (['gratuit', 'echange', 'sur_demande'].includes(priceType)) patch.price = undefined as any;
 
-    for (const key of ['title', 'description', 'condition', 'city', 'postalCode', 'deliveryAvailable'] as const) {
+    for (const key of ['title', 'description', 'condition', 'city', 'postalCode', 'deliveryAvailable', 'weightGrams', 'lengthCm', 'widthCm', 'heightCm'] as const) {
       if (dto[key] !== undefined) (patch as any)[key] = typeof dto[key] === 'string' ? (dto[key] as string).trim() : dto[key];
     }
     if (dto.latitude !== undefined || dto.longitude !== undefined || dto.postalCode !== undefined) {

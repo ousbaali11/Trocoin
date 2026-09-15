@@ -21,6 +21,10 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
   const [message, setMessage] = useState("Bonjour, est-ce toujours disponible ?");
   const [buyOpen, setBuyOpen] = useState(false);
   const [delivery, setDelivery] = useState<"main_propre" | "colissimo" | "mondial_relay">("main_propre");
+  // Adresse de livraison pour un envoi : vue du vendeur seul, transmise au transporteur, jamais publique
+  const [address, setAddress] = useState({ name: "", line1: "", line2: "", postalCode: "", city: "", phone: "" });
+  const setAddr = (k: keyof typeof address, v: string) => setAddress((a) => ({ ...a, [k]: v }));
+  const addressOk = delivery === "main_propre" || (address.name.trim().length >= 2 && address.line1.trim().length >= 3 && /^\d{5}$/.test(address.postalCode) && address.city.trim().length >= 1);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportReason, setReportReason] = useState("arnaque");
   const [reportDetails, setReportDetails] = useState("");
@@ -58,7 +62,7 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
     if (!requireAuth(`/annonces/${listing.id}`)) return;
     setBusy(true);
     try {
-      const res = await api<{ transaction: { id: string }; checkoutUrl?: string }>("/transactions", { method: "POST", body: { listingId: listing.id, deliveryMethod: delivery } });
+      const res = await api<{ transaction: { id: string }; checkoutUrl?: string }>("/transactions", { method: "POST", body: { listingId: listing.id, deliveryMethod: delivery, ...(delivery !== "main_propre" ? { shippingAddress: { name: address.name.trim(), line1: address.line1.trim(), line2: address.line2.trim() || undefined, postalCode: address.postalCode, city: address.city.trim(), phone: address.phone.trim() || undefined } } : {}) } });
       if (res.checkoutUrl) {
         // Paiement hébergé : la carte est saisie sur la page sécurisée Stripe, puis retour sur la transaction
         window.location.assign(res.checkoutUrl);
@@ -156,6 +160,20 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
                 </>
               )}
             </div>
+            {delivery !== "main_propre" && (
+              <fieldset className="field" style={{ border: 0, padding: 0, margin: "0 0 12px" }} data-testid="delivery-address">
+                <legend className="label">Adresse de livraison</legend>
+                <p className="small muted" style={{ margin: "0 0 8px" }}>Vue par le vendeur seul pour préparer l&apos;envoi et l&apos;étiquette ; jamais affichée publiquement.</p>
+                <div className="grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <div className="field" style={{ gridColumn: "1 / -1", marginBottom: 0 }}><label htmlFor="addr-name">Nom et prénom</label><input id="addr-name" className="input" autoComplete="name" value={address.name} onChange={(e) => setAddr("name", e.target.value)} /></div>
+                  <div className="field" style={{ gridColumn: "1 / -1", marginBottom: 0 }}><label htmlFor="addr-line1">Adresse</label><input id="addr-line1" className="input" autoComplete="address-line1" placeholder="N° et rue" value={address.line1} onChange={(e) => setAddr("line1", e.target.value)} /></div>
+                  <div className="field" style={{ gridColumn: "1 / -1", marginBottom: 0 }}><label htmlFor="addr-line2">Complément (facultatif)</label><input id="addr-line2" className="input" autoComplete="address-line2" placeholder="Bâtiment, étage, digicode" value={address.line2} onChange={(e) => setAddr("line2", e.target.value)} /></div>
+                  <div className="field" style={{ marginBottom: 0 }}><label htmlFor="addr-cp">Code postal</label><input id="addr-cp" className="input" inputMode="numeric" autoComplete="postal-code" maxLength={5} value={address.postalCode} onChange={(e) => setAddr("postalCode", e.target.value.replace(/\D/g, ""))} /></div>
+                  <div className="field" style={{ marginBottom: 0 }}><label htmlFor="addr-city">Ville</label><input id="addr-city" className="input" autoComplete="address-level2" value={address.city} onChange={(e) => setAddr("city", e.target.value)} /></div>
+                  <div className="field" style={{ gridColumn: "1 / -1", marginBottom: 0 }}><label htmlFor="addr-phone">Téléphone (facultatif, pour le livreur)</label><input id="addr-phone" className="input" type="tel" autoComplete="tel" value={address.phone} onChange={(e) => setAddr("phone", e.target.value)} /></div>
+                </div>
+              </fieldset>
+            )}
             <table className="table" style={{ marginBottom: 16 }}>
               <tbody>
                 <tr><td>Prix de l&apos;article</td><td style={{ textAlign: "right" }}>{formatEuros(quote.price)}</td></tr>
@@ -166,7 +184,7 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
             <p className="small muted">Frais de port à convenir avec le vendeur pour un envoi. Le vendeur perçoit {formatEuros(quote.sellerPayout)} (commission Trocoin {formatEuros(quote.commission)}).</p>
             <div className="row" style={{ justifyContent: "flex-end" }}>
               <button className="btn btn-outline" onClick={() => setBuyOpen(false)}>Annuler</button>
-              <button className="btn btn-primary" onClick={buy} disabled={busy}>{busy ? "Paiement…" : `Payer ${formatEuros(quote.buyerTotal)}`}</button>
+              <button className="btn btn-primary" onClick={buy} disabled={busy || !addressOk}>{busy ? "Paiement…" : `Payer ${formatEuros(quote.buyerTotal)}`}</button>
             </div>
           </>
         )}

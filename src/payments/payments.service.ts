@@ -19,7 +19,7 @@ import { StripeConnectService } from '../users/stripe-connect.service';
 import { UsersService } from '../users/users.service';
 import { CheckoutSync, IPaymentProvider } from './payment-provider.interface';
 import { CHECKOUT_TTL_MINUTES, PAYMENT_PROVIDER } from './payments.constants';
-import { DeliveryMethod, Transaction } from './transaction.entity';
+import { DeliveryAddress, DeliveryMethod, Transaction } from './transaction.entity';
 
 /**
  * Barème (cahier des charges §3.6 : "commission transparente affichée
@@ -104,7 +104,7 @@ export class PaymentsService {
     return this.rootSlugCache.get(rootCategoryId)!;
   }
 
-  async createTransaction(buyerId: string, listingId: string, deliveryMethod: DeliveryMethod = 'main_propre') {
+  async createTransaction(buyerId: string, listingId: string, deliveryMethod: DeliveryMethod = 'main_propre', shippingAddress?: DeliveryAddress) {
     const listing = await this.listingsRepo.findOne({ where: { id: listingId } });
     if (!listing || listing.status !== 'en_ligne') throw new NotFoundException('Annonce introuvable ou plus disponible.');
     if (listing.userId === buyerId) {
@@ -140,6 +140,8 @@ export class PaymentsService {
       commission: q.commission,
       buyerFee: q.buyerFee,
       deliveryMethod,
+      // Adresse de livraison (envoi) : gardée telle que saisie, jamais exposée en dehors des deux parties
+      shippingAddress: deliveryMethod !== 'main_propre' && shippingAddress ? shippingAddress : null,
       handoverCode: deliveryMethod === 'main_propre' ? randomInt(0, 1_000_000).toString().padStart(6, '0') : undefined,
     };
     const metadata = { listingId, buyerId, sellerId: listing.userId };

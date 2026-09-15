@@ -1,5 +1,15 @@
 import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
-import { DATE_TYPE } from '../config/db';
+import { DATE_TYPE, JSON_TYPE } from '../config/db';
+
+/** Adresse postale complète de l'acheteur pour un envoi. */
+export interface DeliveryAddress {
+  name: string;
+  line1: string;
+  line2?: string;
+  postalCode: string;
+  city: string;
+  phone?: string;
+}
 
 /**
  * Cycle de vie :
@@ -60,6 +70,14 @@ export class Transaction {
 
   @Column({ nullable: true })
   deliveryTrackingNumber?: string;
+
+  /**
+   * Adresse de livraison saisie par l'acheteur au paiement (envoi par transporteur). Visible du
+   * vendeur seul, transmise au prestataire d'étiquettes, jamais publique. Absente sur les ventes
+   * antérieures à la phase 2 des étiquettes : elles suivent le parcours manuel (numéro de suivi saisi).
+   */
+  @Column({ type: JSON_TYPE, nullable: true })
+  shippingAddress?: DeliveryAddress | null;
 
   /** Code de remise en main propre (l'acheteur le donne au vendeur au RDV). */
   @Column({ nullable: true })

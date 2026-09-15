@@ -1,7 +1,39 @@
-import { IsIn, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsIn, IsOptional, IsString, IsUUID, Matches, MaxLength, MinLength, ValidateNested } from 'class-validator';
 import { DeliveryMethod } from '../transaction.entity';
 
 export const DELIVERY_METHODS: DeliveryMethod[] = ['main_propre', 'colissimo', 'mondial_relay'];
+
+/** Adresse de livraison de l'acheteur (envoi par transporteur) : vue du vendeur seul, transmise au prestataire d'étiquettes. */
+export class DeliveryAddressDto {
+  @IsString()
+  @MinLength(2)
+  @MaxLength(80)
+  name: string;
+
+  @IsString()
+  @MinLength(3)
+  @MaxLength(100)
+  line1: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  line2?: string;
+
+  @Matches(/^\d{5}$/, { message: 'Le code postal doit comporter 5 chiffres.' })
+  postalCode: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(80)
+  city: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  phone?: string;
+}
 
 export class CreateTransactionDto {
   @IsUUID()
@@ -13,6 +45,12 @@ export class CreateTransactionDto {
   @IsOptional()
   @IsIn(DELIVERY_METHODS)
   deliveryMethod?: DeliveryMethod;
+
+  /** Requise par le site pour un envoi ; facultative pour l'API (ventes créées avant la phase 2, anciens clients). */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => DeliveryAddressDto)
+  shippingAddress?: DeliveryAddressDto;
 }
 
 export class ShipTransactionDto {

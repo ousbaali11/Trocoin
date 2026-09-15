@@ -73,6 +73,11 @@ export interface ListingCard {
   latitude?: number | null;
   longitude?: number | null;
   deliveryAvailable: boolean;
+  /** Colis déclaré au dépôt (facultatif) : grammes et centimètres. */
+  weightGrams?: number | null;
+  lengthCm?: number | null;
+  widthCm?: number | null;
+  heightCm?: number | null;
   viewsCount: number;
   publishedAt?: string | null;
   expiresAt?: string | null;
@@ -261,6 +266,8 @@ export interface Transaction {
   status: TransactionStatus;
   deliveryMethod: "main_propre" | "colissimo" | "mondial_relay";
   deliveryTrackingNumber?: string | null;
+  /** Adresse de livraison saisie par l'acheteur au paiement (envoi) ; visible des deux parties seulement. */
+  shippingAddress?: DeliveryAddress | null;
   handoverCode?: string;
   disputeReason?: string | null;
   resolutionNote?: string | null;
@@ -382,4 +389,63 @@ export interface PriceEstimate {
   low: number | null;
   high: number | null;
   basis: "mots" | "categorie" | null;
+}
+
+/** Adresse postale complète pour un envoi (acheteur au paiement, expéditeur à l'étiquette). */
+export interface DeliveryAddress {
+  name: string;
+  line1: string;
+  line2?: string;
+  postalCode: string;
+  city: string;
+  phone?: string;
+  email?: string;
+}
+
+export type ShippingMode = "domicile" | "point_relais";
+export type ShipmentStatus = "en_creation" | "etiquette_prete" | "expediee" | "livree" | "echec";
+
+export interface ShippingRate {
+  carrier: "colissimo" | "mondial_relay";
+  mode: ShippingMode;
+  priceCents: number;
+  deliveryDays: number;
+  offerCode: string;
+  label: string;
+}
+
+export interface RelayPoint {
+  id: string;
+  name: string;
+  line1: string;
+  postalCode: string;
+  city: string;
+  hours?: string;
+  distanceMeters?: number;
+}
+
+export interface Shipment {
+  id: string;
+  transactionId: string;
+  provider: string;
+  carrier: "colissimo" | "mondial_relay";
+  mode: ShippingMode;
+  status: ShipmentStatus;
+  weightGrams: number;
+  sender: DeliveryAddress;
+  recipient: DeliveryAddress;
+  relayPointId?: string | null;
+  priceCents?: number | null;
+  trackingNumber?: string | null;
+  trackingUrl?: string | null;
+  labelAvailable: boolean;
+  error?: string | null;
+  createdAt: string;
+}
+
+export interface TrackingInfo {
+  state: "etiquette_creee" | "pris_en_charge" | "en_transit" | "disponible_en_relais" | "livre" | "incident";
+  events: Array<{ at: string; label: string; location?: string }>;
+  trackingNumber: string;
+  trackingUrl?: string;
 }

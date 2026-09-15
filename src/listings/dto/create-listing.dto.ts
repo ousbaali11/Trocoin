@@ -1,23 +1,11 @@
-import {
-  IsBoolean,
-  IsIn,
-  IsLatitude,
-  IsLongitude,
-  IsNumber,
-  IsObject,
-  IsOptional,
-  IsString,
-  IsUUID,
-  Matches,
-  Max,
-  MaxLength,
-  Min,
-  MinLength,
-  ValidateIf,
-} from 'class-validator';
+import { Transform } from 'class-transformer';
+import { IsBoolean, IsIn, IsInt, IsLatitude, IsLongitude, IsNumber, IsObject, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, MinLength, ValidateIf } from 'class-validator';
 import { CONDITIONS, ListingCondition, PRICE_TYPES, PriceType } from '../listing.entity';
 
 export const MAX_PRICE = 10_000_000;
+
+/** Entiers venus d'un formulaire (chaînes) : vide → absent, sinon nombre entier ou tel quel (rejeté par IsInt). */
+const toInt = ({ value }: { value: unknown }) => (value === "" || value === null || value === undefined ? undefined : Number.isFinite(Number(value)) ? Math.round(Number(value)) : value);
 
 export class CreateListingDto {
   @IsString()
@@ -75,6 +63,35 @@ export class CreateListingDto {
   @IsOptional()
   @IsBoolean()
   deliveryAvailable?: boolean;
+
+  /** Colis pour l'envoi (facultatif) : poids en grammes (10 g à 30 kg) et dimensions en cm (1 à 200). */
+  @IsOptional()
+  @Transform(toInt)
+  @IsInt()
+  @Min(10)
+  @Max(30000)
+  weightGrams?: number;
+
+  @IsOptional()
+  @Transform(toInt)
+  @IsInt()
+  @Min(1)
+  @Max(200)
+  lengthCm?: number;
+
+  @IsOptional()
+  @Transform(toInt)
+  @IsInt()
+  @Min(1)
+  @Max(200)
+  widthCm?: number;
+
+  @IsOptional()
+  @Transform(toInt)
+  @IsInt()
+  @Min(1)
+  @Max(200)
+  heightCm?: number;
 
   /** true = enregistrer comme brouillon (non publié, modifiable) */
   @IsOptional()

@@ -97,6 +97,19 @@ export class Listing {
   @Column({ default: false })
   deliveryAvailable: boolean;
 
+  /** Colis déclaré au dépôt (facultatif) : poids en grammes et dimensions en cm, pour la cotation des étiquettes. */
+  @Column({ type: 'integer', nullable: true })
+  weightGrams?: number | null;
+
+  @Column({ type: 'integer', nullable: true })
+  lengthCm?: number | null;
+
+  @Column({ type: 'integer', nullable: true })
+  widthCm?: number | null;
+
+  @Column({ type: 'integer', nullable: true })
+  heightCm?: number | null;
+
   @Column({ default: 0 })
   viewsCount: number;
 

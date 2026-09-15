@@ -5,7 +5,7 @@
  *   SHIPPING_PROVIDER=mock  : étiquette PDF et numéro de suivi simulés (dev, tests) — interdit en production.
  *   SHIPPING_PROVIDER=none  : aucune étiquette possible → 503 explicite (production tant qu'aucun compte
  *                             prestataire n'est ouvert ; le vendeur saisit son numéro de suivi à la main).
- *   SHIPPING_PROVIDER=boxtal : phase 2, une fois les clés de test fournies.
+ *   SHIPPING_PROVIDER=boxtal : BoxtalShippingProvider (v1 cotation + v3 étiquettes), sandbox ou production selon BOXTAL_ENV.
  */
 
 /** Transporteurs proposés aux particuliers en France (les deux plus utilisés). */
@@ -37,6 +37,9 @@ export interface QuoteInput {
   parcel: Parcel;
   fromPostalCode: string;
   toPostalCode: string;
+  /** Communes (facultatives) : affinent la cotation chez le prestataire. */
+  fromCity?: string;
+  toCity?: string;
 }
 
 export interface ShippingRate {
@@ -116,10 +119,12 @@ export interface IShippingProvider {
   readonly name: string;
   /** Tarifs disponibles pour un colis, un transporteur et deux codes postaux. */
   quote(input: QuoteInput): Promise<ShippingRate[]>;
-  /** Points relais proches d'un code postal (obligatoire pour le mode point_relais). */
-  searchRelayPoints(carrier: ShippingCarrier, postalCode: string): Promise<RelayPoint[]>;
+  /** Points relais proches d'un code postal (obligatoire pour le mode point_relais) ; la commune affine la recherche. */
+  searchRelayPoints(carrier: ShippingCarrier, postalCode: string, city?: string): Promise<RelayPoint[]>;
   /** Achat de l'étiquette : numéro de suivi + PDF. */
   createLabel(input: CreateLabelInput): Promise<LabelResult>;
-  /** Suivi d'un envoi. */
-  track(carrier: ShippingCarrier, trackingNumber: string): Promise<TrackingInfo>;
+  /** Suivi d'un envoi (la référence prestataire permet le suivi par commande quand le numéro transporteur tarde). */
+  track(carrier: ShippingCarrier, trackingNumber: string, providerRef?: string): Promise<TrackingInfo>;
+  /** Annulation d'une commande chez le prestataire (facultatif). */
+  cancel?(providerRef: string): Promise<boolean>;
 }
