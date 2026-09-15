@@ -36,9 +36,9 @@ cd frontend && npm install && cp .env.example .env.local && npm run dev -- -p 30
 ## Tests
 
 ```bash
-npm test                 # 112 tests e2e (API, supertest)
+npm test                 # 117 tests e2e (API, supertest)
 npm run e2e:build        # construit l'API (dist/) et le front (next build) pour les tests navigateur
-npm run e2e              # 60 scénarios Playwright dans Chromium (desktop 1280 px + mobile 375 px) : parcours, accessibilité (axe) site + back-office, clavier, SEO
+npm run e2e              # 73 scénarios Playwright dans Chromium (desktop 1280 px + mobile 375 px) : parcours, accessibilité (axe) site + back-office, clavier, SEO
 node scripts/charge.js --api https://trocoin.onrender.com --front https://trocoin.vercel.app --vus 10 --minutes 3   # test de charge léger (lectures publiques)
 SOURCE_DATABASE_URL=… TARGET_DATABASE_URL=… node scripts/migrer-base.js   # copie intégrale d'une base Postgres vers une autre, preuve par comptages + empreintes (DEPLOIEMENT.md §6b) (Jest + supertest, SQLite en mémoire)
 # Les mêmes tests sur PostgreSQL (schéma créé par les migrations) :
@@ -57,7 +57,7 @@ manuel : Playwright démarre et arrête les deux serveurs (`e2e/start-api.js`, `
 ```bash
 npx playwright install chromium   # une fois
 npm run e2e:build                 # API + front (≈ 2 min)
-npm run e2e                       # 60 scénarios (≈ 3 min 30)
+npm run e2e                       # 73 scénarios (≈ 3 min 30)
 npx playwright show-report        # rapport HTML, traces et captures des échecs
 npm run e2e:ui                    # mode interactif pas à pas
 ```
@@ -80,6 +80,8 @@ la construction ET l'exécution (l'URL de l'API est figée dans le build du fron
 | `e2e/08-clavier.spec.ts` | clavier seul : lien d'évitement, recherche avec commune et rayon aux flèches, menu du compte et déconnexion, boîte de dialogue (focus confiné, Échap, retour du focus), dépôt (radios aux flèches, champ fichier atteignable) | desktop |
 | `e2e/11-marges-mobile.spec.ts` | marges ≥ 12 px et absence de débordement sur les pages publiques et du compte à 375 px | mobile |
 | `e2e/12-securite.spec.ts` | changement d'adresse e-mail (mot de passe, lien à la nouvelle adresse, avertissement à l'ancienne, effectif au clic) ; double authentification (QR code, activation, connexion en deux temps, code de récupération à usage unique, désactivation) | desktop |
+| `e2e/13-messagerie.spec.ts` | suppression de conversations : mode sélection, sélection individuelle et multiple, tout sélectionner / désélectionner, confirmation, annulation ; l'autre participant garde ses conversations | desktop |
+| `e2e/14-filtres-decouverte.spec.ts` | panneau « Tous les filtres » (ordre des blocs, tri, dons, vendeurs avec compteurs, urgentes, Tout effacer, Rechercher (N), volet mobile), bandeau livraison et périmètre France, bas de page de catégorie (suggestions, villes, fil d'Ariane), pagination, barre des familles, pied de page, consultation sans connexion | desktop + mobile |
 
 Les pages d'inscription et de recherche vérifient en plus l'absence de défilement horizontal
 (`expectNoHorizontalOverflow`) : c'est la régression trouvée lors du tour de polish. Les données
@@ -216,7 +218,7 @@ npm run migration:run
 ## Principales routes API
 
 ```
-POST /auth/register · POST /auth/email/verify · POST /auth/email/resend · POST /auth/email/change · POST /auth/login · POST /auth/login/2fa · POST /auth/2fa/setup · POST /auth/2fa/enable · POST /auth/2fa/disable · POST /auth/password/forgot · POST /auth/password/reset · POST /auth/register/phone · POST /auth/otp/verify · POST /auth/refresh · POST /auth/logout · /auth/sessions
+GET /listings/facets · GET /listings/discover · DELETE /conversations/:id · POST /conversations/bulk-delete · POST /auth/register · POST /auth/email/verify · POST /auth/email/resend · POST /auth/email/change · POST /auth/login · POST /auth/login/2fa · POST /auth/2fa/setup · POST /auth/2fa/enable · POST /auth/2fa/disable · POST /auth/password/forgot · POST /auth/password/reset · POST /auth/register/phone · POST /auth/otp/verify · POST /auth/refresh · POST /auth/logout · /auth/sessions
 GET  /health
 GET  /users/me · PATCH /users/me · POST /users/me/become-pro · GET /users/:id/profile
 GET  /users/me/export · DELETE /users/me · /users/me/blocks · /users/me/saved-searches

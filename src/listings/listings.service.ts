@@ -14,6 +14,7 @@ import { FieldSchema, getSchemaForSlugs, validateAttributes } from '../categorie
 import { Category } from '../categories/category.entity';
 import { approximateFromPostalCode, boundingBox, haversineKm, isWithinFrance } from '../common/geo/france-geo';
 import { deleteUploadedFile } from '../common/upload/image-upload';
+import { GRANDES_VILLES, NB_SUGGESTIONS, NB_VILLES } from './discover-data';
 import { Favorite } from '../favorites/favorite.entity';
 import { Transaction } from '../payments/transaction.entity';
 import { SettingsService } from '../settings/settings.service';
@@ -48,6 +49,8 @@ export interface ListingCard extends Listing {
     accountType: string;
     shopName?: string;
     identityVerified: boolean;
+    ratingAvg?: number;
+    ratingCount?: number;
   };
 }
 
@@ -754,8 +757,15 @@ export class ListingsService {
       if (!ids) return { items: [], total: 0, page, pageSize };
       qb.andWhere('l.categoryId IN (:...ids)', { ids });
     }
-    if (query.city) qb.andWhere('LOWER(l.city) LIKE :city', { city: `%${escapeLike(query.city.toLowerCase())}%` });
-    if (query.postal_code) qb.andWhere('l.postalCode LIKE :cp', { cp: `${query.postal_code}%` });
+    // « Étendre à la livraison » : le critère de lieu (commune, code postal, rayon) laisse aussi passer
+    // les annonces livrables, où qu'elles soient en France.
+    const deliveryAnywhere = query.delivery_anywhere === 'true';
+    const orDelivery = (sql: string, params: Record<string, unknown>) => {
+      if (deliveryAnywhere) qb.andWhere(new Brackets((b) => b.where(sql, params).orWhere('l.deliveryAvailable = :anyDelivery', { anyDelivery: true })));
+      else qb.andWhere(sql, params);
+    };
+    if (query.city) orDelivery('LOWER(l.city) LIKE :city', { city: `%${escapeLike(query.city.toLowerCase())}%` });
+    if (query.postal_code) orDelivery('l.postalCode LIKE :cp', { cp: `${query.postal_code}%` });
     if (query.seller) qb.andWhere('l.userId = :sellerId', { sellerId: query.seller });
     if (query.seller_type) qb.andWhere('l.userId IN (SELECT CAST(u.id AS varchar) FROM users u WHERE u."accountType" = :sellerType)', { sellerType: query.seller_type });
     if (query.q) {
@@ -783,8 +793,7 @@ export class ListingsService {
     if (query.since_days) qb.andWhere('l.publishedAt > :since', { since: new Date(Date.now() - query.since_days * 86_400_000) });
     if (useDistance) {
       const box = boundingBox(query.lat!, query.lng!, radius);
-      qb.andWhere('l.latitude BETWEEN :minLat AND :maxLat', { minLat: box.minLat, maxLat: box.maxLat })
-        .andWhere('l.longitude BETWEEN :minLng AND :maxLng', { minLng: box.minLng, maxLng: box.maxLng });
+      orDelivery('(l.latitude BETWEEN :minLat AND :maxLat AND l.longitude BETWEEN :minLng AND :maxLng)', { minLat: box.minLat, maxLat: box.maxLat, minLng: box.minLng, maxLng: box.maxLng });
     }
 
     const attrFilters = Object.entries(query)
@@ -798,6 +807,9 @@ export class ListingsService {
         break;
       case 'price_desc':
         qb.orderBy('l.price', 'DESC');
+        break;
+      case 'oldest':
+        qb.orderBy('l.publishedAt', 'ASC').addOrderBy('l.createdAt', 'ASC');
         break;
       case 'relevance':
         // Pertinence (mot-clé) : score plein texte PostgreSQL, puis annonces mises en avant, puis fraîcheur.
@@ -833,15 +845,18 @@ export class ListingsService {
     let withDistance: Array<Listing & { distanceKm?: number }> = filtered;
     if (useDistance) {
       withDistance = filtered
-        .filter((l) => l.latitude != null && l.longitude != null)
-        .map((l) => ({ ...l, distanceKm: Math.round(haversineKm(query.lat!, query.lng!, l.latitude!, l.longitude!) * 10) / 10 }))
-        .filter((l) => l.distanceKm! <= radius);
+        .map((l) => ({ ...l, distanceKm: l.latitude != null && l.longitude != null ? Math.round(haversineKm(query.lat!, query.lng!, l.latitude!, l.longitude!) * 10) / 10 : undefined }))
+        // Dans le rayon, ou livrable partout si « Étendre à la livraison » est coché
+        .filter((l) => (l.distanceKm !== undefined && l.distanceKm <= radius) || (deliveryAnywhere && l.deliveryAvailable));
       if (query.sort === 'distance' || !query.sort) {
         withDistance.sort((a, b) => {
           const ba = a.boostedUntil && new Date(a.boostedUntil) > now ? 1 : 0;
           const bb = b.boostedUntil && new Date(b.boostedUntil) > now ? 1 : 0;
           if (ba !== bb) return bb - ba;
-          return a.distanceKm! - b.distanceKm!;
+          // Les annonces hors rayon (livrables) passent après celles qui sont proches
+          const da = a.distanceKm !== undefined && a.distanceKm <= radius ? a.distanceKm : Number.POSITIVE_INFINITY;
+          const db = b.distanceKm !== undefined && b.distanceKm <= radius ? b.distanceKm : Number.POSITIVE_INFINITY;
+          return da - db;
         });
       }
     }
@@ -883,10 +898,72 @@ export class ListingsService {
         isUrgent: !!l.urgentUntil && new Date(l.urgentUntil).getTime() > now,
         isComplete: computeCompleteness(l, ph.length, this.schemaForCategory(c, catById)).complete,
         seller: u
-          ? { id: u.id, displayName: u.deletedAt ? 'Compte supprimé' : u.displayName, accountType: u.accountType, shopName: u.shopName, identityVerified: u.identityVerified }
+          ? { id: u.id, displayName: u.deletedAt ? 'Compte supprimé' : u.displayName, accountType: u.accountType, shopName: u.shopName, identityVerified: u.identityVerified, ratingAvg: u.ratingAvg, ratingCount: u.ratingCount }
           : undefined,
       };
     });
+  }
+
+  /**
+   * Nombre d'annonces par type de vendeur pour la recherche courante (affiché à côté des cases
+   * « Particuliers » / « Professionnels » du panneau de filtres), et total sans ce filtre.
+   */
+  async sellerTypeFacets(query: SearchListingsDto & Record<string, any>): Promise<{ total: number; particulier: number; professionnel: number }> {
+    const base = { ...query, page: 1, page_size: 1 };
+    const [all, particulier, professionnel] = await Promise.all([
+      this.search({ ...base, seller_type: undefined }),
+      this.search({ ...base, seller_type: 'particulier' }),
+      this.search({ ...base, seller_type: 'professionnel' }),
+    ]);
+    return { total: all.total, particulier: particulier.total, professionnel: professionnel.total };
+  }
+
+  /**
+   * Sections de découverte en bas d'une page de catégorie : fil d'Ariane, recherches suggérées
+   * (sous-catégories et valeurs des critères de la catégorie, marques pour les véhicules) et
+   * localisations les plus demandées (villes des annonces en ligne de la catégorie, complétées par
+   * les grandes villes tant que le site est jeune). Aucune donnée personnelle, rien d'inventé.
+   */
+  async discover(slug: string): Promise<{ breadcrumb: Array<{ slug: string; name: string }>; suggestions: Array<{ label: string; href: string }>; cities: Array<{ city: string; count: number }> }> {
+    const category = await this.categoriesService.findBySlug(slug);
+    if (!category) throw new NotFoundException('Catégorie inconnue.');
+    const all = await this.categoriesService.findAll();
+    const byId = new Map(all.map((c) => [c.id, c]));
+    const parent = category.parentId ? byId.get(category.parentId) : undefined;
+    const breadcrumb = [...(parent ? [{ slug: parent.slug, name: parent.name }] : []), { slug: category.slug, name: category.name }];
+
+    const suggestions: Array<{ label: string; href: string }> = [];
+    const children = all.filter((c) => c.parentId === category.id).sort((a, b) => a.sortOrder - b.sortOrder);
+    for (const c of children) suggestions.push({ label: c.name, href: `/recherche?category=${c.slug}` });
+    const schema = getSchemaForSlugs(category.slug, parent?.slug);
+    for (const field of schema.filter((f) => f.filterable && f.type === 'select' && f.options && f.options.length > 0)) {
+      for (const option of field.options!.filter((o) => o !== 'Autre').slice(0, field.key === 'marque' ? 12 : 8)) {
+        if (suggestions.length >= NB_SUGGESTIONS) break;
+        suggestions.push({ label: `${category.name} ${option}`, href: `/recherche?category=${category.slug}&attr.${field.key}=${encodeURIComponent(option)}` });
+      }
+      if (suggestions.length >= NB_SUGGESTIONS) break;
+    }
+
+    const ids = (await this.categoriesService.idsIncludingChildren(category.slug)) || [];
+    const rows: Array<{ city: string; n: string | number }> = ids.length
+      ? await this.listingsRepo
+          .createQueryBuilder('l')
+          .select('l.city', 'city')
+          .addSelect('COUNT(*)', 'n')
+          .where('l.status = :status', { status: 'en_ligne' })
+          .andWhere('l.categoryId IN (:...ids)', { ids })
+          .andWhere('l.city IS NOT NULL')
+          .groupBy('l.city')
+          .orderBy('n', 'DESC')
+          .limit(NB_VILLES)
+          .getRawMany()
+      : [];
+    const cities = rows.map((r) => ({ city: r.city, count: Number(r.n) }));
+    for (const city of GRANDES_VILLES) {
+      if (cities.length >= NB_VILLES) break;
+      if (!cities.some((c) => c.city.toLowerCase() === city.toLowerCase())) cities.push({ city, count: 0 });
+    }
+    return { breadcrumb, suggestions: suggestions.slice(0, NB_SUGGESTIONS), cities };
   }
 
   @Cron(CronExpression.EVERY_HOUR)

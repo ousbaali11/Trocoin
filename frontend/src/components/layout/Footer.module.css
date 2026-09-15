@@ -7,7 +7,7 @@
 }
 .grid {
   display: grid;
-  grid-template-columns: 1.6fr 1fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
   gap: 32px;
 }
 .grid h2 {
@@ -53,4 +53,11 @@
   .grid {
     grid-template-columns: 1fr;
   }
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  color: var(--ink-muted);
 }

@@ -1102,3 +1102,71 @@ conformes après corrections).
   est le même qu'ailleurs sur le site.
 - Suites rejouées après corrections : 26 scénarios navigateur (05, 07 axe, 08, 11 marges, 12)
   verts ; contrôle des marges à 360 / 375 / 414 px : 33 / 33.
+
+---
+
+## 20. Filtres généralisés, suppression de conversations, mega-menu, découverte, pied de page — 15 septembre 2026 (soir)
+
+Dix points relevés par vos captures d'écran leboncoin (statut point par point dans
+`docs/comparatif-leboncoin.md` §6). Version 1.12.0.
+
+- **Panneau « Tous les filtres »** (`frontend/src/components/search/SearchPage.tsx`) : un seul
+  panneau pour toutes les catégories, dans l'ordre observé — Catégories (catégorie active rappelée,
+  modifiable), Localisation, Étendre à la livraison, Prix, Dons uniquement, Tri (choix unique, cinq
+  libellés dont le nouveau tri « Plus anciennes »), Type de vendeurs (cases à cocher avec le nombre
+  d'annonces de chaque type), Annonces urgentes uniquement, puis les filtres propres à Trocoin.
+  Barre fixe en bas : « Tout effacer » (le mot-clé est gardé) et « Rechercher (N) » avec N en
+  direct. Bureau : colonne ; mobile : volet glissant depuis la droite (`role="dialog"`, Échap,
+  défilement de la page bloqué). API : paramètre `delivery_anywhere` (le critère de lieu laisse aussi
+  passer les annonces livrables, les proches restent triées en premier), tri `oldest`,
+  `GET /listings/facets` (compteurs par type de vendeur avec les mêmes critères, sans le filtre
+  vendeur). « Offres / Demandes » non repris : Trocoin ne publie que des offres.
+- **Suppression de conversations** : colonnes `hiddenForBuyerAt` / `hiddenForSellerAt`
+  (migration `ConversationsMasquees`), `DELETE /conversations/:id` et
+  `POST /conversations/bulk-delete { ids }` (100 max). Règle documentée dans
+  `conversation.entity.ts` : la suppression masque la conversation **pour celui qui supprime
+  seulement** ; l'autre participant garde l'échange (et la modération / les litiges aussi, rien
+  n'est effacé) ; elle réapparaît chez lui si l'autre écrit ou le recontacte depuis l'annonce ; les
+  compteurs de non-lus l'ignorent tant qu'elle est masquée. Page Messages : bouton « Sélectionner »
+  ou appui long (600 ms), cases à cocher, « Tout sélectionner / désélectionner », « Supprimer (n) »
+  avec confirmation « Supprimer n conversations ? … Cette action est irréversible ».
+- **Barre des familles** (`CategoryBar.tsx`, bureau ≥ 1024 px avec survol) : chaque famille ouvre
+  un panneau avec ses sous-catégories en colonnes de huit et un lien « Tout {famille} » ; survol ou
+  clic, fermeture par Échap (focus rendu) ou clic ailleurs. Mobile : accordéon du menu principal
+  inchangé. Aucun encart promotionnel.
+- **Découverte en bas des pages de catégorie** (`GET /listings/discover`, `DiscoverSections.tsx`) :
+  « Les utilisateurs recherchent aussi… » (sous-catégories, valeurs des critères filtrables, 12
+  marques pour les véhicules ; jamais « Autre »), « Localisations les plus demandées… » (villes des
+  annonces en ligne de la catégorie avec leur nombre, complétées par les grandes villes INSEE
+  jusqu'à 24, chacune lançant la recherche filtrée sur la ville), fil d'Ariane. Trocoin n'enregistre
+  aucun historique de recherches : les suggestions viennent des données du site.
+- **Pagination** : déjà numérotée avec Précédent / Suivant, aucun changement.
+- **Sans connexion** : rien ne bloque la consultation ; ajouté la note du vendeur et le nombre
+  d'avis sur les cartes (`seller.ratingAvg` / `ratingCount` renvoyés par l'API, sans donnée
+  personnelle). Le coût de livraison n'existe pas comme concept (mention « Livraison possible »).
+- **Badge « À la une »** : déjà en haut à gauche de la photo, inchangé.
+- **Livraison** : bandeau explicatif quand le filtre est actif, puce « Livraison acceptée ✕ »
+  retirable, périmètre « Autour de {commune} / France » relié à « Étendre à la livraison ».
+- **Pied de page** : quatre colonnes (À propos, Informations légales, Nos solutions pros, Des
+  questions ?), 16 liens vers des pages existantes, nouvelle page `/accessibilite` (uniquement ce
+  qui est en place et vérifié ; pas de déclaration RGAA inventée), copyright « © 2026 ». Omis
+  volontairement : applications, réseaux sociaux, avis externes, fond sombre.
+- **Encarts sponsorisés** : aucune régie tierce ; rien à faire.
+
+**Preuves d'exécution (15 septembre 2026, soir)**
+- `npm test` : **117 tests réussis, 1 ignoré** (112 → 117 ; `test/phase16.e2e-spec.ts` +5 :
+  étendre à la livraison par commune et par rayon avec les proches en premier, tri « plus
+  anciennes », compteurs `/listings/facets` insensibles au filtre vendeur, découverte d'une
+  catégorie et d'une famille, note du vendeur sur les cartes sans donnée personnelle, suppression
+  de conversations masquée pour un seul participant avec retour au premier message de l'autre,
+  compteurs de non-lus, tiers ignoré, validations).
+- Playwright : **73 scénarios, 67 réussis et 6 passés volontairement** (60 → 73 ;
+  `13-messagerie` +1, `14-filtres-decouverte` +6 sur bureau et +6 sur mobile dont la barre des
+  familles passée sur mobile). Un premier passage avait révélé deux ancres « Fil d'Ariane » en
+  double, un contraste insuffisant de la note du vendeur, un clic qui refermait le panneau ouvert
+  au survol et des cases pilotées par l'adresse de la page : corrigés avant la livraison.
+- Captures (API et front construits, seed e2e) : panneau « Tous les filtres » sur bureau avec le
+  bandeau livraison et le périmètre « Autour de Lyon / France », volet mobile à 375 px avec la
+  barre « Tout effacer / Rechercher (N) », barre des familles ouverte sur Services (deux colonnes),
+  messagerie en mode sélection avec « Supprimer (2) » et la boîte de confirmation, bas de page
+  Vélos (suggestions, villes, chemin), pied de page en quatre colonnes sous la page Accessibilité.

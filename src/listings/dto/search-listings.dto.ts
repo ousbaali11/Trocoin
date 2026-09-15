@@ -19,7 +19,7 @@ import { CONDITIONS } from '../listing.entity';
 const toNumber = ({ value }: { value: unknown }) =>
   value === undefined || value === '' ? undefined : Number(value);
 
-export const SORTS = ['recent', 'price_asc', 'price_desc', 'distance', 'relevance'] as const;
+export const SORTS = ['recent', 'oldest', 'price_asc', 'price_desc', 'distance', 'relevance'] as const;
 export type SortKey = (typeof SORTS)[number];
 
 /**
@@ -57,6 +57,10 @@ export class SearchListingsDto {
 
   @IsOptional() @IsBooleanString()
   delivery?: string; // "true"
+
+  /** « Étendre à la livraison » : en plus des annonces autour du lieu choisi, celles livrables partout en France. */
+  @IsOptional() @IsBooleanString()
+  delivery_anywhere?: string; // "true"
 
   @IsOptional() @IsBooleanString()
   with_photo?: string; // "true"

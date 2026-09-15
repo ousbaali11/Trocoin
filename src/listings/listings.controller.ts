@@ -49,8 +49,8 @@ export class ListingsController {
     return this.listingsService.create(req.user.userId, dto);
   }
 
-  @Get()
-  search(@Query() query: SearchListingsDto, @Req() req: any) {
+  /** Filtres spécifiques (attr.*) : clés et valeurs bornées, 10 au plus. */
+  private withAttrFilters(query: SearchListingsDto, req: any): SearchListingsDto & Record<string, any> {
     const attrFilters: Record<string, string> = {};
     for (const [k, v] of Object.entries(req.query || {})) {
       if (k.startsWith('attr.') && /^attr\.[a-z0-9_]{1,40}$/.test(k) && typeof v === 'string' && v.length <= 100) {
@@ -58,7 +58,24 @@ export class ListingsController {
         if (Object.keys(attrFilters).length >= 10) break;
       }
     }
-    return this.listingsService.search({ ...query, ...attrFilters });
+    return { ...query, ...attrFilters };
+  }
+
+  @Get()
+  search(@Query() query: SearchListingsDto, @Req() req: any) {
+    return this.listingsService.search(this.withAttrFilters(query, req));
+  }
+
+  /** Compteurs par type de vendeur pour le panneau « Tous les filtres » (mêmes paramètres que la recherche). */
+  @Get('facets')
+  facets(@Query() query: SearchListingsDto, @Req() req: any) {
+    return this.listingsService.sellerTypeFacets(this.withAttrFilters(query, req));
+  }
+
+  /** Bas de page d'une catégorie : fil d'Ariane, recherches suggérées, localisations les plus demandées. */
+  @Get('discover')
+  discover(@Query('category') category?: string) {
+    return this.listingsService.discover((category || '').slice(0, 60));
   }
 
   @Get('suggest')

@@ -63,3 +63,144 @@
     display: inline-flex;
   }
 }
+
+/* Panneau « Tous les filtres » : groupes (tri, vendeurs) et barre de boutons fixe en bas */
+.group {
+  border: 0;
+  padding: 0;
+  margin: 0 0 14px;
+  min-width: 0;
+}
+.group legend {
+  padding: 0;
+  margin-bottom: 6px;
+}
+.panelFooter {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 0 0;
+  margin-top: 8px;
+  background: var(--white);
+  border-top: 1px solid var(--line-soft);
+}
+.panelFooter .btn {
+  flex: 1 1 auto;
+  justify-content: center;
+}
+
+/* Bandeau livraison : texte, puce retirable et périmètre (autour de la commune / France) */
+.deliveryBanner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+}
+.deliveryText {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+.deliveryTools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.scope {
+  display: inline-flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+/* Mobile : le panneau est un volet qui glisse depuis la droite, plein écran en hauteur */
+.drawerOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  background: rgba(30, 27, 22, 0.45);
+  display: flex;
+  justify-content: flex-end;
+}
+.drawer {
+  width: min(420px, 100%);
+  height: 100%;
+  background: var(--white);
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-lg);
+  animation: drawer-in 0.22s ease-out both;
+}
+@keyframes drawer-in {
+  from {
+    transform: translateX(40px);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+.drawerHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px var(--page-padding-x, 16px);
+  border-bottom: 1px solid var(--line-soft);
+}
+.drawerBody {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 14px var(--page-padding-x, 16px) 8px;
+}
+.drawerBody .field {
+  margin-bottom: 14px;
+}
+.drawer .panelFooter {
+  position: static;
+  padding: 12px var(--page-padding-x, 16px);
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+}
+
+/* Sections de découverte en bas des pages de catégorie */
+.discover {
+  margin-top: 40px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.discoverList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  columns: 4;
+  column-gap: 24px;
+  font-size: 0.92rem;
+}
+.discoverList li {
+  break-inside: avoid;
+  padding: 4px 0;
+}
+.discoverList a {
+  color: var(--ink-soft);
+}
+.discoverList a:hover {
+  color: var(--accent);
+}
+@media (max-width: 900px) {
+  .discoverList {
+    columns: 2;
+  }
+}
+@media (max-width: 480px) {
+  .discoverList {
+    columns: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .drawer {
+    animation: none;
+  }
+}

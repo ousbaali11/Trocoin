@@ -46,15 +46,46 @@ export class ConversationsService {
     let conversation = await this.conversationsRepo.findOne({ where: { listingId, buyerId, sellerId: listing.userId } });
     if (!conversation) {
       conversation = await this.conversationsRepo.save(this.conversationsRepo.create({ listingId, buyerId, sellerId: listing.userId }));
+    } else if (conversation.hiddenForBuyerAt) {
+      // L'acheteur recontacte le vendeur : la conversation qu'il avait supprimée revient dans sa boîte
+      await this.conversationsRepo.update(conversation.id, { hiddenForBuyerAt: null });
+      conversation.hiddenForBuyerAt = null;
     }
     if (firstMessage) await this.postMessage(conversation.id, buyerId, firstMessage);
     return conversation;
   }
 
-  async listMine(userId: string) {
-    const conversations = await this.conversationsRepo
+  /** Conversations visibles pour un membre : les siennes, sauf celles qu'il a supprimées (masquées). */
+  private visibleFor(userId: string) {
+    return this.conversationsRepo
       .createQueryBuilder('c')
-      .where('c.buyerId = :userId OR c.sellerId = :userId', { userId })
+      .where('(c.buyerId = :userId AND c.hiddenForBuyerAt IS NULL) OR (c.sellerId = :userId AND c.hiddenForSellerAt IS NULL)', { userId });
+  }
+
+  /**
+   * Suppression par l'utilisateur : masquage pour lui seul (voir Conversation.hiddenForBuyerAt).
+   * Renvoie le nombre de conversations masquées ; celles qui ne lui appartiennent pas sont ignorées.
+   */
+  async hideForUser(userId: string, ids: string[]): Promise<number> {
+    const unique = [...new Set(ids)];
+    if (unique.length === 0) return 0;
+    const mine = await this.conversationsRepo.find({ where: { id: In(unique) } });
+    const now = new Date();
+    let n = 0;
+    for (const c of mine) {
+      if (c.buyerId === userId && !c.hiddenForBuyerAt) {
+        await this.conversationsRepo.update(c.id, { hiddenForBuyerAt: now });
+        n += 1;
+      } else if (c.sellerId === userId && !c.hiddenForSellerAt) {
+        await this.conversationsRepo.update(c.id, { hiddenForSellerAt: now });
+        n += 1;
+      }
+    }
+    return n;
+  }
+
+  async listMine(userId: string) {
+    const conversations = await this.visibleFor(userId)
       .orderBy('c.lastMessageAt', 'DESC')
       .addOrderBy('c.createdAt', 'DESC')
       .getMany();
@@ -95,11 +126,7 @@ export class ConversationsService {
   }
 
   async unreadTotal(userId: string): Promise<number> {
-    const mine = await this.conversationsRepo
-      .createQueryBuilder('c')
-      .select('c.id')
-      .where('c.buyerId = :userId OR c.sellerId = :userId', { userId })
-      .getMany();
+    const mine = await this.visibleFor(userId).select('c.id').getMany();
     if (mine.length === 0) return 0;
     return this.messagesRepo.count({ where: { conversationId: In(mine.map((c) => c.id)), senderId: Not(userId), readAt: IsNull() } });
   }
@@ -110,6 +137,9 @@ export class ConversationsService {
     if (conversation.buyerId !== userId && conversation.sellerId !== userId) {
       throw new ForbiddenException("Vous n'avez pas accès à cette conversation.");
     }
+    // Supprimée (masquée) par ce membre : pour lui, elle n'existe plus tant que l'autre n'écrit pas
+    const hiddenForMe = conversation.buyerId === userId ? conversation.hiddenForBuyerAt : conversation.hiddenForSellerAt;
+    if (hiddenForMe) throw new NotFoundException('Conversation introuvable.');
     return conversation;
   }
 
@@ -178,7 +208,9 @@ export class ConversationsService {
 
   private async persist(c: Conversation, otherId: string, message: Message, notifBody: string): Promise<Message> {
     const saved = await this.messagesRepo.save(message);
-    await this.conversationsRepo.update(c.id, { lastMessageAt: saved.createdAt });
+    // Un nouveau message fait réapparaître la conversation chez le destinataire s'il l'avait supprimée
+    const unhide = otherId === c.buyerId ? { hiddenForBuyerAt: null } : { hiddenForSellerAt: null };
+    await this.conversationsRepo.update(c.id, { lastMessageAt: saved.createdAt, ...unhide });
     await this.notifications.notify(otherId, { type: 'message', title: 'Nouveau message', body: notifBody, link: `/compte/messages/${c.id}` });
     return saved;
   }

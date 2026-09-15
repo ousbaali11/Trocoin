@@ -2,7 +2,9 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
   Param,
   ParseUUIDPipe,
   Post,
@@ -13,7 +15,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Throttle } from '@nestjs/throttler';
-import { IsIn, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsIn, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { finalizeUploadedImages, imageDiskStorage, imageFileFilter, MAX_IMAGE_BYTES } from '../common/upload/image-upload';
 import { ConversationsService } from './conversations.service';
@@ -27,6 +29,10 @@ class OfferDto {
 class AnswerOfferDto {
   @IsIn(['acceptee', 'refusee', 'retiree'])
   decision: 'acceptee' | 'refusee' | 'retiree';
+}
+class BulkDeleteDto {
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(100) @IsUUID("4", { each: true })
+  ids: string[];
 }
 class ImageCaptionDto {
   @IsOptional() @IsString() @MaxLength(500)
@@ -54,9 +60,24 @@ export class ConversationsController {
     return { unread: await this.conversationsService.unreadTotal(req.user.userId) };
   }
 
+  /** Suppression de plusieurs conversations (masquage pour l'utilisateur, voir Conversation.hiddenForBuyerAt). */
+  @Post('bulk-delete')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 30, ttl: 600_000 } })
+  async bulkDelete(@Req() req: any, @Body() dto: BulkDeleteDto) {
+    return { deleted: await this.conversationsService.hideForUser(req.user.userId, dto.ids) };
+  }
+
   @Get(':id')
   detail(@Req() req: any, @Param('id', ParseUUIDPipe) id: string) {
     return this.conversationsService.getDetail(id, req.user.userId);
+  }
+
+  /** Suppression d'une conversation : masquée pour l'utilisateur seulement, l'autre participant garde l'historique. */
+  @Delete(':id')
+  @HttpCode(200)
+  async remove(@Req() req: any, @Param('id', ParseUUIDPipe) id: string) {
+    return { deleted: await this.conversationsService.hideForUser(req.user.userId, [id]) };
   }
 
   @Get(':id/messages')

@@ -22,7 +22,9 @@ export function ListingCard({ listing, showStatus = false }: { listing: ListingC
   const negotiable = listing.priceType === "negociable";
   const priceLabel = formatPrice(listing.price, negotiable ? "fixe" : listing.priceType);
   const place = [listing.city || "France", listing.postalCode].filter(Boolean).join(" ");
-  const hasMeta = isPro || !!listing.condition || !!listing.isComplete;
+  // Note du vendeur (visible sans connexion, comme le reste de la carte) dès qu'il a reçu un avis
+  const rating = listing.seller && listing.seller.ratingCount && listing.seller.ratingCount > 0 ? listing.seller : null;
+  const hasMeta = isPro || !!listing.condition || !!listing.isComplete || !!rating;
   return (
     <article className={`card card-hover ${styles.card} ${listing.isBoosted ? styles.boosted : ""}`}>
       <Link href={`/annonces/${listing.id}`} className={styles.media} aria-label={listing.title}>
@@ -63,6 +65,11 @@ export function ListingCard({ listing, showStatus = false }: { listing: ListingC
         {hasMeta && (
           <div className={styles.meta}>
             {isPro && <span className={styles.pro}>Pro</span>}
+            {rating && (
+              <span className={styles.rating} title={`${rating.ratingCount} avis`} aria-label={`Vendeur noté ${(rating.ratingAvg ?? 0).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} sur 5, ${rating.ratingCount} avis`}>
+                ★ {(rating.ratingAvg ?? 0).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} ({rating.ratingCount})
+              </span>
+            )}
             {listing.condition && <span>{CONDITION_LABELS[listing.condition]}</span>}
             {listing.isComplete && (
               <span className={styles.complete} title="Photos, description et tous les critères renseignés">

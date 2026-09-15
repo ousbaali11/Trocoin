@@ -90,7 +90,7 @@ export interface ListingCard {
   externalRef?: string | null;
   shopOwnerId?: string;
   createdBy?: string | null;
-  seller?: { id: string; displayName: string; accountType: AccountType; shopName?: string; identityVerified: boolean };
+  seller?: { id: string; displayName: string; accountType: AccountType; shopName?: string; identityVerified: boolean; ratingAvg?: number; ratingCount?: number };
 }
 
 export interface ListingPhoto {

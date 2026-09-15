@@ -1,0 +1,85 @@
+.bar {
+  display: none;
+  position: relative;
+  background: var(--white);
+  border-bottom: 1px solid var(--line-soft);
+  z-index: 40;
+}
+@media (min-width: 1024px) and (hover: hover) {
+  .bar {
+    display: block;
+  }
+}
+.inner {
+  display: flex;
+}
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 2px;
+  overflow: hidden;
+}
+.family {
+  border: 0;
+  background: transparent;
+  padding: 10px 10px;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  min-height: 40px;
+}
+.family:hover,
+.familyOpen {
+  color: var(--accent-dark);
+  border-bottom-color: var(--accent);
+}
+.panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  background: var(--white);
+  border-bottom: 1px solid var(--line);
+  box-shadow: var(--shadow-lg);
+  animation: appear 0.16s ease-out both;
+}
+.panelInner {
+  padding-block: 18px 22px;
+}
+.panelHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.panelTitle {
+  font-weight: 700;
+  color: var(--ink);
+}
+.columns {
+  display: flex;
+  gap: 40px;
+  flex-wrap: wrap;
+}
+.column {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-width: 180px;
+}
+.column li {
+  padding: 4px 0;
+  font-size: 0.9rem;
+}
+.column a {
+  color: var(--ink-soft);
+}
+.column a:hover {
+  color: var(--accent);
+}

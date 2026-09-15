@@ -175,3 +175,8 @@
   border-color: #efd9a8;
   box-shadow: 0 0 0 1px #f3e2b8 inset;
 }
+.rating {
+  color: #7a5211; /* même teinte que les étiquettes ocre : contraste AA sur blanc */
+  font-weight: 600;
+  white-space: nowrap;
+}
