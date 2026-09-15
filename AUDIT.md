@@ -1530,3 +1530,43 @@ pendant la bêta (inscription par e-mail et mot de passe), ce parcours n'avait p
 Preuves : scénarios 03, 07 et 08 verts en local (21 réussis), CI run 35028403061 verte ;
 `www.trocoin.fr/connexion/sms?next=/deposer` → 307 vers `/connexion?next=/deposer` ;
 `www.trocoin.fr/connexion` sans le mot « SMS » ni lien vers `/connexion/sms` (capture).
+
+## 27. « Renvoyer l'e-mail de confirmation » : rien reçu — 16 septembre 2026
+
+Vérifications dans l'ordre demandé.
+
+1. **Faux succès côté interface ?** Non : le bouton n'affiche « E-mail envoyé » qu'après une réponse
+   200 de `POST /auth/email/resend`, et toute erreur donne un message d'erreur. Côté API, un envoi
+   refusé par Resend ou expiré (10 s) lève une 503 : `resendEmailVerification` ne répond jamais
+   `ok` sans que le fournisseur ait accepté le message.
+2. **Refus serveur invisible ?** Les refus (déjà confirmée, moins de 60 s depuis le dernier
+   envoi, 3 par heure et par IP) renvoient un message en français, mais l'interface ne le montrait
+   que dans un message furtif en bas à droite, effacé au bout de 4,5 s ; seul « Renvoyer dans
+   59 s » subsistait sur le bouton. Le message de la limite horaire disait de surcroît « patientez
+   une minute ». Les journaux Render et le tableau de bord Resend n'ont pas pu être consultés
+   (aucun accès depuis cet environnement) : ce point reste à lire par l'utilisateur.
+3. **Accepté par Resend mais non délivré ?** Non vérifiable dans le tableau de bord (même raison).
+   Sur une boîte de test lisible par API, chaque envoi (inscription puis renvoi) est arrivé en
+   moins de dix secondes, de `no-reply@trocoin.fr`.
+4. **Reproduction réelle, par l'interface** (compte créé sur `www.trocoin.fr`, supprimé ensuite) :
+   clic 3 s après l'inscription → 400 « Un e-mail vient de vous être envoyé. Patientez une
+   minute… », bouton « Renvoyer dans 59 s » ; clic après 60 s → 200, second e-mail reçu en 4 s ;
+   nouveau clic dans la minute → 400 avec le même message. Aucun envoi perdu.
+
+**Conclusion** : le mécanisme fonctionne ; ce que l'utilisateur a vécu correspond soit à un clic
+dans la minute qui suit l'inscription ou un envoi précédent (refus signalé seulement par un message
+furtif), soit à l'e-mail arrivé dans les indésirables (cf. §25, « Envoyé par : rsend.trocoin.fr »),
+soit à la limite de 3 envois par heure après plusieurs essais. À défaut d'accès aux journaux, le
+diagnostic exact de son cas est à lire dans Resend (Emails, filtrer sur son adresse) et dans les
+logs Render (« E-mail de confirmation envoyé pour … » ou « Envoi e-mail impossible … »).
+
+**Correctifs** : le résultat du dernier clic reste affiché sous le bouton (`data-testid=
+"resend-status"`) : « E-mail envoyé à … à HH:MM. Ouvrez le lien… regardez vos courriers
+indésirables » ou la raison du refus ; la limite horaire renvoie « Trop de demandes : au plus
+3 e-mails de confirmation par heure… » (filtre d'exceptions, route `/auth/email/resend`) et le front
+affiche ce message sur une 429. Scénario 02 : la raison du refus doit rester visible après la
+disparition du message furtif.
+
+**Preuves** : scénarios 02 et 12 verts (bureau et mobile), CI run 35029639412 verte ; rejeu réel
+après déploiement : mêmes trois clics, message inline « Patientez une minute » puis « E-mail envoyé
+à … à 00:19 … » sous le bouton, second e-mail reçu ; captures avant / après.
