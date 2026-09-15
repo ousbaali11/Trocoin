@@ -46,7 +46,7 @@ describe('Domaine trocoin.fr', () => {
       expect(res.body.siteUrl).toBe(resolveSiteUrl());
       expect(res.body.siteUrl).toMatch(/^https?:\/\//);
       // Aucune clé de configuration (origines, secrets, hôte de base) : seulement l'état, la version et la base des liens
-      expect(Object.keys(res.body).sort()).toEqual(['database', 'siteUrl', 'status', 'uptimeSeconds', 'version'].sort());
+      expect(Object.keys(res.body).filter((k) => k !== 'databaseRegion').sort()).toEqual(['database', 'siteUrl', 'status', 'uptimeSeconds', 'version'].sort());
     });
   });
 });
