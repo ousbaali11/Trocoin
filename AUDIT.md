@@ -6,8 +6,9 @@ dans `AUDIT-HISTORIQUE.md`). Chaque affirmation est étiquetée :
 **[lecture]** vérifié par relecture du code · **[non testé]** impossible à tester ici, avec la raison ·
 **[différé]** volontairement reporté par choix produit.
 
-Production : API `https://trocoin.onrender.com` (Render, Docker, PostgreSQL Neon, SMS Vonage),
-front `https://trocoin.vercel.app` (Vercel). Dépôt GitHub `ousbaali11/Trocoin`, branche `main`.
+Production : API `https://api.trocoin.fr` (Render, Docker, PostgreSQL Neon, SMS Vonage ; alias
+`trocoin.onrender.com`), front `https://www.trocoin.fr` (Vercel ; `trocoin.fr` et `trocoin.vercel.app`
+y redirigent, §23). Dépôt GitHub `ousbaali11/Trocoin`, branche `main`.
 
 ---
 
