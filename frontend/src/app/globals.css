@@ -573,9 +573,10 @@ a.card:hover * {
    Fluidité et micro-interactions (section 5) · cohérence visuelle (section 6)
    Toutes les animations sont courtes (≤ 250 ms) et coupées par prefers-reduced-motion.
    ===================================================================== */
+/* Glissements sans variation d'opacité : le texte reste lisible (et mesurable par axe) à tout instant */
 @keyframes appear {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: none; }
+  from { transform: translateY(6px); }
+  to { transform: none; }
 }
 @keyframes pop {
   0% { transform: scale(1); }
@@ -583,8 +584,8 @@ a.card:hover * {
   100% { transform: scale(1); }
 }
 @keyframes modal-in {
-  from { opacity: 0; transform: translateY(10px) scale(0.98); }
-  to { opacity: 1; transform: none; }
+  from { transform: translateY(10px) scale(0.98); }
+  to { transform: none; }
 }
 @keyframes fade-in {
   from { opacity: 0; }
