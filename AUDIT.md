@@ -1352,3 +1352,65 @@ test. Version 1.14.0. Référence : `docs/etiquettes-transporteur.md`.
   `/health` → `version 1.14.0` ; `POST /transactions/:id/shipment/quote`, `GET …/shipment` et
   `GET …/shipment/label.pdf` sans session → 401 ; `SHIPPING_PROVIDER` absent en production →
   fournisseur `none` (503 explicite pour un vendeur, saisie manuelle inchangée).
+
+## 23. Bascule vers le domaine trocoin.fr — 15 septembre 2026 (soir)
+
+Le site est servi par Vercel sur `https://www.trocoin.fr` (`trocoin.fr` y redirige en 308, choix
+fait au niveau du domaine chez Vercel) et l'API par Render sur `https://api.trocoin.fr`
+(`trocoin.onrender.com` reste un alias). État constaté avant ce tour : l'API refusait les deux
+nouvelles origines (CORS 403, seule l'adresse Vercel était listée), et le front publiait encore
+`trocoin.vercel.app` dans `robots.txt`, le sitemap et les canoniques. Les deux dépendaient de
+variables d'hébergeur restées à l'ancienne valeur : corrigé dans le code pour ne plus en dépendre.
+
+1. **CORS** (`src/config/env.validation.ts`) : `https://www.trocoin.fr` et `https://trocoin.fr`
+   toujours autorisés en production, en plus de `CORS_ORIGINS` (l'origine Vercel y reste en
+   secours tant que la variable la contient). Origine étrangère → 403 inchangé.
+2. **Liens des e-mails** : `resolveSiteUrl` renvoie `https://www.trocoin.fr` quand `SITE_URL` est
+   absente ou pointe encore vers `vercel.app` / `onrender.com` ; `/health` expose désormais
+   `siteUrl` pour le prouver de l'extérieur. Tous les e-mails (confirmation d'inscription, mot de
+   passe oublié, changement d'adresse, avertissement à l'ancienne adresse) passent par cette base.
+3. **Sitemap et robots** (`frontend/src/lib/api.ts`) : en production, une `NEXT_PUBLIC_SITE_URL`
+   absente ou sur un ancien hébergeur est ignorée au profit du domaine canonique.
+4. **Canoniques et Open Graph** : même base (`metadataBase`) ; l'accueil, qui n'avait ni
+   canonique ni `og:url`, en a maintenant.
+5. **Cookies** : aucun cookie n'est posé par l'API ni par le front (session en `localStorage`,
+   refresh par en-tête) : rien à ajuster.
+6. **Redirections** : `trocoin.fr` → `www.trocoin.fr` (Vercel, 308), `http` → `https` (308),
+   et `trocoin.vercel.app` → `www.trocoin.fr` ajoutée dans `next.config.ts` (308, chemin conservé).
+7. **Passage complet en production sur www.trocoin.fr** (script Playwright, comptes de test
+   supprimés à la fin) : inscription d'un vendeur (e-mail de confirmation envoyé à une adresse
+   Gmail de l'utilisateur), statut « Adresse non confirmée » dans les paramètres, dépôt d'une
+   annonce avec photo (POST /listings 201, photo 201, fiche sur `/annonces/:id` avec canonique sur
+   le domaine), inscription d'un acheteur, message au vendeur depuis la fiche et lecture côté
+   vendeur, puis suppression de l'annonce (fiche → 404) et des deux comptes (204, reconnexion →
+   401). Hôtes appelés par le navigateur : `www.trocoin.fr` et `api.trocoin.fr` seulement ;
+   aucune erreur console.
+
+Deux constats faits en passant, corrigés : « Lampe de bureau » était suggérée en Bureaux &
+commerces (le mot « bureau » seul l'emportait ; l'expression complète est maintenant reconnue,
+cas ajouté à `phase17`) ; le test 2FA recalculait le code TOTP entre la connexion et le rejeu et
+pouvait échouer au changement de fenêtre de 30 s (pas figé). Les autres références aux anciennes
+adresses (README, DEPLOIEMENT, `.env.example`, scripts, sonde `/health` de la CI) sont passées au
+domaine ; l'historique de cet audit garde les anciennes adresses telles qu'elles étaient.
+
+À faire côté hébergeurs, sans urgence puisque le code n'en dépend plus : `CORS_ORIGINS` et
+`SITE_URL` sur Render, `NEXT_PUBLIC_SITE_URL` sur Vercel, à passer sur `https://www.trocoin.fr`
+(l'origine Vercel peut être retirée de `CORS_ORIGINS` une fois la redirection constatée).
+
+**Preuves d'exécution (15 septembre 2026, soir)**
+- `npm test` : **127 tests réussis, 1 ignoré** (124 → 127 ; `test/phase19.e2e-spec.ts` +3 :
+  origines de production intégrées avec `CORS_ORIGINS` conservée, URL canonique face à une
+  `SITE_URL` absente, sur `vercel.app`, sur `onrender.com` ou invalide, `/health` avec `siteUrl`
+  et sans clé de configuration).
+- CI verte (runs 35002043850 et 35003525296 : typecheck, tests SQLite et PostgreSQL 16, image
+  Docker, 93 scénarios navigateur, déploiement Render avec sonde sur `api.trocoin.fr`).
+- Production : `GET https://api.trocoin.fr/health` → `version 1.14.0`, `siteUrl
+  https://www.trocoin.fr` ; préflight CORS avec `Origin: https://www.trocoin.fr` → 204 et en-tête
+  renvoyé, idem `https://trocoin.fr` et `https://trocoin.vercel.app`, `https://evil.example` →
+  403 ; `www.trocoin.fr/robots.txt` → `Sitemap: https://www.trocoin.fr/sitemap.xml`, sitemap sans
+  aucune adresse `vercel.app`, canonique de `/recherche?category=velos` et de l'accueil sur le
+  domaine ; `trocoin.fr/recherche?category=velos` et `trocoin.vercel.app/recherche?category=velos`
+  → 308 vers `www.trocoin.fr` avec le chemin ; `GET /categories/suggest?q=Lampe de bureau` →
+  Décoration en premier.
+- Captures : inscription avec le bandeau de confirmation, paramètres (adresse non confirmée),
+  fiche publiée avec « Votre annonce est en ligne ! », messagerie côté acheteur et côté vendeur.
