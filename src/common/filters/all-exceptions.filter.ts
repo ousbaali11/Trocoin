@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { Sentry, SENTRY_ENABLED } from '../../monitoring/sentry';
+import { translateDefaultMessage } from '../validation';
 
 /**
  * Filtre global : les erreurs HTTP prévues sont renvoyées telles quelles ;
@@ -33,9 +34,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
       if (status === 429) {
         return res.status(429).json({ statusCode: 429, message: 'Trop de tentatives en peu de temps. Patientez une minute puis réessayez.' });
       }
-      return res
-        .status(status)
-        .json(typeof body === 'string' ? { statusCode: status, message: body } : body);
+      // Messages par défaut de NestJS (« Unauthorized », « Not Found », « Cannot GET … ») traduits
+      if (typeof body === 'string') return res.status(status).json({ statusCode: status, message: translateDefaultMessage(body) });
+      const obj = body as Record<string, unknown>;
+      return res.status(status).json(typeof obj?.message === 'string' ? { ...obj, message: translateDefaultMessage(obj.message) } : body);
     }
 
     // Erreurs multer (taille, nombre de fichiers) : message utile, pas de détail interne

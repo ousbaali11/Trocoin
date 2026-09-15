@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { SENTRY_ENABLED } from './monitoring/sentry';
-import { Logger, ValidationPipe } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
+import { buildValidationPipe } from './common/validation';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
@@ -42,13 +43,8 @@ async function bootstrap() {
     app.set('trust proxy', 1);
   }
 
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      transform: true,
-      transformOptions: { enableImplicitConversion: false },
-    }),
-  );
+  // Validation des corps de requête, messages en français (src/common/validation.ts)
+  app.useGlobalPipes(buildValidationPipe());
   app.useGlobalFilters(new AllExceptionsFilter());
 
   // Photos uploadées. En production : S3/OVH Object Storage + CDN plutôt que le disque local.

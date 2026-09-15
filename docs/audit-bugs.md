@@ -23,6 +23,10 @@ Gravité : **haute** (données, sécurité, fonction cassée) · **moyenne** (pa
 | 9 | Images d'annonce introuvables (photos d'avant le stockage R2) affichées comme image cassée avec le texte alternatif. | basse | cartes d'annonce | corrigé le 15 septembre matin (repli « Pas de photo ») |
 | 10 | JSON-LD (données structurées) injecté par `JSON.stringify` sans neutraliser `<` : un titre d'annonce contenant `</script>` pouvait fermer la balise et injecter du code dans la page. | haute | fiche annonce, accueil | corrigé (`<` remplacé par la séquence JSON `\u003c` avant insertion) |
 | 11 | Connexion : seuls l'e-mail et le nom d'utilisateur étaient acceptés alors que le compte est défini par le mobile ; aucun contrôle de format avant l'envoi. | moyenne | connexion | corrigé (mobile accepté, format vérifié) |
+| 12 | Découvert en cascade : après la restauration des marges, la zone de résultats est passée de 1180 à 1140 px et la grille retombait à 4 colonnes de 200 px (cartes de 342 px de haut, seuil du test 340). | basse | recherche (bureau) | corrigé (grille `minmax(150px)`, 5 colonnes) |
+| 13 | Découvert en cascade : le fondu d'ouverture des boîtes de dialogue (opacité 0 → 1) faisait mesurer par axe un contraste insuffisant pendant l'animation, en CI seulement. | basse | boîte « Sauvegarder cette recherche » | corrigé (animations en glissement seul, sans opacité) |
+| 14 | Découvert en cascade : première version du durcissement JSON-LD écrite avec un seul antislash (`"<"`), soit le caractère `<` lui-même, donc sans effet ; corrigé pour émettre la séquence littérale. | haute | fiche annonce, accueil | corrigé (vérifié par lecture du source : `.replace(/</g, "\u003c")`) |
+| 15 | Messages par défaut de NestJS et de class-validator en anglais (« Unauthorized », « Not Found », « identifier must be longer than… ») possibles si un client contourne le formulaire. | basse | API | corrigé (traduction globale dans le filtre d'exceptions et la validation) |
 
 ## Vérifications de sécurité (état constaté)
 

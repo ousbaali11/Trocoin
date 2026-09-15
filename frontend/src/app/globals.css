@@ -587,9 +587,11 @@ a.card:hover * {
   from { transform: translateY(10px) scale(0.98); }
   to { transform: none; }
 }
-@keyframes fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+/* Voile des boîtes de dialogue : on anime la couleur de fond, jamais l'opacité (elle s'appliquerait
+   au contenu de la boîte et rendrait le texte temporairement illisible) */
+@keyframes overlay-in {
+  from { background-color: rgba(30, 27, 22, 0); }
+  to { background-color: rgba(30, 27, 22, 0.55); }
 }
 /* Apparition douce des cartes et des blocs chargés */
 .grid-cards > *,
@@ -629,7 +631,7 @@ a.card:hover * {
 }
 /* Boîtes de dialogue et menus : fondu et glissement */
 .modal-overlay {
-  animation: fade-in 0.15s ease-out both;
+  animation: overlay-in 0.15s ease-out both;
 }
 .modal-panel {
   animation: modal-in 0.2s ease-out both;

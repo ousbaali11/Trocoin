@@ -1,4 +1,5 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
+import { buildValidationPipe } from '../src/common/validation';
 import { ConfigService } from '@nestjs/config';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
@@ -74,7 +75,7 @@ describe('Phase 13 : paiement hébergé (Checkout, capture différée) et webhoo
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).overrideProvider(PAYMENT_PROVIDER).useValue(fake).compile();
     app = moduleRef.createNestApplication<NestExpressApplication>({ rawBody: true });
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+    app.useGlobalPipes(buildValidationPipe());
     app.useGlobalFilters(new AllExceptionsFilter());
     await app.init();
     server = app.getHttpServer();

@@ -847,7 +847,11 @@ audit bugs et sécurité. Traité dans l'ordre recommandé, un commit par sectio
    pages légales les notes de travail (« Modèle à faire valider… », « Modèle à compléter… ») ;
    centre d'aide remis à jour (e-mail actif, connexion par mobile, plus de « back-office ») ;
    « sans friction » → « sans complication » ; « jeton » → « lien incomplet » ; réponse 429 en
-   français. Les mentions légales gardent des champs entre crochets : ce sont vos données
+   français. Passe exhaustive : pages, centre d'aide (22 articles), textes légaux, 24 textes d'invite
+   des champs (tous en français), e-mail de réinitialisation, notifications, messages d'erreur de
+   l'API — les messages par défaut de NestJS et de class-validator (anglais) sont désormais traduits
+   globalement (`src/common/validation.ts`, filtre d'exceptions), y compris pour un client qui
+   contournerait le formulaire. Les mentions légales gardent des champs entre crochets : ce sont vos données
    d'éditeur, à saisir depuis Admin → Pages (aucune valeur inventée).
 3. **Connexion** [exécuté] — la connexion par e-mail fonctionnait déjà (insensible à la casse et aux
    espaces, tests phase 5 et scénario 03 verts avant ce tour) ; le brief demandait aussi le mobile.

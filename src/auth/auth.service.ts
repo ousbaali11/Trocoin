@@ -198,7 +198,7 @@ export class AuthService {
   async changePassword(userId: string, currentPassword: string, newPassword: string, confirmation: string): Promise<{ ok: true }> {
     if (newPassword !== confirmation) throw new BadRequestException('Les deux nouveaux mots de passe ne correspondent pas.');
     const user = await this.usersService.findWithPasswordHash(userId);
-    if (!user) throw new UnauthorizedException();
+    if (!user) throw new UnauthorizedException('Connexion requise.');
     if (!user.passwordHash) {
       throw new BadRequestException("Ce compte a été créé par code SMS et n'a pas encore de mot de passe : utilisez « Mot de passe oublié » pour en définir un.");
     }
