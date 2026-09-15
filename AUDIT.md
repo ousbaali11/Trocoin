@@ -1570,3 +1570,17 @@ disparition du message furtif.
 **Preuves** : scénarios 02 et 12 verts (bureau et mobile), CI run 35029639412 verte ; rejeu réel
 après déploiement : mêmes trois clics, message inline « Patientez une minute » puis « E-mail envoyé
 à … à 00:19 … » sous le bouton, second e-mail reçu ; captures avant / après.
+
+## 28. Aide « Se connecter » : plus de renvoi vers la connexion par code SMS — 16 septembre 2026
+
+L'article d'aide `se-connecter` (section « Compte créé par SMS, sans mot de passe ») citait encore
+« la page Connexion par code SMS (lien en bas du formulaire) », supprimée au §26. Il n'indique plus
+que « Mot de passe oublié » (lien sous le champ du mot de passe), en précisant qu'une adresse e-mail
+doit être rattachée au compte et que la connexion par code SMS n'est plus proposée. Recherche des
+autres mentions : le message d'erreur de connexion de l'API pour un compte sans mot de passe disait
+« utilisez la connexion par SMS » → « utilisez « Mot de passe oublié » pour en définir un » ; la page
+Paramètres renvoyait déjà vers Mot de passe oublié ; les autres occurrences (CGU : « Trocoin peut
+demander une vérification par code SMS », inscription : « aucun SMS n'est envoyé ») restent exactes.
+
+Preuve : CI run 35030640853 verte ; `www.trocoin.fr/aide/se-connecter` contient le nouveau texte et
+plus « Connexion par code SMS » (capture).
