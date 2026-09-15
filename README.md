@@ -6,7 +6,7 @@ indicatif est refusé à l'inscription. La vérification de ce numéro par SMS e
 choix** pendant la bêta (voir `AUDIT.md` §6) : le code Vonage reste en place, désactivé.
 
 Documents : `cahier-des-charges.md`, `architecture-technique.md`,
-`analyse-concurrentielle.md` (étude leboncoin + écarts), `docs/design-system.md` (direction artistique et composants), `docs/etiquettes-transporteur.md` (étiquettes d'envoi : comparatif Boxtal / Sendcloud / direct, architecture en simulation), `docs/parite-resultats.md` (contrôle de parité rejouable : `node scripts/audit-parite.js`), `AUDIT.md` (sécurité,
+`analyse-concurrentielle.md` (étude leboncoin + écarts), `docs/design-system.md` (direction artistique et composants), `docs/seo-checklist.md` (état du site pour Google Search Console), `docs/etiquettes-transporteur.md` (étiquettes d'envoi : comparatif Boxtal / Sendcloud / direct, architecture en simulation), `docs/parite-resultats.md` (contrôle de parité rejouable : `node scripts/audit-parite.js`), `AUDIT.md` (sécurité,
 complétude, ce qui n'a pas pu être testé, recommandations avant lancement),
 `DEPLOIEMENT.md` (mise en ligne pas à pas : Neon + Render + Vercel, sauvegardes, SMS).
 
@@ -40,7 +40,7 @@ cd frontend && npm install && cp .env.example .env.local && npm run dev -- -p 30
 ```bash
 npm test                 # 124 tests e2e (API, supertest)
 npm run e2e:build        # construit l'API (dist/) et le front (next build) pour les tests navigateur
-npm run e2e              # 93 scénarios Playwright dans Chromium (desktop 1280 px + mobile 375 px) : parcours, accessibilité (axe) site + back-office, clavier, SEO
+npm run e2e              # 97 scénarios Playwright dans Chromium (desktop 1280 px + mobile 375 px) : parcours, accessibilité (axe) site + back-office, clavier, SEO
 node scripts/charge.js --api https://api.trocoin.fr --front https://www.trocoin.fr --vus 10 --minutes 3   # test de charge léger (lectures publiques)
 SOURCE_DATABASE_URL=… TARGET_DATABASE_URL=… node scripts/migrer-base.js   # copie intégrale d'une base Postgres vers une autre, preuve par comptages + empreintes (DEPLOIEMENT.md §6b) (Jest + supertest, SQLite en mémoire)
 # Les mêmes tests sur PostgreSQL (schéma créé par les migrations) :
@@ -59,7 +59,7 @@ manuel : Playwright démarre et arrête les deux serveurs (`e2e/start-api.js`, `
 ```bash
 npx playwright install chromium   # une fois
 npm run e2e:build                 # API + front (≈ 2 min)
-npm run e2e                       # 93 scénarios (≈ 4 min)
+npm run e2e                       # 97 scénarios (≈ 4 min)
 npx playwright show-report        # rapport HTML, traces et captures des échecs
 npm run e2e:ui                    # mode interactif pas à pas
 ```
@@ -85,6 +85,7 @@ la construction ET l'exécution (l'URL de l'API est figée dans le build du fron
 | `e2e/13-messagerie.spec.ts` | suppression de conversations : mode sélection, sélection individuelle et multiple, tout sélectionner / désélectionner, confirmation, annulation ; l'autre participant garde ses conversations | desktop |
 | `e2e/14-filtres-decouverte.spec.ts` | panneau « Tous les filtres » (ordre des blocs, tri, dons, vendeurs avec compteurs, urgentes, Tout effacer, Rechercher (N), volet mobile), bandeau livraison et périmètre France, bas de page de catégorie (suggestions, villes, fil d'Ariane), pagination, barre des familles, pied de page, consultation sans connexion | desktop + mobile |
 | `e2e/15-experience.spec.ts` | suggestions pendant la frappe (annonce, catégorie, commune) et recherches récentes, aperçu rapide au clic long, panneau des familles et menu « Catégories » animés, menu mobile animé, dépôt (barre de progression, catégorie suggérée d'après le titre, jauge de prix en direct, checklist « Faire → »), Mes annonces (rien de groupé avec une annonce, sélection et pause groupée avec deux), appareils connectés et déconnexion générale | desktop + mobile |
+| `e2e/16-profils.spec.ts` | profils vendeur et boutique en sections repliables : annonces ouvertes, avis et informations de la boutique repliés, clavier (Entrée / Espace, aria-expanded), état mémorisé après rechargement, axe sans violation, compte pro créé pour le scénario | desktop + mobile |
 
 Les pages d'inscription et de recherche vérifient en plus l'absence de défilement horizontal
 (`expectNoHorizontalOverflow`) : c'est la régression trouvée lors du tour de polish. Les données

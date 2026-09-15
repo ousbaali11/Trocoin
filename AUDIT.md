@@ -1584,3 +1584,36 @@ demander une vérification par code SMS », inscription : « aucun SMS n'est env
 
 Preuve : CI run 35030640853 verte ; `www.trocoin.fr/aide/se-connecter` contient le nouveau texte et
 plus « Connexion par code SMS » (capture).
+
+## 29. Préparation à Google Search Console ; profils en sections repliables — 16 septembre 2026
+
+### 29.1 Exploration par Google (`docs/seo-checklist.md`, 20 points)
+
+État avant ce tour, vérifié en production : sitemap de 101 URL sans aucune date et limité à 50
+annonces ; `robots.txt` correct mais sans les écrans de mot de passe et de confirmation ; titres et
+descriptions déjà uniques par catégorie et par fiche ; `Product`/`Offer` et `BreadcrumbList` déjà sur
+les fiches, `Organization` et `WebSite` sur l'accueil ; 404 réels (annonce inconnue, page inconnue) ;
+redirections sans boucle (au plus deux sauts, `http` → `https` → `www`).
+
+Ajouté : sitemap avec **toutes les annonces en ligne** (pagination par 50, jusqu'à 2 000) et leur
+`lastmod`, page Accessibilité ; `robots.txt` bloque aussi `/mot-de-passe-oublie`, `/reinitialiser`,
+`/confirmer-email` (pas de panier sur Trocoin) ; `BreadcrumbList` sur les pages de catégorie ; titre
+de fiche coupé à 60 caractères avant le prix. Rien à signaler sur la vitesse et l'affichage mobile
+(scénario 11 à chaque CI). Reste à l'utilisateur : vérification DNS, envoi du sitemap, lecture des
+rapports Pages et Données structurées.
+
+### 29.2 Profils en sections repliables
+
+`FilterSection` (accordéon des filtres) prend une clé de session dédiée et une taille d'en-tête de
+section (`size="lg"`) ; les pages `/vendeurs/:id` gardent l'identité en tête puis empilent
+« Annonces en ligne (n) » (ouverte), « Informations de la boutique » (pro seulement : description,
+adresse, horaires, site ; repliée) et « Avis reçus (n) » (repliée). En-têtes = boutons dans un `h2`
+avec `aria-expanded` / `aria-controls`, chevron tourné, contenu masqué non focusable, état mémorisé
+pour la session (`sessionStorage`, clé `trocoin_profile_sections`).
+
+**Preuves** : `e2e/16-profils.spec.ts` (+2 scénarios, bureau et mobile : ouverture au clavier
+Entrée / Espace, état conservé après rechargement, boutique pro créée pour le scénario avec un SIRET
+du registre simulé, axe sans violation avec sections ouvertes et repliées) ; scénarios 07 et 10 verts
+(22 réussis en local) ; captures avant / après des profils particulier et professionnel, bureau et
+375 px ; sitemap local 107 URL avec `lastmod` sur les annonces, `BreadcrumbList` servi sur
+`/recherche?category=velos`.

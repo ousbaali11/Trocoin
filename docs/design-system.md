@@ -97,8 +97,11 @@ Champs de saisie : 16 px sur mobile (pas de zoom automatique), hauteur ≥ 46 px
 - **Volets et menus** : entrée par translation + léger agrandissement (160–220 ms, `ease-out`),
   sortie symétrique ; jamais d'apparition brute. Réduits à zéro si l'appareil demande moins
   d'animations.
-- **Accordéons** (filtres) : en-tête bouton avec chevron, ouverture animée par
-  `grid-template-rows`, état mémorisé pour la session.
+- **Accordéons** (filtres, pages de profil) : en-tête bouton avec chevron, ouverture animée par
+  `grid-template-rows`, état mémorisé pour la session (`FilterSection`, une clé de session par
+  usage). Sur les profils vendeur et boutique, la section la plus utile (annonces en ligne) est
+  ouverte d'emblée, « Informations de la boutique » et « Avis reçus » sont repliées ; en-têtes en
+  Fraunces 1,35 rem (`size="lg"`).
 - **Barre de progression** : dépôt d'annonce (étape n/5 avec pourcentage) et navigation entre
   pages (filet vert de 3 px en haut de l'écran pendant le chargement).
 

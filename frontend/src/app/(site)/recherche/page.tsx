@@ -36,10 +36,32 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
  */
 export const dynamic = "force-dynamic";
 
-export default function Page() {
+export default async function Page({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const sp = await searchParams;
+  const category = typeof sp.category === "string" ? sp.category : "";
+  // Fil d'Ariane en données structurées (BreadcrumbList) sur les pages de catégorie, cohérent avec celui affiché
+  let breadcrumb: Record<string, unknown> | null = null;
+  if (category) {
+    const tree = await api<CategoryNode[]>("/categories/tree", { token: null, revalidate: 3600 }).catch(() => [] as CategoryNode[]);
+    for (const root of tree) {
+      const child = root.slug === category ? null : root.children.find((c) => c.slug === category);
+      if (root.slug === category || child) {
+        const items = [
+          { "@type": "ListItem", position: 1, name: "Accueil", item: SITE_URL },
+          { "@type": "ListItem", position: 2, name: root.name, item: `${SITE_URL}/recherche?category=${root.slug}` },
+          ...(child ? [{ "@type": "ListItem", position: 3, name: child.name, item: `${SITE_URL}/recherche?category=${child.slug}` }] : []),
+        ];
+        breadcrumb = { "@context": "https://schema.org", "@type": "BreadcrumbList", itemListElement: items };
+        break;
+      }
+    }
+  }
   return (
+    <>
+      {breadcrumb && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumb).replace(/</g, "\\u003c") }} />}
     <Suspense fallback={<div className="container page" style={{ minHeight: "calc(100vh - var(--header-h))" }} aria-busy="true"><div className="skeleton" style={{ height: 44, width: 320, marginBottom: 22 }} /><div className="skeleton" style={{ height: 480 }} /></div>}>
       <SearchPage />
     </Suspense>
+    </>
   );
 }

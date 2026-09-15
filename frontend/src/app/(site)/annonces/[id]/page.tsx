@@ -25,8 +25,10 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const listing = await getListing(id);
   if (!listing) return { title: "Annonce introuvable" };
   const desc = listing.description.slice(0, 155);
+  // Titre de résultat lisible : les titres d'annonce vont jusqu'à 150 caractères, Google en affiche ~60
+  const shortTitle = listing.title.length > 60 ? `${listing.title.slice(0, 57).trimEnd()}…` : listing.title;
   return {
-    title: `${listing.title} — ${formatPrice(listing.price, listing.priceType)}`,
+    title: `${shortTitle} — ${formatPrice(listing.price, listing.priceType)}`,
     description: desc,
     alternates: { canonical: `${SITE_URL}/annonces/${listing.id}` },
     openGraph: { title: listing.title, description: desc, images: listing.photos[0] ? [{ url: mediaUrl(listing.photos[0].url)! }] : [] },

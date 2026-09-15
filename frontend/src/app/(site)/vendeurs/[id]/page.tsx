@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { api, ApiError, mediaUrl } from "@/lib/api";
+import { api, ApiError, mediaUrl, SITE_URL } from "@/lib/api";
 import { formatDate, memberSince } from "@/lib/format";
-import type { PublicProfile, Review, SearchResult } from "@/lib/types";
+import type { ListingCard as ListingCardType, PublicProfile, Review, SearchResult } from "@/lib/types";
 import { ListingCard } from "@/components/ui/ListingCard";
 import { Rating } from "@/components/ui/Rating";
 import { BlockButton } from "@/components/listing/BlockButton";
 import { ShareMenu } from "@/components/ui/ShareMenu";
-import { SITE_URL } from "@/lib/api";
+import { FilterSection } from "@/components/search/FilterSection";
 
 async function getProfile(id: string): Promise<PublicProfile | null> {
   try {
@@ -23,19 +23,21 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const p = await getProfile(id);
   if (!p) return { title: "Vendeur introuvable" };
   const name = p.accountType === "professionnel" && p.shopName ? p.shopName : p.displayName;
-  return { title: `${name} — ${p.activeListingsCount} annonce${p.activeListingsCount > 1 ? "s" : ""}`, description: p.shopDescription || `Annonces de ${name} sur Trocoin.` };
+  return { title: `${name} — ${p.activeListingsCount} annonce${p.activeListingsCount > 1 ? "s" : ""}`, description: p.shopDescription || `Annonces de ${name} sur Trocoin.`, alternates: { canonical: `${SITE_URL}/vendeurs/${p.id}` } };
 }
 
+/** Profil public d'un vendeur ou vitrine d'un professionnel : identité en tête, puis sections repliables (docs/design-system.md §5). */
 export default async function SellerPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const profile = await getProfile(id);
   if (!profile) notFound();
   const [listings, reviews] = await Promise.all([
-    api<SearchResult>(`/listings?seller=${id}&page_size=48`, { token: null, revalidate: 60 }).catch(() => ({ items: [], total: 0, page: 1, pageSize: 48 })),
+    api<SearchResult>(`/listings?seller=${id}&page_size=48`, { token: null, revalidate: 60 }).catch(() => ({ items: [] as ListingCardType[], total: 0 })),
     api<Review[]>(`/users/${id}/reviews`, { token: null, revalidate: 60 }).catch(() => []),
   ]);
   const isPro = profile.accountType === "professionnel";
   const name = isPro && profile.shopName ? profile.shopName : profile.displayName;
+  const hasShopInfo = isPro && !!(profile.shopDescription || profile.shopAddress || profile.shopHours || profile.shopWebsite);
 
   return (
     <div className="container page">
@@ -62,14 +64,6 @@ export default async function SellerPage({ params }: { params: Promise<{ id: str
             {profile.responseRate !== null && ` · Répond à ${profile.responseRate} % des messages`}
             {` · ${profile.activeListingsCount} annonce${profile.activeListingsCount > 1 ? "s" : ""} en ligne`}
           </p>
-          {isPro && profile.shopDescription && <p style={{ marginTop: 14, whiteSpace: "pre-wrap" }}>{profile.shopDescription}</p>}
-          {isPro && (profile.shopAddress || profile.shopHours || profile.shopWebsite) && (
-            <dl className="small" style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "4px 12px", marginTop: 10 }}>
-              {profile.shopAddress && <><dt className="muted">Adresse</dt><dd style={{ margin: 0 }}>{profile.shopAddress}</dd></>}
-              {profile.shopHours && <><dt className="muted">Horaires</dt><dd style={{ margin: 0 }}>{profile.shopHours}</dd></>}
-              {profile.shopWebsite && <><dt className="muted">Site web</dt><dd style={{ margin: 0 }}><a href={profile.shopWebsite} rel="nofollow noopener" target="_blank">{profile.shopWebsite}</a></dd></>}
-            </dl>
-          )}
         </div>
         <div className="row" style={{ alignItems: "flex-start" }}>
           <ShareMenu url={`${SITE_URL}/vendeurs/${profile.id}`} title={`${name} sur Trocoin`} text={isPro ? "Découvrez cette boutique" : "Découvrez ce vendeur"} compact />
@@ -77,34 +71,48 @@ export default async function SellerPage({ params }: { params: Promise<{ id: str
         </div>
       </section>
 
-      <section style={{ marginTop: 36 }}>
-        <h2>Annonces en ligne ({listings.total})</h2>
-        {listings.items.length === 0 ? (
-          <p className="muted">Aucune annonce en ligne pour le moment.</p>
-        ) : (
-          <div className="grid-cards">{listings.items.map((l) => <ListingCard key={l.id} listing={l} />)}</div>
-        )}
-      </section>
+      <div style={{ marginTop: 28 }}>
+        {/* La section la plus utile (les annonces) est ouverte d'emblée ; les autres se déplient à la demande, état mémorisé pour la session */}
+        <FilterSection id="annonces" title={`Annonces en ligne (${listings.total})`} defaultOpen storageKey="trocoin_profile_sections" size="lg">
+          {listings.items.length === 0 ? (
+            <p className="muted" style={{ margin: 0 }}>Aucune annonce en ligne pour le moment.</p>
+          ) : (
+            <div className="grid-cards">{listings.items.map((l) => <ListingCard key={l.id} listing={l} />)}</div>
+          )}
+        </FilterSection>
 
-      <section style={{ marginTop: 36 }}>
-        <h2>Avis reçus ({reviews.length})</h2>
-        {reviews.length === 0 ? (
-          <p className="muted">Pas encore d&apos;avis. Les avis sont laissés après une transaction sécurisée confirmée.</p>
-        ) : (
-          <div className="stack">
-            {reviews.map((r) => (
-              <div key={r.id} className="card">
-                <div className="row spread">
-                  <strong>{r.reviewer?.displayName || "Membre"}</strong>
-                  <span className="small muted">{formatDate(r.createdAt)}</span>
-                </div>
-                <Rating value={r.rating} />
-                {r.comment && <p style={{ margin: "8px 0 0" }}>{r.comment}</p>}
-              </div>
-            ))}
-          </div>
+        {hasShopInfo && (
+          <FilterSection id="boutique" title="Informations de la boutique" storageKey="trocoin_profile_sections" size="lg">
+            {profile.shopDescription && <p style={{ marginTop: 0, whiteSpace: "pre-wrap" }}>{profile.shopDescription}</p>}
+            {(profile.shopAddress || profile.shopHours || profile.shopWebsite) && (
+              <dl className="small" style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "4px 12px", margin: 0 }}>
+                {profile.shopAddress && <><dt className="muted">Adresse</dt><dd style={{ margin: 0 }}>{profile.shopAddress}</dd></>}
+                {profile.shopHours && <><dt className="muted">Horaires</dt><dd style={{ margin: 0 }}>{profile.shopHours}</dd></>}
+                {profile.shopWebsite && <><dt className="muted">Site web</dt><dd style={{ margin: 0 }}><a href={profile.shopWebsite} rel="nofollow noopener" target="_blank">{profile.shopWebsite}</a></dd></>}
+              </dl>
+            )}
+          </FilterSection>
         )}
-      </section>
+
+        <FilterSection id="avis" title={`Avis reçus (${reviews.length})`} storageKey="trocoin_profile_sections" size="lg">
+          {reviews.length === 0 ? (
+            <p className="muted" style={{ margin: 0 }}>Pas encore d&apos;avis. Les avis sont laissés après une transaction sécurisée confirmée.</p>
+          ) : (
+            <div className="stack">
+              {reviews.map((r) => (
+                <div key={r.id} className="card">
+                  <div className="row spread">
+                    <strong>{r.reviewer?.displayName || "Membre"}</strong>
+                    <span className="small muted">{formatDate(r.createdAt)}</span>
+                  </div>
+                  <Rating value={r.rating} />
+                  {r.comment && <p style={{ margin: "8px 0 0" }}>{r.comment}</p>}
+                </div>
+              ))}
+            </div>
+          )}
+        </FilterSection>
+      </div>
     </div>
   );
 }

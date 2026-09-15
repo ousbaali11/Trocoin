@@ -801,6 +801,19 @@ h2 {
 .filter-section {
   border-top: 1px solid var(--line-soft);
 }
+/* Sections de page repliables (profils) : en-tête de la taille d'un titre de section */
+.filter-section-lg {
+  border-top: 1px solid var(--line);
+}
+.filter-section-lg .filter-section-head {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 700;
+  padding: 16px 0;
+}
+.filter-section-lg .filter-section-body {
+  padding: 4px 0 24px;
+}
 .filter-section-head {
   width: 100%;
   display: flex;
