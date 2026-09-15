@@ -110,10 +110,6 @@ export function LoginForm() {
           {busy ? "Connexion…" : "Me connecter"}
         </button>
       </form>
-      <hr className="divider" />
-      <p className="small muted" style={{ margin: 0 }}>
-        Compte créé par SMS avant l&apos;inscription par formulaire ? <Link href={`/connexion/sms?next=${encodeURIComponent(next)}`}>Connexion par code SMS</Link>.
-      </p>
     </div>
   );
 }

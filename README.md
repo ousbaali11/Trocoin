@@ -27,8 +27,9 @@ npm run dev
 cd frontend && npm install && cp .env.example .env.local && npm run dev -- -p 3001
 ```
 
-- Site public : http://localhost:3001 — inscription par formulaire (aucun SMS) ; pour l'ancien
-  parcours par code SMS, le code s'affiche dans la page (`SMS_PROVIDER=mock` hors production).
+- Site public : http://localhost:3001 — inscription par formulaire (aucun SMS). L'ancien parcours
+  de connexion par code SMS n'a plus d'écran : `/connexion/sms` renvoie vers `/connexion`
+  (les routes OTP de l'API restent, utilisées par les tests).
 - Données de démonstration : `node test/seed-demo.js` (3 comptes, 12 annonces avec photos,
   1 annonce bloquée par la pré-modération, 1 signalement, 1 conversation).
 - Premier administrateur : `npm run create-admin -- 0611223344 "Admin"` (crée ou promeut le

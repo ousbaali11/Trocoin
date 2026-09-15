@@ -1,16 +1,12 @@
-import { Suspense } from "react";
-import type { Metadata } from "next";
-import { OtpLoginForm } from "@/components/auth/OtpLoginForm";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Connexion par code SMS", description: "Connexion par code SMS pour les comptes créés avant l'inscription par formulaire.", robots: { index: false } };
-
-/** Ancien parcours OTP, conservé pour les comptes créés par SMS avant la phase 5. */
-export default function Page() {
-  return (
-    <div className="container page" style={{ maxWidth: 520 }}>
-      <Suspense>
-        <OtpLoginForm />
-      </Suspense>
-    </div>
-  );
+/**
+ * Ancien parcours de connexion par code SMS (comptes créés avant l'inscription par formulaire).
+ * La vérification par SMS est désactivée pendant la bêta : l'adresse est conservée pour ne pas
+ * casser un ancien lien, mais elle renvoie à la connexion classique (le paramètre `next` est gardé).
+ */
+export default async function Page({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const sp = await searchParams;
+  const next = typeof sp.next === "string" && sp.next.startsWith("/") ? sp.next : "";
+  redirect(next ? `/connexion?next=${encodeURIComponent(next)}` : "/connexion");
 }
