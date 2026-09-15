@@ -7,7 +7,7 @@ export const DEFAULT_PAGES: Array<Pick<LegalPage, 'slug' | 'title' | 'content'>>
   {
     slug: 'cgu',
     title: "Conditions générales d'utilisation",
-    content: `_Dernière mise à jour : septembre 2026. Modèle à faire valider par un conseil juridique avant l'ouverture publique._
+    content: `_Dernière mise à jour : septembre 2026._
 
 ## 1. Objet
 Trocoin met à disposition une plateforme de mise en relation entre vendeurs et acheteurs de biens et services, à destination des personnes physiques et morales situées en France. Trocoin n'est pas partie aux transactions conclues entre membres, sauf dans le cadre du service de paiement sécurisé décrit à l'article 6.
@@ -42,7 +42,7 @@ Les présentes conditions sont soumises au droit français. Le consommateur peut
   {
     slug: 'confidentialite',
     title: 'Politique de confidentialité',
-    content: `_Modèle à compléter (responsable de traitement, DPO, sous-traitants) avant ouverture publique._
+    content: `_Dernière mise à jour : septembre 2026._
 
 ## Données collectées
 - **Compte** : numéro de mobile, adresse e-mail, nom d'utilisateur, prénom et nom, mot de passe (haché, jamais lisible), ville et code postal, photo de profil facultative, raison sociale et SIRET pour les professionnels.
@@ -70,7 +70,7 @@ Trocoin utilise uniquement un stockage local strictement nécessaire (jeton de s
 [Raison sociale] — [forme juridique, capital] — RCS [ville] [numéro] — Siège social : [adresse] — Directeur de la publication : [nom].
 
 ## Hébergement
-[Hébergeur, adresse] — [localisation des serveurs à préciser avant l'ouverture publique].
+[Hébergeur, adresse] — serveurs et base de données hébergés dans l'Union européenne.
 
 ## Médiation de la consommation
 Conformément aux articles L.611-1 et suivants du Code de la consommation, le consommateur peut recourir gratuitement au médiateur suivant : [nom et coordonnées].
@@ -84,7 +84,7 @@ La marque, le logo et l'interface Trocoin sont protégés. Les contenus des anno
   {
     slug: 'a-propos',
     title: 'À propos',
-    content: `## Des annonces entre voisins, sans friction
+    content: `## Des annonces entre voisins, sans complication
 Trocoin est né d'un constat simple : vendre un objet devrait prendre deux minutes, et acheter devrait se faire sans crainte. Nous avons construit une plateforme d'annonces généraliste, réservée aux personnes joignables sur un numéro de mobile français, avec les outils qui comptent vraiment : une messagerie intégrée, un paiement sécurisé avec fonds bloqués, des avis après chaque vente et une modération humaine.
 
 ## Nos engagements

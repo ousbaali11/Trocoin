@@ -47,10 +47,10 @@ Aucun SMS n'est envoyé à l'inscription : le numéro est enregistré sans véri
         title: "Se connecter",
         summary: "Par e-mail ou nom d'utilisateur, et que faire si le compte date d'avant le formulaire.",
         keywords: ["connexion", "identifiant", "sms"],
-        body: `Sur la page **Se connecter**, saisissez votre e-mail *ou* votre nom d'utilisateur, puis votre mot de passe. L'icône « œil » affiche le mot de passe pour éviter les fautes de frappe.
+        body: `Sur la page **Se connecter**, saisissez votre e-mail, votre nom d'utilisateur *ou* le numéro de mobile de votre compte, puis votre mot de passe. L'icône « œil » affiche le mot de passe pour éviter les fautes de frappe.
 
 ## Compte créé par SMS, sans mot de passe
-Les premiers comptes ont été ouverts uniquement par code SMS. Deux solutions : la page **Connexion par code SMS** (lien en bas du formulaire), ou **Mot de passe oublié** pour définir un mot de passe si une adresse e-mail est rattachée au compte.
+Les premiers comptes ont été ouverts uniquement par code SMS. Deux possibilités : la page **Connexion par code SMS** (lien en bas du formulaire), ou **Mot de passe oublié** pour définir un mot de passe si une adresse e-mail est rattachée au compte.
 
 ## Sessions
 Chaque connexion crée une session d'un mois, renouvelée automatiquement. Depuis **Paramètres**, changer de mot de passe déconnecte toutes vos sessions.`,
@@ -58,13 +58,13 @@ Chaque connexion crée une session d'un mois, renouvelée automatiquement. Depui
       {
         slug: "mot-de-passe-oublie",
         title: "Mot de passe oublié",
-        summary: "Réinitialiser son mot de passe, et la solution de secours pendant la bêta.",
+        summary: "Recevoir un lien par e-mail pour choisir un nouveau mot de passe.",
         popular: true,
         keywords: ["réinitialiser", "oubli", "e-mail"],
         body: `Cliquez sur **Mot de passe oublié ?** sous le formulaire de connexion et indiquez votre e-mail : un lien de réinitialisation, valable une heure et utilisable une seule fois, vous est envoyé.
 
-## Pendant la phase de test
-L'envoi d'e-mails n'est pas encore activé : la page l'indique clairement. Contactez un administrateur, qui peut générer un **mot de passe temporaire** depuis le back-office ; vous le changerez ensuite dans **Paramètres**.`,
+## Vous ne recevez rien ?
+Vérifiez le dossier des courriers indésirables et l'adresse rattachée à votre compte. En dernier recours, contactez-nous depuis le centre d'aide : l'équipe peut vous remettre un **mot de passe temporaire**, à changer ensuite dans **Paramètres**.`,
       },
       {
         slug: "changer-mes-informations",
@@ -270,7 +270,7 @@ Notre équipe examine chaque signalement : elle peut corriger ou retirer l'annon
         title: "Ce que Trocoin vérifie sur un compte",
         summary: "Badges affichés et ce qu'ils garantissent.",
         keywords: ["badge", "vérifié", "identité", "pro"],
-        body: `- **Pro** : compte professionnel dont le SIRET a été fourni ; le badge « vérifié au registre » dans le back-office indique que l'établissement existe et est actif au registre public des entreprises.
+        body: `- **Pro** : compte professionnel dont le SIRET a été fourni ; l'équipe contrôle que l'établissement existe et est actif au registre public des entreprises.
 - **Identité vérifiée** : attribué manuellement par l'équipe après contrôle.
 - Le numéro de mobile est obligatoire et unique, mais **non vérifié par SMS pendant la phase de test** : aucun badge « téléphone vérifié » n'est affiché.`,
       },

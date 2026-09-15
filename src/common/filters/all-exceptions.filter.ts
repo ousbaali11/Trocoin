@@ -29,6 +29,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
       if (status >= 500) {
         this.logger.error(`${req.method} ${req.url} -> ${status}`, (exception as Error).stack);
       }
+      // Limite de débit : message en français pour l'utilisateur (jamais le libellé technique du garde)
+      if (status === 429) {
+        return res.status(429).json({ statusCode: 429, message: 'Trop de tentatives en peu de temps. Patientez une minute puis réessayez.' });
+      }
       return res
         .status(status)
         .json(typeof body === 'string' ? { statusCode: status, message: body } : body);
