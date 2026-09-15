@@ -1617,3 +1617,10 @@ du registre simulé, axe sans violation avec sections ouvertes et repliées) ; s
 (22 réussis en local) ; captures avant / après des profils particulier et professionnel, bureau et
 375 px ; sitemap local 107 URL avec `lastmod` sur les annonces, `BreadcrumbList` servi sur
 `/recherche?category=velos`.
+- **Déploiement** : CI run 35033327433 verte (129 tests API SQLite et PostgreSQL, 97 scénarios
+  navigateur dont 87 réussis et 10 passés volontairement, image Docker, Render). Production :
+  `robots.txt` avec les trois nouvelles exclusions, sitemap 102 URL avec `/accessibilite` (aucune
+  annonce en ligne en production à cet instant), `BreadcrumbList` servi sur
+  `/recherche?category=velos`, annonce inconnue → 404. Un premier passage CI avait échoué sur le
+  scénario 16 : joué après le scénario 05, le vendeur a déjà un avis ; l'assertion porte
+  maintenant sur la visibilité du contenu replié, pas sur le texte « Pas encore d'avis ».
