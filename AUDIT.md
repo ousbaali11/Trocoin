@@ -1460,3 +1460,57 @@ cause ; elle est inchangée.
   votre adresse e-mail », seul lien : `https://www.trocoin.fr/confirmer-email?token=…` (page → 200),
   aucune occurrence de `vercel.app` ni `onrender.com` ; capture de l'e-mail tel que reçu. Les deux
   comptes ont été supprimés (204). `www.trocoin.fr/connexion` ne contient plus la phrase d'exemple.
+
+## 25. Favicon du site ; « Envoyé par : rsend.trocoin.fr » dans Gmail — 15 septembre 2026 (nuit)
+
+### 25.1 Favicon
+
+`frontend/src/app/favicon.ico` était l'icône par défaut de Next.js. `scripts/make-icons.js` produit
+à partir du logo de l'en-tête (carré vert `#0f7b5f` arrondi, « T » blanc, `Logo.tsx`) :
+`icon.svg` (vectoriel, navigateurs récents), `favicon.ico` (16, 32 et 48 px en PNG dans le
+conteneur ICO, sans dépendance nouvelle : `sharp` était déjà là) et `apple-icon.png` (180 px, iOS).
+Next.js ajoute lui-même les trois balises `<link rel="icon">` / `apple-touch-icon`.
+
+Preuves : `www.trocoin.fr` sert les trois balises (`favicon.ico` 48×48 `image/x-icon`, `icon.svg`
+`image/svg+xml`, `apple-icon.png` 180×180) et les trois fichiers (200 ; le `.ico` téléchargé de
+production contient bien les trois images PNG 16/32/48). Rendu vérifié à 16, 32, 48, 64 et 180 px.
+Limite : aucun outil ne permettait de photographier la barre d'onglets d'un navigateur (Chrome non
+connecté ; la fenêtre de prévisualisation n'a pas d'onglets) : la preuve est le rendu des fichiers
+tels que servis, pas une capture d'onglet.
+
+### 25.2 « Envoyé par : rsend.trocoin.fr » (Gmail)
+
+Constat sur un e-mail réel reçu de Trocoin (en-têtes bruts récupérés via une boîte de test lisible
+par API, compte supprimé ensuite) :
+
+```
+From:        Trocoin <no-reply@trocoin.fr>
+Return-Path: <0102…-000000@rsend.trocoin.fr>
+DKIM:        d=trocoin.fr ; s=resend
+```
+
+DNS public de `trocoin.fr` (résolveur 1.1.1.1) : `resend._domainkey.trocoin.fr` TXT (clé DKIM,
+domaine racine) ; `send.trocoin.fr` CNAME → `send.forge.rmta.net` et `rsend.trocoin.fr` CNAME →
+`rsend-euw1.forge.rmta.net` (chacun portant, par la cible, un MX de retour et un SPF) ; racine :
+MX OVH et `v=spf1 include:mx.ovh.com -all` ; `_dmarc.trocoin.fr` : `p=none`.
+
+Ce que cela signifie :
+- Gmail affiche « Envoyé par » avec le domaine de l'**enveloppe** (Return-Path, vérifié par SPF) et
+  « Signé par » avec le domaine DKIM (`d=`). Ces deux lignes apparaissent dès qu'un message est
+  authentifié ; elles ne disparaissent pas quand tout est aligné (Gmail les montre aussi pour
+  `trocoin.fr` = `trocoin.fr`). Le « via » à côté du nom, lui, n'apparaît pas : le From et le DKIM
+  sont déjà sur `trocoin.fr`.
+- Le DKIM est **déjà aligné** (`d=trocoin.fr`) : une action sur le DKIM ne changerait rien.
+- `rsend` n'est pas un nom choisi : c'est l'installation « CNAME » de Resend, qui crée le
+  sous-domaine de retour (`send`, valeur par défaut) et un jumeau préfixé `r` ; le Return-Path est
+  émis sur le jumeau, d'où `rsend.trocoin.fr` dans Gmail.
+- Le sous-domaine de retour est personnalisable chez Resend (« custom return path », à l'ajout du
+  domaine dans les options avancées, ou par l'API), avec la même construction : `mail` donnerait
+  `mail` + `rmail`, et Gmail afficherait vraisemblablement `rmail.trocoin.fr`. Il doit rester un
+  sous-domaine (règles : lettres, chiffres, tirets) ; le domaine racine est de toute façon pris par
+  la messagerie OVH (MX et SPF `-all`). « Envoyé par : trocoin.fr » n'est donc pas atteignable avec
+  Resend, et la ligne elle-même ne peut pas être retirée.
+
+Conclusion transmise à l'utilisateur : rien à corriger côté code ; seule option, refaire le domaine
+chez Resend avec un sous-domaine de retour choisi (action sur Resend et sur les DNS), pour changer
+le libellé sans le faire disparaître ; à vérifier ensuite sur un envoi réel, comme ici.
