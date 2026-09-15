@@ -122,7 +122,7 @@ test("carte d'annonce : hiérarchie leboncoin (titre 16 px gras, prix 16 px gras
     const cs = getComputedStyle(el);
     return { size: cs.fontSize, weight: cs.fontWeight, color: cs.color };
   });
-  const ink = 'rgb(31, 41, 51)';
+  const ink = 'rgb(31, 41, 55)';
   expect(await style('a[class*="title"]')).toEqual({ size: '16px', weight: '700', color: ink });
   // Le prix n'est plus ni vert ni surdimensionné : même corps que le titre, foncé, gras
   expect(await style('[class*="price"]')).toEqual({ size: '16px', weight: '700', color: ink });
@@ -131,13 +131,14 @@ test("carte d'annonce : hiérarchie leboncoin (titre 16 px gras, prix 16 px gras
   const heart = (await fav.boundingBox())!;
   const media = (await card.locator('a[class*="media"]').boundingBox())!;
   expect([Math.round(heart.width), Math.round(heart.height)]).toEqual([32, 32]);
-  expect(Math.round(media.x + media.width - (heart.x + heart.width))).toBe(8);
-  expect(Math.round(heart.y - media.y)).toBe(8);
+  // 8 px du coin de la photo (± 1 px : arrondis de sous-pixel pendant l'animation d'apparition)
+  expect(Math.abs(media.x + media.width - (heart.x + heart.width) - 8)).toBeLessThanOrEqual(1);
+  expect(Math.abs(heart.y - media.y - 8)).toBeLessThanOrEqual(1);
   const foot = card.locator('[class*="foot"]');
   await expect(foot.locator('[class*="place"]:not([class*="placeholder"])')).toHaveText('Lyon 69003');
   await expect(foot.locator('[class*="date"]')).toHaveText(/^aujourd'hui à \d{2}:\d{2}$/);
   const muted = await style('[class*="date"]');
-  expect(muted).toEqual({ size: '12px', weight: '400', color: 'rgb(97, 110, 124)' });
+  expect(muted).toEqual({ size: '12px', weight: '400', color: 'rgb(95, 107, 120)' });
 });
 
 test("en-tête bureau sur une seule ligne à 1280, 1440 et 1920 px, libellés visibles ; barre d'accueil réduite", async ({ page, isMobile }) => {

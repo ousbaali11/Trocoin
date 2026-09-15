@@ -74,7 +74,7 @@ export function FavoriteButton({ listingId, compact = false }: { listingId: stri
       aria-pressed={active}
       aria-label={active ? "Retirer des favoris" : "Ajouter aux favoris"}
       title={active ? "Retirer des favoris" : "Ajouter aux favoris"}
-      className={compact ? undefined : "btn btn-outline"}
+      className={compact ? "fav-btn" : "btn btn-outline fav-btn"}
       style={
         compact
           ? {

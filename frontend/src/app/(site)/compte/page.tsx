@@ -57,12 +57,18 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
-        <Stat label="Annonces en ligne" value={stats?.byStatus.en_ligne ?? 0} href="/compte/annonces" />
-        <Stat label="Vues cumulées" value={stats?.views ?? 0} />
-        <Stat label="Mises en favori" value={stats?.favorites ?? 0} />
-        <Stat label="Conversations" value={convCount} href="/compte/messages" />
-      </div>
+      {stats ? (
+        <div className="appear" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
+          <Stat label="Annonces en ligne" value={stats.byStatus.en_ligne ?? 0} href="/compte/annonces" />
+          <Stat label="Vues cumulées" value={stats.views ?? 0} />
+          <Stat label="Mises en favori" value={stats.favorites ?? 0} />
+          <Stat label="Conversations" value={convCount} href="/compte/messages" />
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }} aria-hidden="true">
+          {[0, 1, 2, 3].map((i) => <div key={i} className="skeleton" style={{ height: 96 }} />)}
+        </div>
+      )}
 
       <section className="panel">
         <div className="row spread" style={{ marginBottom: 12 }}>

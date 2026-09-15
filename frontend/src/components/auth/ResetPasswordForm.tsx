@@ -39,7 +39,7 @@ export function ResetPasswordForm() {
       <div className="panel">
         <p className="eyebrow">Réinitialisation</p>
         <h1 style={{ fontSize: "1.8rem" }}>Lien incomplet</h1>
-        <p className="muted">Ce lien ne contient pas de jeton. <Link href="/mot-de-passe-oublie">Refaire une demande</Link>.</p>
+        <p className="muted">Ce lien est incomplet.<Link href="/mot-de-passe-oublie">Refaire une demande</Link>.</p>
       </div>
     );
   }

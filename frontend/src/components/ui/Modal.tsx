@@ -47,6 +47,7 @@ export function Modal({ open, onClose, title, children, width = 520 }: { open: b
     <div
       role="presentation"
       onClick={onClose}
+      className="modal-overlay"
       style={{ position: "fixed", inset: 0, background: "rgba(30,27,22,0.55)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
     >
       <div
@@ -55,7 +56,7 @@ export function Modal({ open, onClose, title, children, width = 520 }: { open: b
         aria-modal="true"
         aria-labelledby={titleId}
         onClick={(e) => e.stopPropagation()}
-        className="panel"
+        className="panel modal-panel"
         style={{ width: "100%", maxWidth: width, maxHeight: "90vh", overflow: "auto", boxShadow: "var(--shadow-lg)" }}
       >
         <div className="row spread" style={{ marginBottom: 16 }}>

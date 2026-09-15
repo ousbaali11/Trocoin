@@ -57,6 +57,11 @@ export default function FormulePage() {
           {ent?.plan ? <>Votre formule actuelle : <strong>{ent.plan.name}</strong>{ent.subscription?.endsAt && ` (jusqu'au ${formatDate(ent.subscription.endsAt)})`}.</> : <>Aucune formule : {ent?.listingsLimit} annonces gratuites par 30 jours, mise en avant à l&apos;unité.</>}
         </div>
       )}
+      {plans.length === 0 && !ent && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }} aria-hidden="true">
+          {[0, 1, 2].map((i) => <div key={i} className="skeleton" style={{ height: 220 }} />)}
+        </div>
+      )}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
         {plans.map((p) => {
           const current = ent?.plan?.id === p.id;
