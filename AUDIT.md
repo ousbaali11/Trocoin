@@ -1415,3 +1415,48 @@ domaine ; l'historique de cet audit garde les anciennes adresses telles qu'elles
   Décoration en premier.
 - Captures : inscription avec le bandeau de confirmation, paramètres (adresse non confirmée),
   fiche publiée avec « Votre annonce est en ligne ! », messagerie côté acheteur et côté vendeur.
+
+## 24. E-mail de confirmation encore sur l'ancien domaine ; phrase d'exemple retirée — 15 septembre 2026 (nuit)
+
+**Symptôme** (test réel de l'utilisateur, après la bascule du §23) : le lien de l'e-mail de
+confirmation d'inscription pointait encore vers `https://trocoin.vercel.app/confirmer-email?token=…`,
+alors que `/health` annonçait déjà `siteUrl https://www.trocoin.fr`.
+
+**Cause, vérifiée dans le code** : le service d'e-mail n'utilisait pas `resolveSiteUrl()`. Il gardait
+sa propre copie de la règle, écrite avant la bascule, qui lisait `SITE_URL` telle quelle :
+
+```ts
+// src/email/email.service.ts (avant)
+siteUrl(): string {
+  const explicit = this.config.get<string>('SITE_URL');
+  if (explicit) return explicit.replace(/\/$/, '');
+  const cors = (this.config.get<string>('CORS_ORIGINS') || '').split(',')…;
+  return (cors[0] || 'http://localhost:3001')…;
+}
+```
+
+Les trois liens envoyés par e-mail (confirmation d'inscription, réinitialisation de mot de passe,
+changement d'adresse) passent par cette méthode. Sur Render, `SITE_URL` vaut encore
+`https://trocoin.vercel.app` : le repli vers le domaine canonique existait bien dans
+`resolveSiteUrl()` (§23) mais n'était jamais appelé ici. Ce n'était donc pas un e-mail mis en file
+avant le déploiement (les envois sont immédiats, pas de file) : le défaut était persistant.
+
+**Correctif** : `EmailService.siteUrl()` délègue à `resolveSiteUrl()` ; un test de `phase19` instancie
+le service avec `SITE_URL=https://trocoin.vercel.app` en production et vérifie que le lien part de
+`https://www.trocoin.fr`, identique à `/health`. La détection des anciens hébergeurs n'était pas en
+cause ; elle est inchangée.
+
+**Page de connexion** : la phrase « Le numéro de mobile de votre compte fonctionne aussi
+(06 12 34 56 78). » sous le champ identifiant est supprimée, sans remplacement.
+
+**Preuves d'exécution (15 septembre 2026, nuit)**
+- `npm test` : `phase19` +1 (5 tests), `phase6` inchangé ; CI verte (run 35022685715 après un
+  nouveau passage du job navigateur : le scénario 09 avait échoué une première fois sur le toast
+  « Compte suspendu. », puis sa reprise butait sur un signalement déjà déposé ; `beforeAll` du
+  scénario rendu rejouable).
+- Test réel après déploiement : inscription sur `api.trocoin.fr` d'un compte avec une boîte
+  jetable lisible par API (`trocoin-test-967115@uberip.com`) et d'un compte avec une adresse
+  Gmail « + » de l'utilisateur. E-mail reçu de `no-reply@trocoin.fr`, objet « Trocoin — confirmez
+  votre adresse e-mail », seul lien : `https://www.trocoin.fr/confirmer-email?token=…` (page → 200),
+  aucune occurrence de `vercel.app` ni `onrender.com` ; capture de l'e-mail tel que reçu. Les deux
+  comptes ont été supprimés (204). `www.trocoin.fr/connexion` ne contient plus la phrase d'exemple.

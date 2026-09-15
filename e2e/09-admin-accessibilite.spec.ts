@@ -21,7 +21,10 @@ test.beforeAll(async () => {
   // Signalement ouvert sur le VTT et litige sur la poussette, déposés par l'acheteur du seed
   const login = await api<{ accessToken: string }>('/auth/login', { method: 'POST', body: { identifier: seed.buyer.email, password: seed.buyer.password } });
   const token = login.accessToken;
-  await api('/reports', { method: 'POST', body: { listingId: seed.listings.vtt.id, reason: 'doublon', details: 'Annonce publiée deux fois.' }, token });
+  // Rejouable : sur une nouvelle tentative du fichier, le signalement existe déjà (400 « déjà signalé »)
+  await api('/reports', { method: 'POST', body: { listingId: seed.listings.vtt.id, reason: 'doublon', details: 'Annonce publiée deux fois.' }, token }).catch((e) => {
+    if (!/déjà signalé/.test(String(e))) throw e;
+  });
   const tx = await api<{ transaction: { id: string } }>('/transactions', { method: 'POST', body: { listingId: seed.listings.poussette.id, deliveryMethod: 'main_propre' }, token });
   await api(`/transactions/${tx.transaction.id}/dispute`, { method: 'POST', body: { reason: 'Poussette reçue avec une roue cassée.' }, token });
 });
