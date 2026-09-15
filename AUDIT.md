@@ -1514,3 +1514,19 @@ Ce que cela signifie :
 Conclusion transmise à l'utilisateur : rien à corriger côté code ; seule option, refaire le domaine
 chez Resend avec un sous-domaine de retour choisi (action sur Resend et sur les DNS), pour changer
 le libellé sans le faire disparaître ; à vérifier ensuite sur un envoi réel, comme ici.
+
+## 26. Connexion sans mention du code SMS — 16 septembre 2026
+
+La page de connexion affichait « Compte créé par SMS avant l'inscription par formulaire ? » et un
+lien « Connexion par code SMS » vers `/connexion/sms`. La vérification par SMS étant désactivée
+pendant la bêta (inscription par e-mail et mot de passe), ce parcours n'avait plus de sens :
+- phrase et lien retirés de `LoginForm.tsx` ;
+- `/connexion/sms` conservée comme adresse (anciens liens) mais redirige en 307 vers `/connexion`
+  en gardant `next` ; le formulaire OTP du front (`OtpLoginForm.tsx`) est supprimé, il n'est plus
+  accessible par URL directe ;
+- les routes OTP de l'API (`/auth/register/phone`, `/auth/otp/verify`) restent : les tests s'en
+  servent pour créer des comptes, et elles seraient le point de départ d'une réactivation du SMS.
+
+Preuves : scénarios 03, 07 et 08 verts en local (21 réussis), CI run 35028403061 verte ;
+`www.trocoin.fr/connexion/sms?next=/deposer` → 307 vers `/connexion?next=/deposer` ;
+`www.trocoin.fr/connexion` sans le mot « SMS » ni lien vers `/connexion/sms` (capture).
