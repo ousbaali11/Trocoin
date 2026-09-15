@@ -1170,3 +1170,10 @@ Dix points relevés par vos captures d'écran leboncoin (statut point par point 
   barre « Tout effacer / Rechercher (N) », barre des familles ouverte sur Services (deux colonnes),
   messagerie en mode sélection avec « Supprimer (2) » et la boîte de confirmation, bas de page
   Vélos (suggestions, villes, chemin), pied de page en quatre colonnes sous la page Accessibilité.
+- **Déploiement** : CI verte (run 34977192106 : typecheck, 117 tests SQLite et PostgreSQL 16 avec
+  la migration `ConversationsMasquees`, image Docker, 73 scénarios navigateur, déploiement
+  Render). Production : `/health` → `version 1.12.0` ; `GET /listings/facets?category=vehicules`
+  → compteurs ; `GET /listings/discover?category=velos` → fil d'Ariane Loisirs › Vélos, 22
+  suggestions, 24 villes ; `GET /listings?sort=oldest&city=Lyon&delivery_anywhere=true` → 200 ;
+  `POST /conversations/bulk-delete` sans session → 401 ; `trocoin.vercel.app/accessibilite` et
+  `/recherche?category=velos` → 200, barre des familles présente dans les fichiers servis par Vercel.
