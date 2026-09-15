@@ -10,8 +10,9 @@ Documents : `cahier-des-charges.md`, `architecture-technique.md`,
 complétude, ce qui n'a pas pu être testé, recommandations avant lancement),
 `DEPLOIEMENT.md` (mise en ligne pas à pas : Neon + Render + Vercel, sauvegardes, SMS).
 
-**Production** : API `https://trocoin.onrender.com` (Render, Docker, PostgreSQL Neon) et front
-`https://trocoin.vercel.app` (Vercel). Déploiement automatique à chaque push sur `main` après une
+**Production** : API `https://api.trocoin.fr` (Render, Docker, PostgreSQL Neon ; ancienne adresse
+`trocoin.onrender.com` conservée en alias) et front `https://www.trocoin.fr` (Vercel ; `trocoin.fr` et
+`trocoin.vercel.app` y redirigent). Déploiement automatique à chaque push sur `main` après une
 CI verte (tests API, tests navigateur, image Docker) ; procédure et variables : `DEPLOIEMENT.md`.
 
 ## Démarrage rapide (développement)
@@ -39,7 +40,7 @@ cd frontend && npm install && cp .env.example .env.local && npm run dev -- -p 30
 npm test                 # 124 tests e2e (API, supertest)
 npm run e2e:build        # construit l'API (dist/) et le front (next build) pour les tests navigateur
 npm run e2e              # 93 scénarios Playwright dans Chromium (desktop 1280 px + mobile 375 px) : parcours, accessibilité (axe) site + back-office, clavier, SEO
-node scripts/charge.js --api https://trocoin.onrender.com --front https://trocoin.vercel.app --vus 10 --minutes 3   # test de charge léger (lectures publiques)
+node scripts/charge.js --api https://api.trocoin.fr --front https://www.trocoin.fr --vus 10 --minutes 3   # test de charge léger (lectures publiques)
 SOURCE_DATABASE_URL=… TARGET_DATABASE_URL=… node scripts/migrer-base.js   # copie intégrale d'une base Postgres vers une autre, preuve par comptages + empreintes (DEPLOIEMENT.md §6b) (Jest + supertest, SQLite en mémoire)
 # Les mêmes tests sur PostgreSQL (schéma créé par les migrations) :
 E2E_DB=postgres DB_TYPE=postgres DATABASE_URL=postgresql://... DB_SYNCHRONIZE=false npm test

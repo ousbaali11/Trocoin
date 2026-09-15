@@ -100,20 +100,38 @@ export function resolveJwtSecret(env: Record<string, unknown> = process.env): st
   return DEFAULT_DEV_JWT_SECRET;
 }
 
-/** Liste blanche CORS. En dev, par défaut : le front Next.js local et la page de test. */
+/** Domaine public du site depuis le 15 septembre 2026 (www est la version canonique, trocoin.fr y redirige). */
+export const CANONICAL_SITE_URL = 'https://www.trocoin.fr';
+/** Origines toujours autorisées en production, en plus de CORS_ORIGINS (qui peut garder l'ancienne adresse Vercel en secours). */
+export const PRODUCTION_ORIGINS = ['https://www.trocoin.fr', 'https://trocoin.fr'];
+/** Anciens hébergeurs : jamais l'adresse publique du site (liens des e-mails et canoniques doivent pointer vers trocoin.fr). */
+const LEGACY_HOSTS = /\.(vercel\.app|onrender\.com)$/i;
+
+/** Liste blanche CORS. En production : trocoin.fr et www.trocoin.fr toujours inclus, plus CORS_ORIGINS. En dev, par défaut : le front Next.js local et la page de test. */
 export function resolveCorsOrigins(env: Record<string, unknown> = process.env): string[] {
   const raw = (env.CORS_ORIGINS as string | undefined) || '';
-  const list = raw.split(',').map((s) => s.trim()).filter(Boolean);
+  const list = raw.split(',').map((s) => s.trim().replace(/\/$/, '')).filter(Boolean);
+  if (isProduction(env)) return [...new Set([...PRODUCTION_ORIGINS, ...list])];
   if (list.length > 0) return list;
-  if (isProduction(env)) return [];
   const port = env.PORT || 3000;
   return [`http://localhost:${port}`, 'http://localhost:3001', 'http://127.0.0.1:3001'];
 }
 
 /** URL publique du site (liens des e-mails, retours de paiement) : SITE_URL, sinon la première origine CORS qui n'est pas l'API elle-même, sinon le front local. */
 export function resolveSiteUrl(env: Record<string, unknown> = process.env): string {
-  const explicit = (env.SITE_URL as string | undefined)?.trim();
-  if (explicit) return explicit.replace(/\/$/, '');
+  const explicit = (env.SITE_URL as string | undefined)?.trim().replace(/\/$/, '');
+  if (isProduction(env)) {
+    // Une SITE_URL absente ou encore sur un ancien hébergeur (vercel.app, onrender.com) → domaine canonique
+    if (!explicit) return CANONICAL_SITE_URL;
+    let host = '';
+    try {
+      host = new URL(explicit).hostname;
+    } catch {
+      return CANONICAL_SITE_URL;
+    }
+    return LEGACY_HOSTS.test(host) ? CANONICAL_SITE_URL : explicit;
+  }
+  if (explicit) return explicit;
   const cors = resolveCorsOrigins(env).filter((o) => !/localhost:3000$/.test(o));
   return (cors[0] || 'http://localhost:3001').replace(/\/$/, '');
 }

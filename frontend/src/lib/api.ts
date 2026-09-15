@@ -6,7 +6,16 @@
  * - côté serveur (rendu SSR des pages publiques) : appels anonymes.
  */
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3001";
+/**
+ * Domaine canonique depuis le 15 septembre 2026. En production, une NEXT_PUBLIC_SITE_URL absente ou encore
+ * sur l'ancien hébergeur (vercel.app) est ignorée : robots, sitemap, canoniques et Open Graph pointent vers trocoin.fr.
+ */
+const CANONICAL_SITE_URL = "https://www.trocoin.fr";
+const configuredSite = (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "");
+export const SITE_URL =
+  process.env.NODE_ENV === "production" && (!configuredSite || /\.(vercel\.app|onrender\.com)$/i.test(configuredSite))
+    ? CANONICAL_SITE_URL
+    : configuredSite || "http://localhost:3001";
 const TOKEN_KEY = "trocoin_token";
 const REFRESH_KEY = "trocoin_refresh";
 

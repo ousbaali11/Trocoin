@@ -168,7 +168,7 @@ jobs:
     timeout-minutes: 20
     env:
       RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
-      HEALTH_URL: ${{ vars.RENDER_HEALTH_URL || 'https://trocoin.onrender.com/health' }}
+      HEALTH_URL: ${{ vars.RENDER_HEALTH_URL || 'https://api.trocoin.fr/health' }}
     steps:
       - uses: actions/checkout@v4
       - name: Secret présent ?

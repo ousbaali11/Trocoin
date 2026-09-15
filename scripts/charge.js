@@ -6,7 +6,7 @@
  * réflexion aléatoire entre les pages, contre l'API et (optionnel) les pages du front.
  *
  * Usage :
- *   node scripts/charge.js --api https://trocoin.onrender.com --front https://trocoin.vercel.app --vus 10 --minutes 3
+ *   node scripts/charge.js --api https://api.trocoin.fr --front https://www.trocoin.fr --vus 10 --minutes 3
  *
  * Sortie : nombre de requêtes, erreurs (statut ≥ 400 ou réseau), latences p50 / p95 / p99 / max par
  * point d'entrée, et l'état /health avant et après (uptime : un redémarrage serait visible).

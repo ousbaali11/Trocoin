@@ -3,7 +3,7 @@
  * Contrôle de parité Trocoin / leboncoin, ligne par ligne du comparatif (docs/comparatif-leboncoin.md).
  *
  * Deux sources de preuves :
- *  - PUBLIC   : la production (https://trocoin.onrender.com + https://trocoin.vercel.app), sans connexion ;
+ *  - PUBLIC   : la production (https://api.trocoin.fr + https://www.trocoin.fr), sans connexion ;
  *  - CONNECTÉ : la pile locale construite à partir du même commit (API 3010 + front 3011, seed e2e),
  *               parce qu'aucun compte de test ne doit écrire dans la base de production.
  *
@@ -18,8 +18,8 @@ const arg = (name, def) => {
   const i = process.argv.indexOf(name);
   return i >= 0 ? process.argv[i + 1] : def;
 };
-const API_PROD = arg('--api-prod', 'https://trocoin.onrender.com');
-const FRONT_PROD = arg('--front-prod', 'https://trocoin.vercel.app');
+const API_PROD = arg('--api-prod', 'https://api.trocoin.fr');
+const FRONT_PROD = arg('--front-prod', 'https://www.trocoin.fr');
 const API_LOCAL = arg('--api-local', 'http://localhost:3010');
 const FRONT_LOCAL = arg('--front-local', 'http://localhost:3011');
 const seedPath = path.join(__dirname, '..', 'e2e', '.tmp', 'seed.json');

@@ -3,6 +3,7 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import { resolveSiteUrl } from '../config/env.validation';
 
 /** Version lue dans package.json à l'exécution (pas d'import JSON : il déplacerait la sortie de tsc hors de dist/). */
 const packageVersion: string = (() => {
@@ -48,6 +49,8 @@ export class HealthController {
       databaseRegion: this.dataSource.options.type === 'postgres' ? databaseRegion() : undefined,
       uptimeSeconds: Math.round(process.uptime()),
       version: process.env.APP_VERSION || packageVersion,
+      // Base des liens envoyés par e-mail (confirmation, mot de passe, changement d'adresse) : vérifiable depuis l'extérieur
+      siteUrl: resolveSiteUrl(),
     };
   }
 }

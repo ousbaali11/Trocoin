@@ -58,7 +58,7 @@ automatiquement) ou Fly.io. Les étapes ci-dessous restent les mêmes, seule l'i
    | `NOTIFICATION_PROVIDER` | `none` (notifications in-app seulement) |
    | `EMAIL_PROVIDER` | `resend` + `RESEND_API_KEY` + `EMAIL_FROM` (§5b) ; ou `none` (« mot de passe oublié » en 503, l'admin réinitialise depuis le back-office) |
    | `STORAGE_PROVIDER` | `s3` + `S3_ENDPOINT`, `S3_REGION=auto`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` (+ `S3_PUBLIC_URL` facultative, voir « Fichiers envoyés ») ; `local` = disque éphémère |
-   | `SITE_URL` | `https://trocoin.vercel.app` (liens des e-mails) |
+   | `SITE_URL` | `https://www.trocoin.fr` (liens des e-mails) |
    | `SENTRY_DSN` | facultatif (§7) |
    | `APP_VERSION` | facultatif, ex. `1.0.0` (affiché par `/health`) |
 
@@ -67,8 +67,8 @@ automatiquement) ou Fly.io. Les étapes ci-dessous restent les mêmes, seule l'i
    `API Trocoin démarrée … (env=production)` et `CORS autorisé pour : https://…`.
    Si la configuration est incomplète, l'API **refuse de démarrer** et le log indique
    précisément la variable fautive (`Configuration invalide : …`).
-6. Notez l'URL : `https://trocoin-api.onrender.com` (à adapter). Vérifiez
-   `https://trocoin-api.onrender.com/health` → `{"status":"ok","database":"postgres",…}`.
+6. Notez l'URL : `https://api.trocoin.fr` (à adapter). Vérifiez
+   `https://api.trocoin.fr/health` → `{"status":"ok","database":"postgres",…}`.
 
 ### 2b. Déploiement automatique à chaque push (à faire une fois)
 
@@ -122,7 +122,7 @@ publique, vignettes comprises) et **contre le bucket R2 réel `trocoin-photos` l
 1. vercel.com → *Add New… → Project* → importer `ousbaali11/Trocoin`.
 2. *Root Directory* : `frontend` (important). Framework détecté : Next.js.
 3. *Environment Variables* :
-   - `NEXT_PUBLIC_API_URL` = `https://trocoin-api.onrender.com` (l'URL Render, sans slash final)
+   - `NEXT_PUBLIC_API_URL` = `https://api.trocoin.fr` (l'URL Render, sans slash final)
    - `NEXT_PUBLIC_SITE_URL` = `https://<votre-projet>.vercel.app`
 4. *Deploy*. Ces variables sont figées dans le bundle au build : après tout changement,
    *Redeploy*.
@@ -133,8 +133,8 @@ publique, vignettes comprises) et **contre le bucket R2 réel `trocoin-photos` l
 
 Depuis un téléphone **hors du réseau du développeur** :
 
-1. `https://trocoin-api.onrender.com/health` → `status: ok`.
-2. `https://trocoin-api.onrender.com/dev/last-otp/0612345678` → **404** (endpoint de dev neutralisé).
+1. `https://api.trocoin.fr/health` → `status: ok`.
+2. `https://api.trocoin.fr/dev/last-otp/0612345678` → **404** (endpoint de dev neutralisé).
 3. Ouvrir le site Vercel → *Créer un compte* (formulaire, aucun SMS pendant la phase de test,
    voir AUDIT.md §11) → *Déposer une annonce* → l'annonce apparaît dans la recherche.
    Le parcours SMS reste testable sur `/connexion/sms` (consomme du crédit Vonage).
@@ -198,7 +198,7 @@ au compte du vendeur ; sinon la plateforme encaisse et reverse manuellement.
 1. Stripe → *Developers* → *API keys* : `STRIPE_SECRET_KEY` (`sk_test_…` tant que l'on teste ;
    `sk_live_…` après activation du compte).
 2. Stripe → *Developers* → *Webhooks* → *Add endpoint* :
-   URL `https://trocoin.onrender.com/transactions/webhook/stripe`, évènements
+   URL `https://api.trocoin.fr/transactions/webhook/stripe`, évènements
    `checkout.session.completed`, `checkout.session.expired`,
    `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`,
    `payment_intent.canceled`, `charge.refunded` → *Signing secret* = `STRIPE_WEBHOOK_SECRET`.

@@ -9,6 +9,11 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "**", pathname: "/uploads/**" },
     ],
   },
+  async redirects() {
+    // L'ancienne adresse Vercel ne doit plus vivre à part : redirection permanente vers le domaine
+    // (trocoin.fr → www.trocoin.fr est géré par Vercel au niveau du domaine)
+    return [{ source: "/:path*", has: [{ type: "host", value: "trocoin.vercel.app" }], destination: "https://www.trocoin.fr/:path*", permanent: true }];
+  },
   async headers() {
     return [
       {
