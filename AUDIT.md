@@ -1766,3 +1766,5 @@ fiche affiche le prix une seule fois, sous le titre (aucune incrustation ailleur
   de suivi entre appareils sans compte.
 - Le filtre `region=` n'a pas de commande dans le panneau de filtres : il est atteint par le fil
   d'Ariane et gardé dans l'adresse ; son libellé apparaît dans le sous-titre des résultats.
+
+Déploiement : CI verte sur les deux commits, API Render en **1.15.0** (`/health`), front Vercel servant les nouveaux styles (`card-carousel` dans la feuille de style de `/recherche`) et le libellé de région sur `/recherche?region=ile-de-france`, vérifiés le 16 septembre 2026.
