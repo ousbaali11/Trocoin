@@ -499,14 +499,32 @@ export class BoxtalShippingProvider implements IShippingProvider {
           for (const code of [c.code, c.code.replace('_', '-')]) {
             if (seen.has(code)) continue;
             seen.add(code);
-            const qs = new URLSearchParams({ countryIsoCode: 'FR', operationType: c.mode === 'point_relais' ? 'DELIVERY' : 'DROP_OFF', shippingOfferCode: code, postalCode: '75017', city: 'Paris' });
-            const r = await this.v3<{ errors?: Array<{ code?: string }>; content?: unknown[] }>('GET', `/shipping/v3.2/parcel-point-by-shipping-offer?${qs}`).catch((e) => ({ status: 0, data: undefined, text: String((e as Error).message) }));
-            const errCode = r.data?.errors?.[0]?.code;
+            // operationType : DEPARTURE (points de dépôt pour l'expéditeur) — valeur attendue par l'API v3.2
+            const qs = new URLSearchParams({ countryIsoCode: 'FR', operationType: 'DEPARTURE', shippingOfferCode: code, postalCode: '69003', city: 'Lyon' });
+            const r = await this.v3<{ errors?: Array<{ code?: string; parameters?: unknown; message?: string }>; content?: unknown[] }>('GET', `/shipping/v3.2/parcel-point-by-shipping-offer?${qs}`).catch((e) => ({ status: 0, data: undefined, text: String((e as Error).message) }));
+            const err = r.data?.errors?.[0];
             const ok = r.status >= 200 && r.status < 300;
-            probed.push({ code, carrier: c.carrier, mode: c.mode, ok, statut: ok ? `200 (${Array.isArray(r.data?.content) ? r.data!.content!.length : '?'} point(s))` : `${r.status} ${errCode || r.text.slice(0, 120)}` });
+            probed.push({ code, carrier: c.carrier, mode: c.mode, ok, statut: ok ? `200 (${Array.isArray(r.data?.content) ? r.data!.content!.length : '?'} point(s))` : `${r.status} ${err ? JSON.stringify(err).slice(0, 200) : r.text.slice(0, 200)}` });
           }
         }
         return probed.map((p) => `${p.code} [${p.mode}] → ${p.statut}`);
+      });
+    }
+    if ((out.jeton_v3 as { ok: boolean }).ok) {
+      // Y a-t-il un point d'entrée listant les offres du compte ? Statuts et début de réponse, sans effet.
+      await step('liste_offres_v3', async () => {
+        const tries: Record<string, string> = {};
+        for (const [method, path, body] of [
+          ['GET', '/shipping/v3.1/shipping-offer', undefined],
+          ['GET', '/shipping/v3.2/shipping-offer', undefined],
+          ['GET', '/shipping/v3.1/shipping-offer?countryIsoCode=FR', undefined],
+          ['GET', '/shipping/v3.1/contract', undefined],
+          ['POST', '/shipping/v3.1/shipping-offer', { shipment: { packages: [{ type: 'PARCEL', weight: 0.9, length: 30, width: 20, height: 10, value: { value: 120, currency: 'EUR' } }], fromAddress: { type: 'RESIDENTIAL', location: { city: 'Lyon', postalCode: '69003', countryIsoCode: 'FR' } }, toAddress: { type: 'RESIDENTIAL', location: { city: 'Paris', postalCode: '75017', countryIsoCode: 'FR' } } } }],
+        ] as const) {
+          const r = await this.v3<unknown>(method, path, body).catch((e) => ({ status: 0, data: undefined, text: String((e as Error).message) }));
+          tries[`${method} ${path}`] = `${r.status} ${r.text.replace(/\s+/g, ' ').slice(0, 300)}`;
+        }
+        return tries;
       });
     }
     if (withLabel) {
