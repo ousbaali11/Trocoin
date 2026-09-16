@@ -81,11 +81,19 @@ Champs de saisie : 16 px sur mobile (pas de zoom automatique), hauteur ≥ 46 px
   jamais sur une teinte intermédiaire. La variante `pill-tag` (« À la une », « Urgent ») pose sur la
   photo une étiquette blanche avec un point coloré à gauche.
 - **Cartes d'annonce** (`ListingCard`) : cadre blanc arrondi 16 px avec **6 px de cadre autour
-  de la photo** (5 px + bordure de 1 px ; photo carrée, coins 12 px), **prix en pilule blanche en bas à gauche de la
-  photo**, **cœur rond blanc à cheval sur le bas droit de la photo**, étiquettes en haut à
-  gauche, puis titre (2 lignes), ligne d'état / Pro / note, et en pied « lieu · date » (la date reste
+  de la photo** (5 px + bordure de 1 px ; photo carrée, coins 12 px), **cœur rond blanc à cheval sur le bas droit de la photo**,
+  étiquettes en haut à gauche (« À la une », « Urgent », « Déjà vu » pour une annonce déjà consultée), puis titre (2 lignes),
+  **prix sous la photo dans le bloc de texte** (Fraunces 1,05 rem, encre ; depuis le 16 septembre 2026 le prix n'est plus incrusté
+  sur l'image, à la demande de l'utilisateur), ligne d'état / Pro / note, et en pied « lieu · date » (la date reste
   entière, le lieu se tronque) avec la livraison à droite. Survol : élévation de 2 px et ombre douce ; clic long (souris, 500 ms) :
   **aperçu rapide** dans une boîte sans quitter la liste.
+- **Fiche annonce** (`annonces/[id]`) : fil d'Ariane à six niveaux (famille, catégorie, région, département, ville, titre),
+  galerie 4:3 avec cœur + nombre de favoris, « Partager » et « Voir les photos » posés sur la photo, titre puis ligne de repères
+  de la catégorie (année · kilométrage · carburant…), prix en Fraunces, jauge de position par rapport au marché (teinte
+  `--accent-tint`), « Les + de cette annonce » en pilules vertes avec icône, « Les informations clés » en grille à deux
+  colonnes (six visibles, dépliant), « Équipements » à coches, description tronquée à 8 lignes (« Voir plus »), carte à 320 px
+  (zoom 13, cercle de 1,5 km), « Signaler l'annonce » en bas de fiche, carrousel « Ces annonces peuvent vous intéresser » à
+  accroche de défilement avec flèches rondes.
 - **Champs** : bordure `--line`, anneau de focus vert à 3 px, libellé au-dessus, aide en dessous
   en `--ink-muted`.
 - **Icônes** : traits de 1,8 px, bouts ronds, 16–20 px, sans remplissage ; pas d'émoji dans les

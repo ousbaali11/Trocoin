@@ -1693,3 +1693,76 @@ convenait pas), description, et **sans `sameAs`** (aucun profil public sur un r�
 rien d'inventé) ; titre de l'accueil « Trocoin — Les petites annonces entre voisins, en France »
 (55 caractères) et description de 149 caractères fidèle au site. CI run 35040280613 verte ;
 production : titre, description, Open Graph, JSON-LD et `/logo.png` (200, image/png) vérifiés.
+
+## 33. Fiche annonce complète (inspirée de leboncoin), prix sous la photo, carte zoomée — 16 septembre 2026
+
+Brief : « Fiche annonce complète (inspirée de leboncoin) + prix hors photo + zoom carte ».
+Le statut de chaque élément de l'inventaire leboncoin est dans `docs/comparatif-leboncoin.md` §8
+(14 lignes : 1 en place, 7 complétés, 4 ajoutés, 2 écartés avec la raison).
+
+### Ce qui a été livré
+
+**1. Carte de localisation** (`ListingsMap.tsx`, `DynamicMap.tsx`) : zoom 11 → **13** (rues et
+quartiers lisibles) ; cercle de rayon réel inchangé (1,5 km, cohérent avec l'arrondi des
+coordonnées publiques à 0,01°) mais **≈ 226 px de diamètre à l'écran au lieu de ≈ 58 px** (× 3,9),
+trait de 3 px, fond teinté ; carte de 320 px de haut. La même carte est **ajoutée à l'aperçu avant
+publication** du dépôt (`ListingForm.tsx`, `data-testid="preview-map"`, coordonnées arrondies comme
+pour les visiteurs). Vérifié par le scénario 18 (tuiles `/13/` et cercle entre 150 et 320 px) et par
+les captures.
+
+**2. Fiche annonce** (`annonces/[id]/page.tsx` réécrite, nouveaux composants dans
+`components/listing/`) :
+- fil d'Ariane **Accueil › Famille › Catégorie › Région › Département › Ville › Titre** ; région et
+  département dérivés du code postal côté API (`src/common/geo/france-admin.ts`, `location` sur le
+  détail d'annonce) ; nouveau filtre de recherche `region=<identifiant>` (préfixes de code postal),
+  département via `postal_code=69`, ville via `city=` ; `BreadcrumbList` aligné (scénario 10 mis à jour) ;
+- galerie : cœur + **nombre de favoris**, menu **Partager**, bouton **« Voir les photos »** (plein
+  écran avec flèches, compteur, clavier) ;
+- bloc prix : ligne de repères selon la catégorie (**année · kilométrage · carburant**, surface ·
+  pièces, marque · modèle), prix, **position par rapport au marché** (`MarketPosition.tsx` : jauge
+  « Prix dans la fourchette / Bonne affaire / Au-dessus du marché » sur l'estimation existante
+  `/listings/price-estimate`, rien sous trois annonces comparables), **« Publiée aujourd'hui / hier /
+  il y a N jours »** (`daysAgo`) ;
+- bloc vendeur (`SellerCard.tsx`) : **« Suivre »** (`FollowSellerButton.tsx` = recherche sauvegardée
+  sur le critère `seller`, nouveau dans `SavedSearchQueryDto`, alerte à chaque nouvelle annonce,
+  gérable dans « Mes recherches »), repères de confiance calculés uniquement (« Répond à X % des
+  messages » dès 80 %, « N annonces en ligne ») ; pas de téléphone (jamais public) ;
+- **« Les + de cette annonce »** (`ListingHighlights.tsx`) : récente, fiche complète, N photos,
+  neuf, livraison, urgente, identité vérifiée, pro, options cochées ;
+- **« Les informations clés »** (`KeyInfo.tsx`) : grille à deux colonnes, six visibles, « Voir les
+  critères supplémentaires (n) » ; **« Équipements »** : options cochées à coches, dépliant ;
+- **description** tronquée (8 lignes / 500 caractères) avec « Voir plus / Voir moins »
+  (`ExpandableText.tsx`) ;
+- **« Signaler l'annonce »** aussi en bas de fiche (`ReportListingButton.tsx`, partagé avec le
+  bloc d'actions) ;
+- **« Ces annonces peuvent vous intéresser »** : carrousel à accroche de défilement avec flèches
+  (`CardCarousel.tsx`) et « Voir plus d'annonces » vers la catégorie ;
+- badge **« Déjà vu »** sur les cartes (`lib/viewed.ts` : 100 derniers identifiants dans le
+  navigateur + `GET /listings/history/ids` pour un membre, fusionnés ; jamais sur ses propres annonces).
+
+**3. Exclus** (brief §3) : simulateur de crédit, assurance / garantie payante, publicités et
+carrousels sponsorisés. Le paiement sécurisé Trocoin est inchangé.
+
+**4. Prix hors photo** (`ListingCard.tsx` / `.module.css`) : la pilule sur la photo est retirée ; le
+prix est **sous la photo, après le titre** (Fraunces 1,05 rem, encre) sur toutes les cartes. La
+fiche affiche le prix une seule fois, sous le titre (aucune incrustation ailleurs).
+`docs/design-system.md` §1, §3 et §5 mis à jour.
+
+### Vérification
+
+| Contrôle | Résultat |
+|---|---|
+| `npm test` (API, SQLite) | 135 réussis, 1 ignoré (tests étendus : `region=`, `location` du détail, `history/ids`, recherche sauvegardée `seller`) |
+| `npx playwright test` (bureau + mobile, pile locale reconstruite) | 102 scénarios : 91 réussis, 10 ignorés, 1 échec ponctuel (14 « livraison » : bandeau rendu en double, aléa déjà connu de la diffusion Next) ; relance de 01 + 14 + 18 sur pile fraîche : 31 réussis, 2 ignorés |
+| Nouveau scénario `e2e/18-fiche.spec.ts` (3 tests) | fil d'Ariane, galerie, bloc prix, informations clés, équipements, description, carte (tuiles zoom 13, cercle 150–320 px), signalement, carrousel ; « Déjà vu » visiteur puis membre ; « Suivre » aller-retour |
+| Scénarios adaptés | 01 (prix sous la photo, hors de l'image, après le titre), 04 (« Les informations clés », équipements), 10 (`BreadcrumbList` à 7 niveaux) |
+| Captures | `avant-fiche-complete.png` / `apres-fiche-complete.png` (fiche entière), `apres-carte-zoomee.png`, `apres-resultats-prix-sous-photo.png` (avec « Déjà vu »), `apres-depot-apercu-carte.png`, `apres-bloc-vendeur.png` |
+
+### Limites connues
+
+- La position par rapport au marché dépend du nombre d'annonces comparables en ligne : en
+  production, tant qu'une catégorie compte moins de trois annonces, la jauge n'apparaît pas.
+- Le badge « Déjà vu » d'un visiteur est propre à son navigateur (stockage local) ; il n'y a pas
+  de suivi entre appareils sans compte.
+- Le filtre `region=` n'a pas de commande dans le panneau de filtres : il est atteint par le fil
+  d'Ariane et gardé dans l'adresse ; son libellé apparaît dans le sous-titre des résultats.

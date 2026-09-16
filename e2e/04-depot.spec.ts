@@ -69,9 +69,11 @@ test('voiture : critères obligatoires, deux photos, localisation par code posta
   await expect(page.getByText('11 900 €', { exact: true })).toBeVisible();
   await expect(page.getByText('1 / 2')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Voir la photo 2' })).toBeVisible();
-  const specs = page.getByRole('heading', { name: 'Caractéristiques' }).locator('..');
+  const specs = page.getByRole('heading', { name: 'Les informations clés' }).locator('..');
   await expect(specs).toContainText('Peugeot');
-  await expect(specs).toContainText('58000 km');
+  await expect(specs).toContainText(/58[\s ]000 km/);
+  // Ligne de repères sous le titre : année · kilométrage · carburant (comme sur leboncoin pour une voiture)
+  await expect(page.getByTestId('listing-summary')).toContainText(/2019.*58[\s ]000 km.*Essence/);
   await expect(page.getByText("C'est votre annonce")).toBeVisible();
 });
 
@@ -108,8 +110,9 @@ test('location de vacances : champs propres à la famille, prix par semaine, une
   await expect(page).toHaveURL(/\/annonces\/[0-9a-f-]{36}$/);
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(title);
   await expect(page.getByText('Annecy (74000)')).toBeVisible();
-  const specs = page.getByRole('heading', { name: 'Caractéristiques' }).locator('..');
+  const specs = page.getByRole('heading', { name: 'Les informations clés' }).locator('..');
   await expect(specs).toContainText('Chalets');
-  await expect(specs).toContainText('Piscine');
+  // Option cochée (« Piscine ») : dans la liste « Équipements », pas dans les informations clés
+  await expect(page.getByRole('heading', { name: 'Équipements' }).locator('..')).toContainText('Piscine');
   await expect(page.getByText('1 / 1')).toBeVisible();
 });

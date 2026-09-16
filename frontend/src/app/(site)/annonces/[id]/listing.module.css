@@ -21,6 +21,20 @@
   font-size: clamp(1.5rem, 2.6vw, 2.1rem);
   margin-bottom: 6px;
 }
+/* Ligne sous le titre : lieu, puis les repères de la catégorie (année · kilométrage · carburant, surface · pièces…) */
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+  margin: 0 0 10px;
+}
+.summary span + span::before {
+  content: "·";
+  margin-right: 8px;
+  color: var(--ink-muted);
+}
 .price {
   font-family: var(--font-display);
   font-size: 1.8rem;
@@ -28,27 +42,38 @@
   color: var(--bottle);
   margin-bottom: 8px;
 }
-.specs {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 10px 20px;
-  margin: 0;
+.crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 6px;
+  align-items: center;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
 }
-.specs div {
+.crumbs li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.crumbs li + li::before {
+  content: "›";
+  color: var(--ink-muted);
+}
+.crumbs [aria-current="page"] {
+  color: var(--ink);
+  max-width: 320px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bottomRow {
   display: flex;
   justify-content: space-between;
-  gap: 10px;
-  padding: 8px 0;
-  border-bottom: 1px dashed var(--line-soft);
-}
-.specs dt {
-  color: var(--ink-muted);
-  font-size: 0.88rem;
-}
-.specs dd {
-  margin: 0;
-  font-weight: 600;
-  text-align: right;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
 }
 @media (max-width: 900px) {
   .layout {

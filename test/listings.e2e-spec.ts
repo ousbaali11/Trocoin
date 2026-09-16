@@ -155,6 +155,16 @@ describe('Annonces : dépôt, validation, recherche, photos, contrôle d\'accès
 
     const similar = await request(server).get(`/listings/${a.id}/similar`).expect(200);
     expect(similar.body.map((l: any) => l.id)).toContain(b.id);
+
+    // Région (fil d'Ariane des fiches) : Villeurbanne en Auvergne-Rhône-Alpes, Paris en Île-de-France
+    const rhoneAlpes = ids(await request(server).get('/listings?region=auvergne-rhone-alpes').expect(200));
+    expect(rhoneAlpes).toContain(a.id);
+    expect(rhoneAlpes).not.toContain(b.id);
+    expect(ids(await request(server).get('/listings?region=ile-de-france').expect(200))).toEqual([b.id]);
+    expect((await request(server).get('/listings?region=atlantide').expect(200)).body.total).toBe(0);
+    await request(server).get('/listings?region=Île de France').expect(400);
+    const detail = await request(server).get(`/listings/${a.id}`).expect(200);
+    expect(detail.body.location).toEqual({ departmentCode: '69', department: 'Rhône', postalPrefix: '69', region: 'Auvergne-Rhône-Alpes', regionSlug: 'auvergne-rhone-alpes' });
   });
 
   it('photos : signature réelle vérifiée, extension dérivée du contenu, non-propriétaire bloqué avant écriture', async () => {

@@ -118,6 +118,8 @@ export interface ListingDetail extends Omit<ListingCard, "coverUrl" | "photosCou
   isOwner: boolean;
   isBoosted: boolean;
   isUrgent: boolean;
+  /** Région et département dérivés du code postal (fil d'Ariane) ; `postalPrefix` sert au filtre `postal_code=` */
+  location?: { departmentCode: string; department: string; postalPrefix: string; region: string; regionSlug: string } | null;
 }
 
 export interface SearchResult {

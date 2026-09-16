@@ -260,6 +260,23 @@ describe('Messagerie, paiement séquestre, avis, signalements, alertes, admin', 
     expect(after.length).toBe(before + 1);
     expect(after[after.length - 1].body).toMatch(/Rockrider/);
 
+    // « Suivre ce vendeur » (fiche annonce) : recherche sauvegardée sur le seul critère vendeur
+    await request(server).post('/users/me/saved-searches').set(watcher.auth).send({ name: 'Suivi', query: { seller: 'pas-un-uuid' } }).expect(400);
+    const follow = await request(server).post('/users/me/saved-searches').set(watcher.auth).send({ name: 'Annonces du vendeur', query: { seller: seller.id } }).expect(201);
+    expect(follow.body.query.seller).toBe(seller.id);
+    await svc.checkAll();
+    const other = await login(app);
+    await createListing(app, other, { title: 'Annonce d\'un autre vendeur', price: 300, postalCode: '75011' });
+    await createListing(app, seller, { title: 'Nouvelle annonce du vendeur suivi', price: 40 });
+    await svc.checkAll();
+    const followed = await notifRepo.find({ where: { userId: watcher.id, type: 'alerte_recherche' } });
+    expect(followed.some((n) => /vendeur suivi/.test(n.body))).toBe(true);
+    expect(followed.some((n) => /autre vendeur/.test(n.body))).toBe(false);
+    const followRun = await request(server).get(`/users/me/saved-searches/${follow.body.id}/results`).set(watcher.auth).expect(200);
+    expect(followRun.body.items.length).toBeGreaterThanOrEqual(3);
+    expect(followRun.body.items.every((l: any) => l.userId === seller.id)).toBe(true);
+    await request(server).delete(`/users/me/saved-searches/${follow.body.id}`).set(watcher.auth).expect(200); // « Ne plus suivre »
+
     const run = await request(server).get(`/users/me/saved-searches/${saved.body.id}/results`).set(watcher.auth).expect(200);
     expect(run.body.items.length).toBe(1);
     await request(server).get(`/users/me/saved-searches/${saved.body.id}/results`).set(seller.auth).expect(404);

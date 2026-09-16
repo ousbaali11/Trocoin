@@ -9,6 +9,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
   Matches,
   Max,
   MaxLength,
@@ -45,6 +46,9 @@ export class SavedSearchQueryDto {
 
   @IsOptional() @IsIn(['particulier', 'professionnel'])
   seller_type?: 'particulier' | 'professionnel';
+
+  @IsOptional() @IsUUID()
+  seller?: string;
 
   @IsOptional() @IsLatitude()
   lat?: number;

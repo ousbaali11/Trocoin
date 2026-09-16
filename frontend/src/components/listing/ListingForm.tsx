@@ -12,6 +12,7 @@ import { PhotoCropper } from "./PhotoCropper";
 import { PriceEstimate } from "./PriceEstimate";
 import { CompletenessHint } from "./CompletenessHint";
 import { AutoTextarea } from "@/components/ui/AutoTextarea";
+import { ApproxMapDynamic } from "@/components/ui/DynamicMap";
 import { titleExample } from "@/lib/title-examples";
 
 const NO_DELIVERY_ROOTS = ["immobilier", "vehicules", "emploi", "services", "vacances", "animaux"];
@@ -510,6 +511,12 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
               )}
             </div>
           </div>
+          {typeof form.location.latitude === "number" && typeof form.location.longitude === "number" && (
+            <div className="card" style={{ marginTop: 12 }} data-testid="preview-map">
+              <p className="small" style={{ margin: "0 0 8px" }}><strong>Localisation affichée</strong> <span className="muted">— zone approximative telle que les visiteurs la verront, jamais votre adresse exacte.</span></p>
+              <ApproxMapDynamic latitude={Math.round(form.location.latitude * 100) / 100} longitude={Math.round(form.location.longitude * 100) / 100} height={260} />
+            </div>
+          )}
           <p className="small muted" style={{ marginTop: 12 }}>En publiant, vous confirmez que l&apos;annonce respecte les règles de diffusion (pas d&apos;objet interdit, pas de coordonnées, un objet par annonce).</p>
         </div>
       )}

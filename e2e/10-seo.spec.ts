@@ -65,8 +65,9 @@ test('JSON-LD de l\'annonce : Product complet et fil d\'Ariane ; accueil : WebSi
   expect(product.offers.availability).toBe('https://schema.org/InStock');
   expect(product.offers.seller.name).toBe(seed.seller.displayName);
   const crumbs = data.find((d) => d['@type'] === 'BreadcrumbList');
-  expect(crumbs.itemListElement.map((i: { name: string }) => i.name)).toEqual(['Accueil', 'Loisirs', 'Vélos', seed.listings.vtt.title]);
-  expect(crumbs.itemListElement.map((i: { position: number }) => i.position)).toEqual([1, 2, 3, 4]);
+  // Fil d'Ariane complet depuis le 16 septembre 2026 : région et département dérivés du code postal (69003)
+  expect(crumbs.itemListElement.map((i: { name: string }) => i.name)).toEqual(['Accueil', 'Loisirs', 'Vélos', 'Auvergne-Rhône-Alpes', 'Rhône', 'Lyon', seed.listings.vtt.title]);
+  expect(crumbs.itemListElement.map((i: { position: number }) => i.position)).toEqual([1, 2, 3, 4, 5, 6, 7]);
 
   await page.goto('/');
   const home = (await page.locator('script[type="application/ld+json"]').allTextContents()).flatMap((b) => JSON.parse(b));

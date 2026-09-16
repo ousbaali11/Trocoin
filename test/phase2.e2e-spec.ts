@@ -250,6 +250,9 @@ describe('Phase 2 : monétisation désactivable, catégories, import, multi-util
     await request(server).get(`/listings/${a.id}`).set(seller.auth).expect(200); // propriétaire : rien
     const h = await request(server).get('/listings/history').set(viewer.auth).expect(200);
     expect(h.body.map((l: any) => l.id)).toEqual([a.id, b.id]);
+    // Identifiants seuls (badge « Déjà vu » des cartes) : même ordre, sans les fiches
+    expect((await request(server).get('/listings/history/ids').set(viewer.auth).expect(200)).body).toEqual([a.id, b.id]);
+    await request(server).get('/listings/history/ids').expect(401);
     expect((await request(server).get('/listings/history').set(seller.auth)).body.length).toBe(0);
     await request(server).delete('/listings/history').set(viewer.auth).expect(200);
     expect((await request(server).get('/listings/history').set(viewer.auth)).body.length).toBe(0);

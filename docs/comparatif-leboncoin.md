@@ -162,3 +162,34 @@ sessions avec navigateur et système, « Déconnecter tous les appareils » avec
 Ajouts de ce tour repris dans le contrôle : aperçu rapide d'une annonce au clic long, « Plus de
 filtres » en accordéon, suggestions de communes et recherches récentes pendant la frappe,
 catégorie suggérée d'après le titre, actions groupées sur Mes annonces.
+
+## 8. Fiche annonce complète, prix hors photo, carte zoomée — 16 septembre 2026
+
+Brief « Fiche annonce complète (inspirée de leboncoin) + prix hors photo + zoom carte ». Chaque
+élément de l'inventaire leboncoin (du clic sur une annonce au bas de page) est repris ici avec son
+statut **après** ce tour : **en place** (existait déjà, vérifié), **complété** (existait
+partiellement), **ajouté** (nouveau), **équivalent** (fonction obtenue autrement, avec ce que
+Trocoin sait réellement), **écarté** (avec la raison). Vérifié par le scénario `e2e/18-fiche` et
+par les captures du tour (AUDIT.md §33).
+
+| # | Élément observé sur leboncoin | Statut | Ce que fait Trocoin |
+|---|---|---|---|
+| 1 | Fil d'Ariane Accueil › Catégorie › Région › Département › Ville › Titre | **complété** | avant : Accueil › Famille › Catégorie. Maintenant les six niveaux : région et département dérivés du code postal (`src/common/geo/france-admin.ts`, jamais de l'adresse), chaque niveau cliquable vers la recherche filtrée (`region=`, nouveau filtre ; `postal_code=69` ; `city=`), titre en `aria-current`. Le `BreadcrumbList` (Google) suit les mêmes niveaux |
+| 2 | Galerie : plusieurs photos, compteur, partage, compteur de favoris, « Voir les photos » | **complété** | compteur « n / total » et vignettes existaient ; ajoutés sur la photo : cœur + nombre de favoris, menu « Partager », bouton « Voir les photos » (plein écran avec flèches, compteur, clavier, Échap) |
+| 3 | Bloc prix : titre, lieu + année / km / carburant, prix, position par rapport au marché, « il y a X jours » | **complété** | ligne de repères sous le titre selon la catégorie (année · kilométrage · carburant ; surface · pièces ; marque · modèle…) ; jauge « Prix dans la fourchette / Bonne affaire / Au-dessus du marché » construite sur l'estimation déjà utilisée au dépôt (`/listings/price-estimate`, médiane et quartiles des annonces comparables en ligne) ; rien d'affiché sous trois annonces comparables ; « Publiée aujourd'hui / hier / il y a N jours » (date complète au survol) |
+| 4 | Bloc vendeur : avatar, nom, « Suivre », badges de confiance, « Membre depuis », message, paiement sécurisé, téléphone | **complété / équivalent** | avatar, nom, type, identité vérifiée, note, « Membre depuis » existaient. **Ajouté « Suivre »** : recherche sauvegardée sur le seul critère vendeur (`query.seller`), alerte à chaque nouvelle annonce, visible et gérable dans « Mes recherches », « ✓ Suivi » pour retirer. Repères de confiance **uniquement calculés** : « Répond à X % des messages » (taux existant, affiché à partir de 80 %) et « N annonces en ligne » ; pas de badge « Très réactif » ni « profil recommandé » inventé. Message et « Acheter » (paiement sécurisé Trocoin, inchangé) : boutons du bloc d'actions juste au-dessus. **Téléphone : écarté**, Trocoin ne rend jamais un numéro public (contact par messagerie) |
+| 5 | « Les + de cette annonce » | **ajouté** | badges tirés des données réelles de l'annonce : annonce récente (< 7 jours), fiche complète, N photos (≥ 3), neuf, livraison possible, vente urgente, vendeur à l'identité vérifiée, vendeur professionnel, options cochées dans les critères (contrôle technique à jour, première main, piscine…) ; section absente quand rien ne ressort |
+| 6 | « Les informations clés » en grille à deux colonnes, « Voir les critères supplémentaires » | **complété** | les critères par catégorie existaient (panneau « Caractéristiques » en colonnes automatiques) ; maintenant « Les informations clés » : grille à deux colonnes (une sur mobile), six critères visibles, « Voir les critères supplémentaires (n) » / « Voir moins » |
+| 7 | Équipements avec dépliant | **ajouté** | section « Équipements » = options cochées des critères (booléens à oui), coche verte, « Voir tous les équipements (n) » au-delà de six ; ces options ne sont plus répétées dans les informations clés |
+| 8 | Description avec « Voir plus » / « Voir moins » | **ajouté** | tronquée à 8 lignes ou 500 caractères, texte complet dans le HTML (moteurs de recherche) |
+| 9 | Localisation : carte | **complété** | zoom 11 → **13** (rues lisibles) ; cercle : rayon réel inchangé (1,5 km, cohérent avec l'arrondi des coordonnées publiques à 0,01°) mais **≈ 4 fois plus grand à l'écran** (≈ 58 px → ≈ 226 px de diamètre), trait de 3 px et fond teinté ; carte de 320 px de haut ; libellé « Ville, Département, Région ». Même carte **ajoutée à l'aperçu avant publication** du dépôt (coordonnées arrondies comme pour les visiteurs) |
+| 10 | « Signaler l'annonce » toujours accessible | **complété** | existait dans le bloc d'actions (colonne de droite, qui reste collée à l'écran) ; ajouté un lien « Signaler l'annonce » en bas de la fiche, même boîte de dialogue, connexion demandée avec retour sur l'annonce |
+| 11 | « Ces annonces peuvent vous intéresser » : carrousel + « Voir plus d'annonces » | **complété** | la section « Annonces similaires » (même catégorie, même département d'abord) devient un carrousel horizontal (accroche au défilement, flèches quand ça déborde, tactile et molette) titré « Ces annonces peuvent vous intéresser », avec « Voir plus d'annonces » vers la catégorie |
+| 12 | Badge « Déjà vu » sur les vignettes des résultats | **ajouté** | étiquette « Déjà vu » (en haut à gauche de la photo, à côté d'« À la une » / « Urgent ») ; visiteur : 100 derniers identifiants mémorisés dans le navigateur ; membre : fusion avec l'historique serveur de « Annonces consultées » (`GET /listings/history/ids`), donc valable d'un appareil à l'autre ; jamais sur ses propres annonces |
+| 13 | Prix incrusté sur la photo des cartes | **retiré (demande)** | le prix passe **sous la photo**, dans le bloc de texte après le titre (Fraunces 1,05 rem, encre), sur toutes les cartes (résultats, accueil, profils, favoris, historique, similaires) ; la fiche n'affiche le prix qu'une fois, sous le titre |
+| 14 | Simulateur de financement, assurance / garantie payante, publicités et carrousels sponsorisés | **écarté** | partenariats commerciaux réels de leboncoin (banque, assureur, régie) ; le paiement sécurisé Trocoin reste tel quel |
+
+Ce qui n'existe pas sur Trocoin et n'a pas été inventé : téléphone du vendeur (jamais public),
+badges « Très réactif » / « profil recommandé » (aucune donnée fiable ; le taux de réponse calculé est
+affiché tel quel), position du prix sans annonces comparables (rien d'affiché plutôt qu'un
+chiffre).

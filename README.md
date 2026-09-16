@@ -40,7 +40,7 @@ cd frontend && npm install && cp .env.example .env.local && npm run dev -- -p 30
 ```bash
 npm test                 # 135 tests e2e (API, supertest)
 npm run e2e:build        # construit l'API (dist/) et le front (next build) pour les tests navigateur
-npm run e2e              # 99 scénarios Playwright dans Chromium (desktop 1280 px + mobile 375 px) : parcours, accessibilité (axe) site + back-office, clavier, SEO
+npm run e2e              # 102 scénarios Playwright dans Chromium (desktop 1280 px + mobile 375 px) : parcours, accessibilité (axe) site + back-office, clavier, SEO
 node scripts/charge.js --api https://api.trocoin.fr --front https://www.trocoin.fr --vus 10 --minutes 3   # test de charge léger (lectures publiques)
 SOURCE_DATABASE_URL=… TARGET_DATABASE_URL=… node scripts/migrer-base.js   # copie intégrale d'une base Postgres vers une autre, preuve par comptages + empreintes (DEPLOIEMENT.md §6b) (Jest + supertest, SQLite en mémoire)
 # Les mêmes tests sur PostgreSQL (schéma créé par les migrations) :
@@ -59,7 +59,7 @@ manuel : Playwright démarre et arrête les deux serveurs (`e2e/start-api.js`, `
 ```bash
 npx playwright install chromium   # une fois
 npm run e2e:build                 # API + front (≈ 2 min)
-npm run e2e                       # 99 scénarios (≈ 4 min 30)
+npm run e2e                       # 102 scénarios (≈ 4 min 30)
 npx playwright show-report        # rapport HTML, traces et captures des échecs
 npm run e2e:ui                    # mode interactif pas à pas
 ```
@@ -87,6 +87,7 @@ la construction ET l'exécution (l'URL de l'API est figée dans le build du fron
 | `e2e/15-experience.spec.ts` | suggestions pendant la frappe (annonce, catégorie, commune) et recherches récentes, aperçu rapide au clic long, panneau des familles et menu « Catégories » animés, menu mobile animé, dépôt (barre de progression, catégorie suggérée d'après le titre, jauge de prix en direct, checklist « Faire → »), Mes annonces (rien de groupé avec une annonce, sélection et pause groupée avec deux), appareils connectés et déconnexion générale | desktop + mobile |
 | `e2e/16-profils.spec.ts` | profils vendeur et boutique en sections repliables : annonces ouvertes, avis et informations de la boutique repliés, clavier (Entrée / Espace, aria-expanded), état mémorisé après rechargement, axe sans violation, compte pro créé pour le scénario | desktop + mobile |
 | `e2e/17-expedition.spec.ts` | étiquette d'envoi : adresse de livraison exigée au paiement, panneau vendeur (colis prérempli, tarif, point relais, achat de l'étiquette, PDF téléchargé, numéro repris), confirmation d'expédition, suivi côté acheteur ; refus du transporteur affiché sans bloquer la vente, saisie manuelle | desktop |
+| `e2e/18-fiche.spec.ts` | fiche annonce complète (bureau) : fil d'Ariane à six niveaux (région, département, ville) et `BreadcrumbList`, galerie (favoris, partage, « Voir les photos » plein écran), repères de catégorie sous le titre, position du prix par rapport au marché, « Publiée aujourd'hui », « Les + de cette annonce », informations clés en grille dépliable, équipements, description « Voir plus », carte zoom 13 avec cercle visible, « Signaler l'annonce » en bas, carrousel « Ces annonces peuvent vous intéresser » ; badge « Déjà vu » (visiteur puis membre) ; « Suivre » le vendeur (alerte dans Mes recherches) |
 
 Les pages d'inscription et de recherche vérifient en plus l'absence de défilement horizontal
 (`expectNoHorizontalOverflow`) : c'est la régression trouvée lors du tour de polish. Les données
@@ -230,9 +231,9 @@ GET  /users/me/export · DELETE /users/me · /users/me/blocks · /users/me/saved
 GET  /categories/tree · GET /categories/:slug/schema · GET /categories/suggest?q= · GET /listings/suggest?q=
 GET  /settings/public · GET /plans · /users/me/entitlements · /users/me/subscription/:planId
 /users/me/shop/members · /users/me/shops · POST /listings/import · POST /listings/:id/promote
-/listings/history · /conversations/:id/images · /conversations/:id/offers · GET /pages/:slug
+/listings/history · GET /listings/history/ids · /conversations/:id/images · /conversations/:id/offers · GET /pages/:slug
 /admin/settings · /admin/plans · /admin/pages
-GET  /listings (filtres) · POST /listings · GET/PATCH/DELETE /listings/:id · POST /listings/bulk
+GET  /listings (filtres, dont `region=` et `postal_code=` préfixe) · POST /listings · GET/PATCH/DELETE /listings/:id · POST /listings/bulk
 POST /listings/:id/photos · PATCH /listings/:id/photos/order · /listings/:id/similar
 /listings/:id/favorite · /conversations · /transactions (quote, ship, handover, dispute…)
 /transactions/:id/shipment (quote, relay-points, étiquette PDF, tracking — SHIPPING_PROVIDER=mock|none|boxtal, docs/etiquettes-transporteur.md) · GET /shipping/diagnostic (sandbox Boxtal seulement)

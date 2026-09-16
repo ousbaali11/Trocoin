@@ -11,6 +11,7 @@ import { fieldOptions, type CategoryNode, type FieldSchema, type SearchResult } 
 import { LocationPicker, type LocationValue } from "@/components/ui/LocationPicker";
 import { ListingsMapDynamic } from "@/components/ui/DynamicMap";
 import { ListingCard } from "@/components/ui/ListingCard";
+import { regionName } from "@/lib/france";
 import { Modal } from "@/components/ui/Modal";
 import { Pagination } from "@/components/ui/Pagination";
 import { DiscoverSections, type DiscoverData } from "./DiscoverSections";
@@ -29,7 +30,7 @@ const SORTS = [
 ];
 
 /** Paramètres comptés dans « Filtres (n) » et effacés par « Tout effacer » (le mot-clé reste). */
-const FILTER_KEYS = ["category", "price_min", "price_max", "condition", "delivery", "delivery_anywhere", "seller_type", "with_photo", "urgent", "since_days", "lat", "lng", "radius", "city", "city_label", "postal_code", "price_type", "sort"];
+const FILTER_KEYS = ["category", "price_min", "price_max", "condition", "delivery", "delivery_anywhere", "seller_type", "with_photo", "urgent", "since_days", "lat", "lng", "radius", "city", "city_label", "postal_code", "region", "price_type", "sort"];
 
 interface Facets {
   total: number;
@@ -435,7 +436,8 @@ export function SearchPage() {
             {loading ? "Recherche…" : `${total} annonce${total > 1 ? "s" : ""}`}
             {get("city_label") && ` · ${get("city_label")} (${radius} km)`}
             {!get("city_label") && (get("city") || get("postal_code")) && ` · ${get("city") || get("postal_code")}`}
-            {!get("city_label") && !get("city") && !get("postal_code") && " · Toute la France"}
+            {!get("city_label") && !get("city") && !get("postal_code") && get("region") && ` · ${regionName(get("region")) ?? get("region")}`}
+            {!get("city_label") && !get("city") && !get("postal_code") && !get("region") && " · Toute la France"}
             {get("delivery_anywhere") === "true" && hasPlace && " + livraison partout en France"}
           </p>
           <div className="row" style={{ marginTop: 8, gap: 6, flexWrap: "wrap" }} aria-label="Filtres rapides">

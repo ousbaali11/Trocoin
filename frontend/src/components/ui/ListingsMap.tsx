@@ -52,12 +52,19 @@ export function ListingsMap({ listings, center, radiusKm, height = 520 }: { list
   );
 }
 
-/** Carte de localisation approximative d'une seule annonce (cercle, pas de point exact). */
-export function ApproxMap({ latitude, longitude, height = 260 }: { latitude: number; longitude: number; height?: number }) {
+/**
+ * Carte de localisation approximative d'une seule annonce (cercle, pas de point exact).
+ * Zoom 13 : les rues de la commune sont lisibles (zoom 11 auparavant : la ville n'était qu'un point).
+ * Le cercle garde son rayon réel de 1,5 km (cohérent avec l'arrondi des coordonnées publiques) ; à
+ * ce zoom il occupe près de quatre fois plus de pixels qu'avant, avec un trait épais et un fond visible.
+ */
+export const APPROX_MAP_ZOOM = 13;
+export const APPROX_RADIUS_M = 1500;
+export function ApproxMap({ latitude, longitude, height = 320 }: { latitude: number; longitude: number; height?: number }) {
   return (
-    <MapContainer center={[latitude, longitude]} zoom={11} style={{ height, width: "100%" }} scrollWheelZoom={false} dragging={false} zoomControl={false} attributionControl>
+    <MapContainer center={[latitude, longitude]} zoom={APPROX_MAP_ZOOM} style={{ height, width: "100%" }} scrollWheelZoom={false} dragging={false} zoomControl={false} attributionControl>
       <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" />
-      <Circle center={[latitude, longitude]} radius={1500} pathOptions={{ color: "#1f3b2e", fillOpacity: 0.15 }} />
+      <Circle center={[latitude, longitude]} radius={APPROX_RADIUS_M} pathOptions={{ color: "#1f3b2e", weight: 3, fillColor: "#1f3b2e", fillOpacity: 0.18 }} />
     </MapContainer>
   );
 }

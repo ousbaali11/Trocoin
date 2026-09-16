@@ -39,6 +39,9 @@ export class SearchListingsDto {
   @IsOptional() @IsString() @Matches(/^\d{2,5}$/)
   postal_code?: string; // préfixe accepté : "69" = tout le Rhône
 
+  @IsOptional() @IsString() @Matches(/^[a-z-]{2,40}$/)
+  region?: string; // identifiant de région (france-admin.ts), ex. "auvergne-rhone-alpes"
+
   @IsOptional() @Transform(toNumber) @IsNumber() @Min(0)
   price_min?: number;
 

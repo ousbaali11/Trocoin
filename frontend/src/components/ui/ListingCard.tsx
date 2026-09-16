@@ -3,8 +3,10 @@
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { mediaUrl } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import { CONDITION_LABELS, formatPrice, LISTING_STATUS_LABELS, postedAt } from "@/lib/format";
 import type { ListingCard as ListingCardType } from "@/lib/types";
+import { useViewedIds } from "@/lib/viewed";
 import { FavoriteButton } from "./FavoriteButton";
 import { QuickPreview } from "./QuickPreview";
 import styles from "./ListingCard.module.css";
@@ -12,9 +14,10 @@ import styles from "./ListingCard.module.css";
 const LONG_PRESS_MS = 500;
 
 /**
- * Carte d'annonce « fiche » Trocoin (docs/design-system.md §5) : photo carrée encadrée, prix en
- * pilule sur la photo, cœur à cheval sur le bas droit du cadre, étiquettes en haut à gauche, puis
- * titre sur deux lignes, ligne Pro / état / note du vendeur, et « lieu · date » en pied.
+ * Carte d'annonce « fiche » Trocoin (docs/design-system.md §5) : photo carrée encadrée, étiquettes
+ * en haut à gauche (« À la une », « Urgent », « Déjà vu »), cœur à cheval sur le bas droit du cadre,
+ * puis titre sur deux lignes, **prix sous la photo** dans le bloc de texte (plus d'incrustation sur
+ * l'image depuis le 16 septembre 2026), ligne Pro / état / note du vendeur, et « lieu · date » en pied.
  * Clic long à la souris (500 ms) : aperçu rapide sans quitter la liste.
  */
 export function ListingCard({ listing, showStatus = false }: { listing: ListingCardType; showStatus?: boolean }) {
@@ -23,6 +26,9 @@ export function ListingCard({ listing, showStatus = false }: { listing: ListingC
   const [preview, setPreview] = useState(false);
   const pressTimer = useRef<number | null>(null);
   const longPressed = useRef(false);
+  const { user } = useAuth();
+  const viewed = useViewedIds(user?.id ?? null);
+  const seen = viewed.has(listing.id) && listing.userId !== user?.id;
   const cover = broken ? undefined : mediaUrl(listing.coverUrl);
   const isPro = listing.seller?.accountType === "professionnel";
   const negotiable = listing.priceType === "negociable";
@@ -52,7 +58,7 @@ export function ListingCard({ listing, showStatus = false }: { listing: ListingC
   };
 
   return (
-    <article className={`card card-hover ${styles.card} ${listing.isBoosted ? styles.boosted : ""}`} data-testid="listing-card">
+    <article className={`card card-hover ${styles.card} ${listing.isBoosted ? styles.boosted : ""}`} data-testid="listing-card" data-seen={seen ? "true" : undefined}>
       <div className={styles.frame}>
       <Link href={`/annonces/${listing.id}`} className={styles.media} aria-label={listing.title} onPointerDown={pressStart} onPointerUp={pressEnd} onPointerLeave={pressEnd} onPointerCancel={pressEnd} onClick={onClick}>
         {cover ? (
@@ -64,10 +70,11 @@ export function ListingCard({ listing, showStatus = false }: { listing: ListingC
             <span>Pas de photo</span>
           </div>
         )}
-        {(listing.isUrgent || listing.isBoosted) && (
+        {(listing.isUrgent || listing.isBoosted || seen) && (
           <div className={styles.tags}>
             {listing.isBoosted && <span className={`${styles.tag} ${styles.tagBoosted}`}>À la une</span>}
             {listing.isUrgent && <span className={`${styles.tag} ${styles.tagUrgent}`}>Urgent</span>}
+            {seen && <span className={`${styles.tag} ${styles.tagSeen}`} data-testid="card-seen" title="Vous avez déjà consulté cette annonce">Déjà vu</span>}
           </div>
         )}
         {listing.photosCount > 1 && (
@@ -77,10 +84,6 @@ export function ListingCard({ listing, showStatus = false }: { listing: ListingC
             <span className="sr-only"> photos</span>
           </span>
         )}
-        <span className={styles.pricePill} data-testid="card-price">
-          {priceLabel}
-          {negotiable && <span className={styles.negotiable}>à débattre</span>}
-        </span>
       </Link>
       <div className={styles.fav}>
         <FavoriteButton listingId={listing.id} compact />
@@ -90,6 +93,10 @@ export function ListingCard({ listing, showStatus = false }: { listing: ListingC
         <Link href={`/annonces/${listing.id}`} className={styles.title} onPointerDown={pressStart} onPointerUp={pressEnd} onPointerLeave={pressEnd} onPointerCancel={pressEnd} onClick={onClick}>
           {listing.title}
         </Link>
+        <div className={styles.price} data-testid="card-price">
+          {priceLabel}
+          {negotiable && <span className={styles.negotiable}>à débattre</span>}
+        </div>
         {hasMeta && (
           <div className={styles.meta}>
             {isPro && <span className={styles.pro}>Pro</span>}

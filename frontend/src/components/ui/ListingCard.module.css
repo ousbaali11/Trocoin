@@ -1,8 +1,8 @@
 /*
  * Carte d'annonce « fiche » Trocoin (docs/design-system.md §5) : cadre blanc arrondi 16 px avec
- * 6 px de marge autour de la photo carrée (coins 12 px), prix en pilule posée en bas à gauche de
- * la photo, cœur rond à cheval sur le bas droit du cadre photo, étiquettes en haut à gauche,
- * puis titre 15 px sur deux lignes, ligne Pro / état / note, et « lieu · date » en pied.
+ * 6 px de marge autour de la photo carrée (coins 12 px), étiquettes en haut à gauche, cœur rond à
+ * cheval sur le bas droit du cadre photo, puis titre 15 px sur deux lignes, prix sous la photo dans
+ * le bloc de texte (plus d'incrustation sur l'image), ligne Pro / état / note, et « lieu · date » en pied.
  */
 .card {
   /* 5 px + bordure 1 px = cadre visible de 6 px autour de la photo ; min-width 0 pour ne jamais élargir une colonne de grille */
@@ -79,24 +79,23 @@
 .tagBoosted::before {
   background: var(--ochre);
 }
-/* Prix posé sur la photo, en Fraunces */
-.pricePill {
-  position: absolute;
-  left: 8px;
-  bottom: 8px;
-  display: inline-flex;
+.tagSeen::before {
+  background: var(--ink-muted);
+}
+.tagSeen {
+  color: var(--ink-soft);
+}
+/* Prix sous la photo, dans le bloc de texte (Fraunces, encre) — plus d'incrustation sur l'image */
+.price {
+  margin-top: 4px;
+  display: flex;
   align-items: baseline;
   gap: 5px;
-  max-width: calc(100% - 52px);
-  padding: 4px 10px;
-  border-radius: var(--radius-pill);
-  background: var(--white);
   color: var(--ink);
   font-family: var(--font-display);
-  font-size: 1rem;
-  font-weight: 600;
+  font-size: 1.05rem;
+  font-weight: 700;
   line-height: 1.2;
-  box-shadow: 0 1px 3px rgba(31, 41, 51, 0.18);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

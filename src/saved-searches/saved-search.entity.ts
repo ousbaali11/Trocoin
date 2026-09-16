@@ -11,6 +11,8 @@ export interface SavedSearchQuery {
   condition?: string[];
   delivery?: boolean;
   seller_type?: 'particulier' | 'professionnel';
+  /** « Suivre ce vendeur » : alerte sur les nouvelles annonces d'un vendeur donné */
+  seller?: string;
   lat?: number;
   lng?: number;
   radius?: number;

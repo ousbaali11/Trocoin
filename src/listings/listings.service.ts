@@ -13,6 +13,7 @@ import { computeCompleteness } from './listing-completeness';
 import { FieldSchema, getSchemaForSlugs, validateAttributes } from '../categories/category-schemas';
 import { Category } from '../categories/category.entity';
 import { approximateFromPostalCode, boundingBox, haversineKm, isWithinFrance } from '../common/geo/france-geo';
+import { adminLocationFromPostalCode, regionPostalPrefixes } from '../common/geo/france-admin';
 import { deleteUploadedFile } from '../common/upload/image-upload';
 import { GRANDES_VILLES, NB_SUGGESTIONS, NB_VILLES } from './discover-data';
 import { Favorite } from '../favorites/favorite.entity';
@@ -528,6 +529,8 @@ export class ListingsService {
       isBoosted: !!listing.boostedUntil && new Date(listing.boostedUntil).getTime() > now,
       isUrgent: !!listing.urgentUntil && new Date(listing.urgentUntil).getTime() > now,
       completeness: computeCompleteness(listing, photos.length, schema || []),
+      // Fil d'Ariane « Région › Département › Ville » (dérivé du code postal, jamais de l'adresse exacte)
+      location: adminLocationFromPostalCode(listing.postalCode),
     };
   }
 
@@ -632,6 +635,12 @@ export class ListingsService {
     const order = new Map(views.map((v, i) => [v.listingId, i]));
     listings.sort((a, b) => order.get(a.id)! - order.get(b.id)!);
     return this.toCards(listings);
+  }
+
+  /** Identifiants des annonces déjà consultées (badge « Déjà vu » sur les cartes de résultats). */
+  async historyIds(userId: string, limit = 200): Promise<string[]> {
+    const views = await this.viewsRepo.find({ where: { userId }, order: { viewedAt: 'DESC' }, take: limit });
+    return views.map((v) => v.listingId);
   }
 
   async clearHistory(userId: string) {
@@ -792,6 +801,14 @@ export class ListingsService {
     };
     if (query.city) orDelivery('LOWER(l.city) LIKE :city', { city: `%${escapeLike(query.city.toLowerCase())}%` });
     if (query.postal_code) orDelivery('l.postalCode LIKE :cp', { cp: `${query.postal_code}%` });
+    if (query.region) {
+      // Région administrative = liste de préfixes de code postal (fil d'Ariane des fiches)
+      const prefixes = regionPostalPrefixes(query.region);
+      if (prefixes.length === 0) return { items: [], total: 0, page, pageSize };
+      const sql = prefixes.map((_, i) => `l.postalCode LIKE :reg${i}`).join(' OR ');
+      const params = Object.fromEntries(prefixes.map((p, i) => [`reg${i}`, `${p}%`]));
+      orDelivery(`(${sql})`, params);
+    }
     if (query.seller) qb.andWhere('l.userId = :sellerId', { sellerId: query.seller });
     if (query.seller_type) qb.andWhere('l.userId IN (SELECT CAST(u.id AS varchar) FROM users u WHERE u."accountType" = :sellerType)', { sellerType: query.seller_type });
     if (query.q) {

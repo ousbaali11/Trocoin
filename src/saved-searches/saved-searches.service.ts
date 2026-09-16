@@ -26,7 +26,7 @@ export class SavedSearchesService {
       throw new BadRequestException(`Vous avez atteint la limite de ${MAX_SAVED_SEARCHES} recherches sauvegardées.`);
     }
     const q = dto.query;
-    if (!q.q && !q.category && !q.city && !q.postal_code && q.lat === undefined) {
+    if (!q.q && !q.category && !q.city && !q.postal_code && q.lat === undefined && !q.seller) {
       throw new BadRequestException('Une recherche sauvegardée doit contenir au moins un critère.');
     }
     return this.savedRepo.save(
@@ -76,6 +76,7 @@ export class SavedSearchesService {
       condition: q.condition,
       delivery: q.delivery ? 'true' : undefined,
       seller_type: q.seller_type,
+      seller: q.seller,
       lat: q.lat,
       lng: q.lng,
       radius: q.radius,

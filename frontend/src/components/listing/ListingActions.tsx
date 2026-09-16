@@ -6,11 +6,12 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast-context";
-import { formatEuros, REPORT_REASON_LABELS } from "@/lib/format";
+import { formatEuros } from "@/lib/format";
 import type { ListingDetail, Quote } from "@/lib/types";
 import { FavoriteButton } from "@/components/ui/FavoriteButton";
 import { Modal } from "@/components/ui/Modal";
 import { ShareMenu } from "@/components/ui/ShareMenu";
+import { ReportListingButton } from "./ReportListingButton";
 
 export function ListingActions({ listing }: { listing: ListingDetail }) {
   const { user, requireAuth } = useAuth();
@@ -25,9 +26,6 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
   const [address, setAddress] = useState({ name: "", line1: "", line2: "", postalCode: "", city: "", phone: "" });
   const setAddr = (k: keyof typeof address, v: string) => setAddress((a) => ({ ...a, [k]: v }));
   const addressOk = delivery === "main_propre" || (address.name.trim().length >= 2 && address.line1.trim().length >= 3 && /^\d{5}$/.test(address.postalCode) && address.city.trim().length >= 1);
-  const [reportOpen, setReportOpen] = useState(false);
-  const [reportReason, setReportReason] = useState("arnaque");
-  const [reportDetails, setReportDetails] = useState("");
   const [busy, setBusy] = useState(false);
   const isOwner = user?.id === listing.userId;
   const active = listing.status === "en_ligne";
@@ -77,20 +75,6 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
     }
   };
 
-  const report = async () => {
-    if (!requireAuth(`/annonces/${listing.id}`)) return;
-    setBusy(true);
-    try {
-      await api("/reports", { method: "POST", body: { listingId: listing.id, reason: reportReason, details: reportDetails.trim() || undefined } });
-      toast("Merci, votre signalement a été transmis à notre équipe.", "success");
-      setReportOpen(false);
-    } catch (e) {
-      toast((e as Error).message, "error");
-    } finally {
-      setBusy(false);
-    }
-  };
-
   if (isOwner) {
     return (
       <div className="card stack">
@@ -125,9 +109,7 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
       <div className="row" style={{ justifyContent: "space-between" }}>
         <FavoriteButton listingId={listing.id} />
         <ShareMenu title={listing.title} text="Regarde cette annonce sur Trocoin" compact />
-        <button className="btn btn-ghost btn-sm" onClick={() => (user ? setReportOpen(true) : requireAuth(`/annonces/${listing.id}`))} style={{ color: "var(--brick)" }}>
-          Signaler
-        </button>
+        <ReportListingButton listingId={listing.id} />
       </div>
 
       <Modal open={contactOpen} onClose={() => setContactOpen(false)} title="Écrire au vendeur">
@@ -188,23 +170,6 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
             </div>
           </>
         )}
-      </Modal>
-
-      <Modal open={reportOpen} onClose={() => setReportOpen(false)} title="Signaler cette annonce">
-        <div className="field">
-          <label htmlFor="reason">Motif</label>
-          <select id="reason" className="select" value={reportReason} onChange={(e) => setReportReason(e.target.value)}>
-            {Object.entries(REPORT_REASON_LABELS).filter(([k]) => k !== "harcelement").map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
-        </div>
-        <div className="field">
-          <label htmlFor="details">Précisions (facultatif)</label>
-          <textarea id="details" className="textarea" value={reportDetails} onChange={(e) => setReportDetails(e.target.value)} maxLength={2000} style={{ minHeight: 90 }} />
-        </div>
-        <div className="row" style={{ justifyContent: "flex-end" }}>
-          <button className="btn btn-outline" onClick={() => setReportOpen(false)}>Annuler</button>
-          <button className="btn btn-danger" onClick={report} disabled={busy}>Envoyer le signalement</button>
-        </div>
       </Modal>
     </div>
   );

@@ -117,10 +117,12 @@ test('tri par prix croissant puis décroissant : toute la liste est ordonnée', 
   await expect.poll(async () => sorted(await prices(), -1), { message: 'prix décroissants' }).toBe(true);
 });
 
-test("carte d'annonce « fiche » Trocoin : prix en pilule sur la photo, cœur à cheval sur le cadre, titre 15 px, lieu · date en pied", async ({ page }) => {
+test("carte d'annonce « fiche » Trocoin : prix sous la photo dans le bloc de texte, cœur à cheval sur le cadre, titre 15 px, lieu · date en pied", async ({ page }) => {
   await page.goto('/recherche');
   const card = page.locator('article').filter({ hasText: L.vtt.title }).first();
   await expect(card).toBeVisible();
+  // Les mesures attendent la fin de l'animation d'apparition des cartes (translation + léger agrandissement)
+  await card.evaluate((el) => Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished)));
   const style = (sel: string) => card.locator(sel).first().evaluate((el) => {
     const cs = getComputedStyle(el);
     return { size: cs.fontSize, weight: cs.fontWeight, color: cs.color, family: cs.fontFamily };
@@ -130,7 +132,7 @@ test("carte d'annonce « fiche » Trocoin : prix en pilule sur la photo, cœur �
   const title = await style('a[class*="title"]');
   expect([title.size, title.weight, title.color]).toEqual(['15.04px', '600', ink]);
   expect(title.family.toLowerCase()).toContain('public sans');
-  // Prix : pilule blanche posée sur la photo, en Fraunces
+  // Prix : sous la photo, dans le bloc de texte après le titre (plus d'incrustation sur l'image), en Fraunces
   const price = card.getByTestId('card-price');
   await expect(price).toHaveText('890 €');
   const priceStyle = await style('[data-testid="card-price"]');
@@ -138,9 +140,10 @@ test("carte d'annonce « fiche » Trocoin : prix en pilule sur la photo, cœur �
   expect(priceStyle.color).toBe(ink);
   const media = (await card.locator('a[class*="media"]').boundingBox())!;
   const pb = (await price.boundingBox())!;
-  expect(pb.x).toBeGreaterThanOrEqual(media.x + 6);
-  expect(pb.y + pb.height).toBeLessThanOrEqual(media.y + media.height - 6);
-  expect(pb.y).toBeGreaterThan(media.y + media.height / 2);
+  const tb = (await card.locator('a[class*="title"]').boundingBox())!;
+  expect(pb.y).toBeGreaterThanOrEqual(media.y + media.height); // entièrement hors de la photo
+  expect(pb.y).toBeGreaterThanOrEqual(tb.y + tb.height - 1); // après le titre
+  expect(await card.locator('a[class*="media"] [data-testid="card-price"]').count()).toBe(0);
   // Cœur : 32 px, à cheval sur le bord bas droit du cadre photo (centre à ± 4 px du bord bas)
   const fav = card.getByRole('button', { name: 'Ajouter aux favoris' });
   const heart = (await fav.boundingBox())!;

@@ -10,14 +10,14 @@ export const ListingsMapDynamic = dynamic(() => import("./ListingsMap").then((m)
 });
 const ApproxMapInner = dynamic(() => import("./ListingsMap").then((m) => m.ApproxMap), {
   ssr: false,
-  loading: () => <div className="skeleton" style={{ height: 260 }} />,
+  loading: () => <div className="skeleton" style={{ height: 320 }} />,
 });
 
 /**
- * Carte de la page d'annonce : le code Leaflet et les tuiles (≈ 200 Ko) ne sont demandés que
- * lorsque la section approche de l'écran, pour ne pas peser sur le chargement initial.
+ * Carte de la page d'annonce (et de l'aperçu avant publication) : le code Leaflet et les tuiles
+ * (≈ 200 Ko) ne sont demandés que lorsque la section approche de l'écran.
  */
-export function ApproxMapDynamic({ latitude, longitude }: { latitude: number; longitude: number }) {
+export function ApproxMapDynamic({ latitude, longitude, height = 320 }: { latitude: number; longitude: number; height?: number }) {
   const ref = useRef<HTMLDivElement>(null);
   const [near, setNear] = useState(false);
   useEffect(() => {
@@ -32,5 +32,9 @@ export function ApproxMapDynamic({ latitude, longitude }: { latitude: number; lo
     io.observe(el);
     return () => io.disconnect();
   }, []);
-  return <div ref={ref} style={{ minHeight: 260 }}>{near ? <ApproxMapInner latitude={latitude} longitude={longitude} /> : <div className="skeleton" style={{ height: 260 }} aria-hidden="true" />}</div>;
+  return (
+    <div ref={ref} style={{ minHeight: height, borderRadius: 12, overflow: "hidden" }} data-testid="approx-map">
+      {near ? <ApproxMapInner latitude={latitude} longitude={longitude} height={height} /> : <div className="skeleton" style={{ height }} aria-hidden="true" />}
+    </div>
+  );
 }

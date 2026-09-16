@@ -118,6 +118,12 @@ export class ListingsController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Get('history/ids')
+  historyIds(@Req() req: any) {
+    return this.listingsService.historyIds(req.user.userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get('history')
   history(@Req() req: any) {
     return this.listingsService.history(req.user.userId);

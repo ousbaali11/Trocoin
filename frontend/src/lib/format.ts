@@ -58,6 +58,18 @@ export function postedAt(iso?: string | null, now: Date = new Date()): string {
   return a.date;
 }
 
+/** Ancienneté d'une annonce en jours entiers : « aujourd'hui », « hier », « il y a 12 jours », puis la date au-delà de 60 jours. */
+export function daysAgo(iso?: string | null, now: Date = new Date()): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const days = Math.max(0, Math.floor((now.getTime() - d.getTime()) / 86_400_000));
+  if (days === 0) return "aujourd'hui";
+  if (days === 1) return "hier";
+  if (days <= 60) return `il y a ${days} jours`;
+  return `le ${formatDate(iso)}`;
+}
+
 export function memberSince(iso?: string | null): string {
   if (!iso) return "";
   return new Intl.DateTimeFormat("fr-FR", { month: "long", year: "numeric" }).format(new Date(iso));
