@@ -373,3 +373,19 @@
   color: var(--a-muted);
   font-size: 0.88rem;
 }
+
+/* Navigation regroupée par domaine (audit admin, étape 3) */
+.admin-nav-group {
+  margin-top: 10px;
+}
+.admin-nav-title {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  padding: 6px 12px 2px;
+}
+.admin-nav-group:first-of-type {
+  margin-top: 0;
+}

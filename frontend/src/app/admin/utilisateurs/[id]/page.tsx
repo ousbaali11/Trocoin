@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { HardDeleteDialog } from "@/components/admin/HardDeleteDialog";
 import { api } from "@/lib/api";
 import { useToast } from "@/lib/toast-context";
 import { useConfirm } from "@/lib/confirm-context";
@@ -42,9 +43,11 @@ export default function AdminUserPage() {
   const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
   const confirm = useConfirm();
+  const router = useRouter();
   const [u, setU] = useState<AdminUserDetail | null>(null);
   const [form, setForm] = useState({ displayName: "", city: "", postalCode: "", accountType: "particulier", identityVerified: false, shopName: "", siret: "" });
   const [reason, setReason] = useState("");
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [temp, setTemp] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -135,6 +138,29 @@ export default function AdminUserPage() {
             <dt>Signalements émis</dt><dd>{u.reportsByCount}</dd>
             <dt>Signalements reçus</dt><dd>{u.reportsAgainst.length}</dd>
           </dl>
+          <h2 className="h3" style={{ color: "var(--a-danger)" }}>Suppression définitive</h2>
+          <p className="small" style={{ margin: "0 0 8px", color: "var(--a-muted)" }}>
+            Irréversible : les transactions en cours sont annulées et remboursées, les annonces retirées, les données personnelles effacées (le numéro redevient utilisable). Différent de la suspension, qui est réversible. Motif obligatoire, action journalisée.
+          </p>
+          <button className="a-btn danger" disabled={busy || u.deleted || u.accountType === "admin"} onClick={() => setDeleteOpen(true)} data-testid="delete-user">Supprimer définitivement ce compte</button>
+          {u.accountType === "admin" && !u.deleted && <p className="small" style={{ margin: "6px 0 0", color: "var(--a-muted)" }}>Rétrogradez d&apos;abord ce compte administrateur.</p>}
+          <HardDeleteDialog
+            open={deleteOpen}
+            onClose={() => setDeleteOpen(false)}
+            title="Supprimer définitivement ce compte ?"
+            text={`${u.displayName} (${u.phoneNumber}) : ses transactions en cours seront annulées et remboursées, ses annonces retirées et ses données personnelles effacées. Cette action ne peut pas être annulée.`}
+            confirmLabel="Supprimer le compte"
+            onConfirm={async (reason) => {
+              try {
+                const r = await api<{ refundedTransactions: string[] }>(`/admin/users/${u.id}`, { method: "DELETE", body: { reason, confirm: "SUPPRIMER" } });
+                toast(`Compte supprimé${r.refundedTransactions.length ? ` (${r.refundedTransactions.length} transaction(s) remboursée(s))` : ""}.`, "success");
+                setDeleteOpen(false);
+                router.push("/admin/utilisateurs");
+              } catch (e) {
+                toast((e as Error).message, "error");
+              }
+            }}
+          />
         </section>
 
         <section className="a-panel">

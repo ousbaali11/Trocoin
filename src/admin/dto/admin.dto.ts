@@ -136,11 +136,21 @@ export class AdminTransactionsQueryDto extends AdminPaginationDto {
 }
 
 export class AdminResolveTransactionDto {
-  @IsIn(['rembourser', 'liberer'])
-  decision: 'rembourser' | 'liberer';
+  /** rembourser (annulation de l'autorisation ou remboursement), liberer (capture, vendeur payé), annuler (vente annulée avant envoi, acheteur remboursé) */
+  @IsIn(['rembourser', 'liberer', 'annuler'])
+  decision: 'rembourser' | 'liberer' | 'annuler';
 
   @IsString() @MinLength(5) @MaxLength(1000)
   note: string;
+}
+
+/** Suppressions définitives : motif obligatoire et confirmation explicite (le mot SUPPRIMER saisi dans l'interface). */
+export class AdminHardDeleteDto {
+  @IsString() @MinLength(5) @MaxLength(500)
+  reason: string;
+
+  @IsIn(['SUPPRIMER'])
+  confirm: 'SUPPRIMER';
 }
 
 export class AdminAuditQueryDto extends AdminPaginationDto {

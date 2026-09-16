@@ -24,6 +24,7 @@ import {
   AdminReportsQueryDto,
   AdminResolveReportDto,
   AdminResolveTransactionDto,
+  AdminHardDeleteDto,
   AdminTransactionsQueryDto,
   AdminUpdateListingDto,
   AdminUpdateUserDto,
@@ -88,9 +89,16 @@ export class AdminController {
     return this.admin.updateListing(this.ctx(req), id, dto);
   }
 
+  /** Suppression définitive d'une annonce : motif + confirmation explicite (corps), journalisée. */
   @Delete('listings/:id')
-  deleteListing(@Req() req: any, @Param('id', ParseUUIDPipe) id: string, @Query('reason') reason?: string) {
-    return this.admin.deleteListing(this.ctx(req), id, reason?.slice(0, 500));
+  deleteListing(@Req() req: any, @Param('id', ParseUUIDPipe) id: string, @Body() dto: AdminHardDeleteDto) {
+    return this.admin.deleteListing(this.ctx(req), id, dto.reason);
+  }
+
+  /** Suppression définitive d'un compte (particulier ou professionnel) : motif + confirmation explicite, journalisée. */
+  @Delete('users/:id')
+  deleteUser(@Req() req: any, @Param('id', ParseUUIDPipe) id: string, @Body() dto: AdminHardDeleteDto) {
+    return this.admin.deleteUser(this.ctx(req), id, dto.reason);
   }
 
   // Reports
@@ -110,6 +118,13 @@ export class AdminController {
     return this.admin.listTransactions(query);
   }
 
+  /** Fiche détaillée : parties, annonce, adresse de livraison, expédition, échéances, journal d'audit lié. */
+  @Get('transactions/:id')
+  transaction(@Param('id', ParseUUIDPipe) id: string) {
+    return this.admin.getTransaction(id);
+  }
+
+  /** Décision admin sur une transaction en séquestre, expédiée ou en litige (fraude, conflit) : rembourser, libérer, annuler. */
   @Post('transactions/:id/resolve')
   resolveTransaction(@Req() req: any, @Param('id', ParseUUIDPipe) id: string, @Body() dto: AdminResolveTransactionDto) {
     return this.admin.resolveTransaction(this.ctx(req), id, dto);

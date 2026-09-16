@@ -433,13 +433,17 @@ export class UsersService {
    * transactions et avis sont conservés (obligation comptable) mais ne
    * pointent plus vers des données personnelles.
    */
-  async deleteAccount(userId: string): Promise<void> {
+  /**
+   * Suppression définitive (anonymisation) : par le membre lui-même (RGPD) ou par un administrateur
+   * (`force` : les transactions en cours ont déjà été traitées par l'admin avant l'appel).
+   */
+  async deleteAccount(userId: string, opts: { force?: boolean } = {}): Promise<void> {
     const user = await this.findById(userId);
     if (!user) throw new NotFoundException('Utilisateur introuvable.');
     if (user.accountType === 'admin') {
       throw new BadRequestException('Un compte administrateur doit être rétrogradé avant suppression.');
     }
-    const openTx = await this.transactionsRepo
+    const openTx = opts.force ? 0 : await this.transactionsRepo
       .createQueryBuilder('t')
       .where('(t.buyerId = :userId OR t.sellerId = :userId)', { userId })
       .andWhere('t.status IN (:...statuses)', { statuses: ['sequestre', 'livree', 'litige'] })

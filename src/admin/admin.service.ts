@@ -12,6 +12,7 @@ import { Transaction } from '../payments/transaction.entity';
 import { Report } from '../reports/report.entity';
 import { Review } from '../reviews/review.entity';
 import { User } from '../users/user.entity';
+import { UsersService } from '../users/users.service';
 import { AdminAuditLog } from './admin-audit-log.entity';
 import { PagesService } from '../pages/pages.service';
 import { AuthService } from '../auth/auth.service';
@@ -54,6 +55,7 @@ export class AdminService {
     private settings: SettingsService,
     private pages: PagesService,
     private auth: AuthService,
+    private usersService: UsersService,
   ) {}
 
   // ---------------------------------------------------- réglages / formules
@@ -344,11 +346,11 @@ export class AdminService {
     return this.listingsRepo.findOne({ where: { id } });
   }
 
-  async deleteListing(ctx: AdminContext, id: string, reason?: string) {
+  async deleteListing(ctx: AdminContext, id: string, reason: string) {
     const listing = await this.listingsRepo.findOne({ where: { id } });
     if (!listing) throw new NotFoundException('Annonce introuvable.');
     const result = await this.listingsService.deleteListing(listing);
-    await this.audit(ctx, 'listing.delete', 'listing', id, { title: listing.title, ownerId: listing.userId, reason, hardDeleted: result.deleted });
+    await this.audit(ctx, 'listing.delete', 'listing', id, { title: listing.title, ownerId: listing.userId, reason, hardDeleted: result.deleted, keptForTransactions: !result.deleted });
     await this.notifications.notify(listing.userId, {
       type: 'moderation',
       title: 'Votre annonce a été retirée',
@@ -472,9 +474,71 @@ export class AdminService {
   }
 
   async resolveTransaction(ctx: AdminContext, id: string, dto: AdminResolveTransactionDto) {
+    const before = await this.transactionsRepo.findOne({ where: { id } });
     const tx = await this.paymentsService.resolveDispute(id, dto.decision, dto.note);
-    await this.audit(ctx, 'transaction.resolve', 'transaction', id, { decision: dto.decision, note: dto.note, amount: tx.amount });
+    // Action journalisée selon le contexte : arbitrage d'un litige, ou décision forcée hors litige (fraude, conflit)
+    const action = before?.status === 'litige' ? 'transaction.resolve' : dto.decision === 'rembourser' ? 'transaction.force_refund' : dto.decision === 'liberer' ? 'transaction.force_capture' : 'transaction.cancel';
+    await this.audit(ctx, action, 'transaction', id, { decision: dto.decision, note: dto.note, amount: tx.amount, fromStatus: before?.status, toStatus: tx.status, buyerId: tx.buyerId, sellerId: tx.sellerId });
     const { handoverCode, ...safe } = tx;
     return safe;
+  }
+
+  /** Fiche détaillée d'une transaction : parties, annonce, expédition, échéances, journal lié. */
+  async getTransaction(id: string) {
+    const tx = await this.transactionsRepo.findOne({ where: { id } });
+    if (!tx) throw new NotFoundException('Transaction introuvable.');
+    const [buyer, seller, listing, shipment, audit] = await Promise.all([
+      this.usersRepo.findOne({ where: { id: tx.buyerId } }),
+      this.usersRepo.findOne({ where: { id: tx.sellerId } }),
+      this.listingsRepo.findOne({ where: { id: tx.listingId } }),
+      this.paymentsService.shipmentOf(tx.id),
+      this.auditRepo.find({ where: { targetType: 'transaction', targetId: tx.id }, order: { createdAt: 'DESC' }, take: 20 }),
+    ]);
+    const party = (u: User | null) => (u ? { id: u.id, displayName: u.displayName, phoneNumber: u.phoneNumber, email: u.email, accountType: u.accountType, suspended: !!u.suspendedAt, deleted: !!u.deletedAt, ratingAvg: u.ratingAvg, ratingCount: u.ratingCount } : null);
+    const { handoverCode, ...safe } = tx;
+    const open = ['sequestre', 'livree', 'litige'].includes(tx.status);
+    const refundableAfterCapture = tx.status === 'confirme' && !!tx.autoResolution && !!tx.disputeAllowedUntil && new Date(tx.disputeAllowedUntil).getTime() > Date.now();
+    // Décisions possibles maintenant (mêmes règles que PaymentsService.resolveDispute)
+    const decisions = [...(open || refundableAfterCapture ? ['rembourser'] : []), ...(open ? ['liberer'] : []), ...(open && !tx.confirmedAt ? ['annuler'] : [])];
+    return {
+      ...safe,
+      hasHandoverCode: !!handoverCode,
+      decisions,
+      buyer: party(buyer),
+      seller: party(seller),
+      listing: listing ? { id: listing.id, title: listing.title, price: listing.price, status: listing.status } : null,
+      shipment: shipment ? { status: shipment.status, carrier: shipment.carrier, mode: shipment.mode, trackingNumber: shipment.trackingNumber, trackingUrl: shipment.trackingUrl, priceCents: shipment.priceCents, createdAt: shipment.createdAt } : null,
+      audit: audit.map((e) => ({ id: e.id, action: e.action, adminId: e.adminId, details: e.details, createdAt: e.createdAt })),
+    };
+  }
+
+  /**
+   * Suppression définitive d'un compte par un administrateur : les transactions encore ouvertes sont
+   * d'abord annulées avec remboursement de l'acheteur (le compte disparaît, personne ne doit rester
+   * bloqué), les annonces sont retirées, puis le compte est anonymisé (même routine que l'auto-suppression
+   * RGPD). Irréversible : motif obligatoire, confirmation explicite côté interface, journal d'audit.
+   */
+  async deleteUser(ctx: AdminContext, id: string, reason: string) {
+    const user = await this.usersRepo.findOne({ where: { id } });
+    if (!user) throw new NotFoundException('Utilisateur introuvable.');
+    if (user.deletedAt) throw new BadRequestException('Ce compte est déjà supprimé.');
+    if (id === ctx.adminId) throw new BadRequestException('Vous ne pouvez pas supprimer votre propre compte depuis la console.');
+    if (user.accountType === 'admin') throw new BadRequestException('Rétrogradez ce compte administrateur avant de le supprimer.');
+    const open = await this.transactionsRepo
+      .createQueryBuilder('t')
+      .where('(t.buyerId = :id OR t.sellerId = :id)', { id })
+      .andWhere('t.status IN (:...statuses)', { statuses: ['sequestre', 'livree', 'litige'] })
+      .getMany();
+    const cancelled: string[] = [];
+    for (const tx of open) {
+      const note = `Compte ${tx.sellerId === id ? 'vendeur' : 'acheteur'} supprimé par la modération : ${reason}`;
+      await this.paymentsService.resolveDispute(tx.id, 'rembourser', note);
+      await this.audit(ctx, 'transaction.force_refund', 'transaction', tx.id, { decision: 'rembourser', note, cause: 'user.delete', deletedUserId: id, amount: tx.amount });
+      cancelled.push(tx.id);
+    }
+    await this.auth.revokeAllSessions(id);
+    await this.usersService.deleteAccount(id, { force: true });
+    await this.audit(ctx, 'user.delete', 'user', id, { reason, displayName: user.displayName, accountType: user.accountType, refundedTransactions: cancelled, listingsHidden: true });
+    return { deleted: true, refundedTransactions: cancelled };
   }
 }

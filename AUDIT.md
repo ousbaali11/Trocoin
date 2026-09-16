@@ -2015,3 +2015,81 @@ rappels, action par défaut) resteraient identiques après la bascule.
   de plateforme lève cette limite.
 
 Déploiement : CI verte (migration `SequestreEcheances` jouée sur Postgres 16 puis Render), API en **1.17.0** (`/health`), tâche `runEscrowSchedule` active toutes les 15 minutes, `GET /admin/transactions?due=1` réservé aux administrateurs (401 anonyme), vérifiés le 16 septembre 2026.
+
+## 38. PayPal (phase 1 : conception) et audit-renforcement du panneau admin — 16 septembre 2026
+
+### Partie A — PayPal, phase 1 (documentation seule, aucun code de paiement)
+
+`docs/paypal-integration.md` (sources PayPal et Stripe lues le jour même) :
+
+- **Faits relevés** : Orders API v2 en `intent=AUTHORIZE` → autorisation valable 29 jours, capture
+  garantie 3 jours (« honor period »), ré-autorisation possible ; PayPal Commerce Platform (multiparty)
+  → approbation de la plateforme par PayPal + onboarding de chaque vendeur (Partner Referrals) ;
+  Payouts → compte professionnel, approbation, solde à alimenter ; politique d'utilisation acceptable
+  : encaisser pour des tiers sans ce cadre est interdit. Côté Stripe : PayPal disponible pour les
+  comptes français, compatible Connect en destination charges (notre modèle), capture différée
+  10 + 10 jours, activation sur candidature dans le Dashboard Stripe.
+- **Options** : 0 = PayPal *via Stripe* (recommandée : même séquestre, mêmes versements Connect, même
+  fiche transaction, `captureBefore` déjà lu chez le fournisseur) ; A = Commerce Platform (chaque
+  vendeur connecte son PayPal, solide mais double onboarding) ; B = PayPal propre + Stripe Connect
+  (**déconseillée** : contraire aux conditions PayPal, fonds hors Stripe) ; C = Payouts (déconseillée).
+- **Recommandation** : option 0 d'abord, puis A seulement si PayPal-via-Stripe n'est pas accordé ou
+  si les frais l'exigent. **Décision laissée à l'utilisateur** (compromis expliqué dans le document).
+- **À faire par l'utilisateur** : demander l'activation de PayPal dans le Dashboard Stripe (option 0)
+  ou créer l'application sandbox PayPal (client ID / secret, comptes sandbox acheteur / vendeur,
+  webhooks) pour l'option A. Les identifiants ne sont jamais à me transmettre : variables Render.
+- **Architecture préparée** : `paymentProvider` par transaction, `PAYMENT_PROVIDERS` (plusieurs
+  fournisseurs actifs), `paymentMethod` choisi au paiement, contrat `IPaymentProvider` conservé
+  (`MockPaymentProvider` et Stripe intacts), point d'extension `reauthorize`, tests sur faux serveur.
+  Rien de tout cela n'est codé tant que les identifiants n'existent pas.
+
+### Partie B — panneau admin
+
+**Étape 1, audit réel** (`docs/audit-admin.md`) : chaque écran et chaque route exercés sur la pile
+locale par un script qui vérifie l'effet réel côté membre. **29 fonctions OK sur 32, 3 absentes** :
+pas de suppression définitive d'un compte par l'admin, confirmation faible pour supprimer une annonce,
+décisions impossibles hors litige, pas de fiche détaillée de transaction ; navigation à plat (8
+entrées). Observation annexe : « urgent » et « whatsapp » ne déclenchent pas la pré-modération.
+
+**Étape 2, droits ajoutés** (API + console) :
+
+| Droit | Route | Garde-fous | Journal |
+|---|---|---|---|
+| Suppression définitive d'un compte | `DELETE /admin/users/:id` `{ reason, confirm: 'SUPPRIMER' }` | motif ≥ 5 car., mot exact, refusé pour soi-même et pour un admin ; transactions ouvertes annulées + remboursées, sessions révoquées, annonces retirées, données personnelles effacées (routine RGPD forcée) | `user.delete` + `transaction.force_refund` par transaction |
+| Suppression définitive d'une annonce | `DELETE /admin/listings/:id` (même corps ; l'ancien `?reason=` est refusé 400) | annonce liée à une vente : seulement mise en pause | `listing.delete` (`hardDeleted`, `keptForTransactions`) |
+| Décision sur toute vente ouverte | `POST /admin/transactions/:id/resolve` `rembourser \| liberer \| annuler` | note ≥ 5 car. transmise aux deux parties ; `annuler` impossible après capture ; remboursement possible après capture automatique tant que la fenêtre de litige est ouverte | `transaction.resolve` (litige) sinon `transaction.force_refund` / `force_capture` / `cancel` |
+| Fiche détaillée | `GET /admin/transactions/:id` + page `/admin/litiges/:id` | parties, annonce, adresse, étiquette, échéances, journal lié, `decisions` calculées par l'API ; code de remise jamais renvoyé | — |
+| Suspension (réversible) | inchangée, liée depuis la fiche transaction | connexion bloquée, annonces en pause, motif transmis, réactivable | `user.update` |
+
+Dialogue commun `HardDeleteDialog` (composant `Modal` du site) : motif obligatoire + saisie de
+**SUPPRIMER** (casse exacte), bouton inactif sinon. Journal : filtre `?target=` pré-rempli depuis les
+fiches ; journal lié affiché sur la fiche transaction.
+
+**Étape 3, réorganisation** : menu par domaine — Vue d'ensemble · Comptes · Annonces (annonces,
+signalements) · Transactions (compteur litiges + séquestres à échéance) · Configuration (monétisation,
+pages légales) · Traçabilité (journal). URL et thème inchangés (`docs/design-system.md` §9).
+
+### Preuves
+
+| Contrôle | Résultat |
+|---|---|
+| Script d'audit rejoué après livraison (pile locale neuve) | **34 OK / 34** (refus testés : sans mot, sans motif, soi-même) |
+| `test/phase23.e2e-spec.ts` | 3 tests (suppression de compte : garde-fous, remboursements, effets, journal ; suppression d'annonce : corps obligatoire, 404, notification ; décisions hors litige et fiche détaillée, 403 / 404) |
+| `npm test` | **148 réussis, 1 ignoré** (le test historique de suppression d'annonce mis au nouveau corps) |
+| `e2e/21-admin-droits.spec.ts` | 3 scénarios réussis (menu groupé, dialogue annonce, fiche transaction + suppression de compte + journal) |
+| Suite Playwright complète (113 scénarios) | 101 réussis, 11 ignorés, 1 échec sur le seul scénario du menu : compteur « Signalements 1 » laissé par les scénarios précédents — assertion rendue tolérante aux badges, scénario rejoué 3/3 ; suite complète rejouée par la CI |
+| Captures « après » | menu groupé (tableau de bord), fiche transaction annulée avec journal lié, fiche utilisateur avec bloc « Suppression définitive », dialogue de suppression de compte, dialogue annonce (bouton inactif sans le mot), journal filtré par cible, liste des transactions avec « Fiche détaillée » |
+| Lint / typecheck | API et front sans erreur (règle `react-hooks` : les décisions possibles sont calculées par l'API, plus de `Date.now()` au rendu) |
+
+### Compromis et questions à trancher
+
+1. **PayPal** : option 0 (via Stripe) recommandée ; option A si PayPal refuse ou pour des frais plus
+   bas. Sans identifiants, rien n'est codé. À décider : laquelle demander.
+2. **Suppression d'un compte avec ventes en cours** : implémenté comme « rembourser d'office les
+   transactions ouvertes puis effacer » (un compte frauduleux ne reste pas vivant grâce à une vente).
+   L'alternative (refuser la suppression tant qu'une vente est ouverte, comme l'auto-suppression) est
+   plus prudente pour un acheteur honnête qui attend un colis déjà expédié : à confirmer, ou à
+   restreindre aux ventes non expédiées.
+3. **Réactivation d'un compte suspendu** : les annonces restent en pause (le membre les remet en
+   ligne) — à documenter dans l'interface ou à automatiser.
+4. Pré-modération : ajouter « urgent », « whatsapp » à la liste surveillée (tour dédié).

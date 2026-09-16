@@ -227,7 +227,7 @@ describe('Messagerie, paiement séquestre, avis, signalements, alertes, admin', 
     const ok = await createListing(app, seller, { title: 'Lampe de bureau' });
     const approved = await request(server).patch(`/admin/listings/${ok.id}`).set(admin.auth).send({ title: 'Lampe de bureau (titre corrigé)' }).expect(200);
     expect(approved.body.title).toMatch(/corrigé/);
-    const del = await request(server).delete(`/admin/listings/${ok.id}?reason=Test`).set(admin.auth).expect(200);
+    const del = await request(server).delete(`/admin/listings/${ok.id}`).set(admin.auth).send({ reason: "Test : annonce de démonstration", confirm: "SUPPRIMER" }).expect(200);
     expect(del.body.deleted).toBe(true);
 
     const stats = await request(server).get('/admin/stats').set(admin.auth).expect(200);

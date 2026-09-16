@@ -327,6 +327,11 @@ export class PaymentsService {
     return result;
   }
 
+  /** Expédition (étiquette) rattachée à une transaction, pour la fiche admin. */
+  shipmentOf(transactionId: string): Promise<Shipment | null> {
+    return this.shipments.findOne({ where: { transactionId } });
+  }
+
   /** Filet de sécurité admin : transactions non résolues dont la date limite de capture approche. */
   async escrowDueSoon(now: Date = new Date()): Promise<Transaction[]> {
     const limit = new Date(now.getTime() + ESCROW_ADMIN_ALERT_HOURS * HOUR_MS);
@@ -590,11 +595,31 @@ export class PaymentsService {
 
   // ---------------------------------------------------------- administration
 
-  /** Arbitrage admin : rembourser l'acheteur ou libérer les fonds au vendeur. */
-  async resolveDispute(transactionId: string, decision: 'rembourser' | 'liberer', note: string): Promise<Transaction> {
+  /**
+   * Décision admin (litige, fraude, conflit) : rembourser l'acheteur, libérer les fonds au vendeur ou annuler
+   * la vente. Possible sur toute transaction encore ouverte (séquestre, expédiée, litige) et, pour un
+   * remboursement, sur une transaction confirmée automatiquement tant que sa fenêtre de litige est ouverte.
+   */
+  async resolveDispute(transactionId: string, decision: 'rembourser' | 'liberer' | 'annuler', note: string): Promise<Transaction> {
     const tx = await this.transactionsRepo.findOne({ where: { id: transactionId } });
     if (!tx) throw new NotFoundException('Transaction introuvable.');
-    if (tx.status !== 'litige') throw new BadRequestException('Cette transaction n\'est pas en litige.');
+    const open = ['sequestre', 'livree', 'litige'].includes(tx.status);
+    const refundableAfterCapture = tx.status === 'confirme' && !!tx.autoResolution && !!tx.disputeAllowedUntil && new Date(tx.disputeAllowedUntil).getTime() > Date.now();
+    if (!open && !(decision === 'rembourser' && refundableAfterCapture)) {
+      throw new BadRequestException(`Aucune décision possible sur une transaction "${tx.status}".`);
+    }
+    if (decision === 'annuler') {
+      if (tx.confirmedAt) throw new BadRequestException('Fonds déjà capturés : utilisez « rembourser ».');
+      await this.paymentProvider.refund(tx.providerPaymentId!);
+      tx.status = 'annulee';
+      tx.resolutionNote = note;
+      tx.resolvedAt = new Date();
+      const cancelled = await this.transactionsRepo.save(tx);
+      for (const uid of [tx.buyerId, tx.sellerId]) {
+        await this.notifications.notify(uid, { type: 'transaction', title: 'Vente annulée par Trocoin', body: `L'acheteur est intégralement remboursé. ${note}`, link: `/compte/transactions/${tx.id}` });
+      }
+      return cancelled;
+    }
     if (decision === 'rembourser') {
       // Autorisation encore ouverte : annulée ; fonds déjà capturés (échéance, réception présumée) : remboursés
       await this.paymentProvider.refund(tx.providerPaymentId!);

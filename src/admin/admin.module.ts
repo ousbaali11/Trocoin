@@ -12,6 +12,7 @@ import { Transaction } from '../payments/transaction.entity';
 import { Report } from '../reports/report.entity';
 import { Review } from '../reviews/review.entity';
 import { User } from '../users/user.entity';
+import { UsersModule } from '../users/users.module';
 import { AdminAuditLog } from './admin-audit-log.entity';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
@@ -24,6 +25,7 @@ import { AdminService } from './admin.service';
     NotificationsModule,
     CategoriesModule,
     PagesModule,
+    UsersModule,
   ],
   controllers: [AdminController],
   providers: [AdminService],

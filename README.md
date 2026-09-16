@@ -38,9 +38,9 @@ cd frontend && npm install && cp .env.example .env.local && npm run dev -- -p 30
 ## Tests
 
 ```bash
-npm test                 # 145 tests e2e (API, supertest)
+npm test                 # 148 tests e2e (API, supertest)
 npm run e2e:build        # construit l'API (dist/) et le front (next build) pour les tests navigateur
-npm run e2e              # 110 scénarios Playwright dans Chromium (desktop 1280 px + mobile 375 px) : parcours, accessibilité (axe) site + back-office, clavier, SEO
+npm run e2e              # 113 scénarios Playwright dans Chromium (desktop 1280 px + mobile 375 px) : parcours, accessibilité (axe) site + back-office, clavier, SEO
 node scripts/charge.js --api https://api.trocoin.fr --front https://www.trocoin.fr --vus 10 --minutes 3   # test de charge léger (lectures publiques)
 SOURCE_DATABASE_URL=… TARGET_DATABASE_URL=… node scripts/migrer-base.js   # copie intégrale d'une base Postgres vers une autre, preuve par comptages + empreintes (DEPLOIEMENT.md §6b) (Jest + supertest, SQLite en mémoire)
 # Les mêmes tests sur PostgreSQL (schéma créé par les migrations) :
@@ -59,7 +59,7 @@ manuel : Playwright démarre et arrête les deux serveurs (`e2e/start-api.js`, `
 ```bash
 npx playwright install chromium   # une fois
 npm run e2e:build                 # API + front (≈ 2 min)
-npm run e2e                       # 110 scénarios (≈ 4 min 30)
+npm run e2e                       # 113 scénarios (≈ 4 min 30)
 npx playwright show-report        # rapport HTML, traces et captures des échecs
 npm run e2e:ui                    # mode interactif pas à pas
 ```
@@ -90,6 +90,7 @@ la construction ET l'exécution (l'URL de l'API est figée dans le build du fron
 | `e2e/18-fiche.spec.ts` | fiche annonce complète (bureau) : fil d'Ariane à six niveaux (région, département, ville) et `BreadcrumbList`, galerie (favoris, partage, « Voir les photos » plein écran), repères de catégorie sous le titre, position du prix par rapport au marché, « Publiée aujourd'hui », « Les + de cette annonce », informations clés en grille dépliable, équipements, description « Voir plus », carte zoom 13 avec cercle visible, « Signaler l'annonce » en bas, carrousel « Ces annonces peuvent vous intéresser » ; badge « Déjà vu » (visiteur puis membre) ; « Suivre » le vendeur (alerte dans Mes recherches) |
 | `e2e/19-session.spec.ts` | rester connecté (bureau et mobile) : fermeture du navigateur puis retour avec un jeton d'accès expiré → toujours connecté, session renouvelée en silence, ancien jeton toléré 30 s sans casser la session ; « Se déconnecter » efface les deux jetons et le serveur refuse l'ancien ; double authentification demandée à la connexion par mot de passe seulement, pas au retour |
 | `e2e/20-telephone-stats.spec.ts` | téléphone au dépôt : un compte sans numéro est bloqué à l'aperçu (champ obligatoire, numéro invalide refusé) puis publie avec un mobile français enregistré sur le compte ; un compte avec numéro ne le retape pas (case « Afficher mon numéro ») ; statistiques par annonce sur Mes annonces (vues, favoris, messages, clics « Voir le numéro »), mises à jour au retour sur l'onglet, jamais publiques ; numéro masqué depuis les paramètres → bouton absent de la fiche | desktop |
+| `e2e/21-admin-droits.spec.ts` | console admin : menu regroupé par domaine (Vue d'ensemble, Comptes, Annonces, Transactions, Configuration, Traçabilité) ; suppression définitive d'une annonce (bouton inactif sans motif ni mot SUPPRIMER en majuscules, annonce en 404, entrée `listing.delete` avec le motif dans le journal filtré par cible) ; fiche détaillée d'une transaction avec annulation forcée hors litige (note transmise à l'acheteur, `transaction.cancel` dans le journal lié) puis suppression définitive du vendeur (connexion refusée, profil en 404, `user.delete` au journal) |
 
 Les pages d'inscription et de recherche vérifient en plus l'absence de défilement horizontal
 (`expectNoHorizontalOverflow`) : c'est la régression trouvée lors du tour de polish. Les données
@@ -116,8 +117,13 @@ suppression de compte.
 
 **Administration** (`/admin`, rôle admin relu en base à chaque requête) : statistiques,
 utilisateurs (suspension, rôle, badge identité), annonces (approbation, refus motivé,
-correction, retrait), signalements (traitement avec action), litiges (remboursement /
-libération), journal d'audit.
+correction, retrait, suppression définitive avec motif et saisie du mot SUPPRIMER), signalements
+(traitement avec action), transactions (fiche détaillée `/admin/litiges/:id` ; arbitrage d'un litige
+et décision forcée sur toute vente ouverte : rembourser, libérer, annuler), comptes (suspension
+réversible ; suppression définitive avec motif + SUPPRIMER, transactions ouvertes remboursées, données
+personnelles effacées), journal d'audit consultable (filtre par cible). Menu regroupé par domaine.
+Audit page par page : `docs/audit-admin.md` ; intégration PayPal (options, recommandation) :
+`docs/paypal-integration.md`.
 
 ## Phase 2 (gratuit par défaut)
 
@@ -275,6 +281,6 @@ POST /listings/:id/photos · PATCH /listings/:id/photos/order · /listings/:id/s
 /listings/:id/favorite · /conversations · /transactions (quote, ship, handover, dispute…)
 /transactions/:id/shipment (quote, relay-points, étiquette PDF, tracking — SHIPPING_PROVIDER=mock|none|boxtal, docs/etiquettes-transporteur.md) · GET /shipping/diagnostic (sandbox Boxtal seulement)
 /transactions/:id/review · /reports · /notifications
-/admin/stats · /admin/users · /admin/listings · /admin/reports · /admin/transactions · /admin/audit-log
+/admin/stats · /admin/users (DELETE /admin/users/:id : motif + confirm=SUPPRIMER) · /admin/listings (DELETE /admin/listings/:id : idem) · /admin/reports · /admin/transactions (GET :id, POST :id/resolve : rembourser | liberer | annuler) · /admin/audit-log
 WebSocket : join / leave / message (JWT dans handshake.auth.token)
 ```

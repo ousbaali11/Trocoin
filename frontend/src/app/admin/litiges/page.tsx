@@ -88,7 +88,7 @@ function AdminDisputesInner() {
               <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
                 <div style={{ fontSize: ".9rem" }}>
                   <span className={`a-pill ${s.cls}`}>{s.label}</span> <strong>{t.listing ? <Link href={`/admin/annonces/${t.listing.id}`} style={{ textDecoration: "underline" }}>{t.listing.title}</Link> : "Annonce supprimée"}</strong>
-                  <span className="mono"> · {t.id.slice(0, 8)} · {formatDateTime(t.createdAt)}</span>
+                  <span className="mono"> · {t.id.slice(0, 8)} · {formatDateTime(t.createdAt)}</span> · <Link href={`/admin/litiges/${t.id}`} style={{ textDecoration: "underline" }}>Fiche détaillée</Link>
                   <dl className="a-kv" style={{ marginTop: 8 }}>
                     <dt>Montant</dt><dd>{formatEuros(t.amount)} (frais acheteur {formatEuros(t.buyerFee)}, commission {formatEuros(t.commission)})</dd>
                     <dt>Acheteur</dt><dd>{t.buyer ? <Link href={`/admin/utilisateurs/${t.buyer.id}`} style={{ textDecoration: "underline" }}>{t.buyer.displayName}</Link> : "—"}</dd>

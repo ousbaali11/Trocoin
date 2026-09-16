@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import type { Paged } from "@/lib/types";
@@ -18,9 +19,11 @@ interface AuditEntry {
   createdAt: string;
 }
 
-export default function AdminAuditPage() {
+function AdminAuditInner() {
+  const params = useSearchParams();
   const [action, setAction] = useState("");
-  const [target, setTarget] = useState("");
+  // `?target=` : arriver depuis une fiche (transaction, compte) avec le filtre déjà posé
+  const [target, setTarget] = useState(params.get("target") ?? "");
   const [page, setPage] = useState(1);
   const [data, setData] = useState<Paged<AuditEntry> | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -64,4 +67,8 @@ export default function AdminAuditPage() {
       {data && <AdminPager page={data.page} pageSize={data.pageSize} total={data.total} onChange={setPage} />}
     </div>
   );
+}
+
+export default function AdminAuditPage() {
+  return <Suspense><AdminAuditInner /></Suspense>;
 }

@@ -9,6 +9,7 @@ import { useConfirm } from "@/lib/confirm-context";
 import { formatDateTime, formatPrice, REPORT_REASON_LABELS } from "@/lib/format";
 import type { ListingPhoto, PriceType, Report, Transaction } from "@/lib/types";
 import { statusPill } from "@/components/admin/AdminPager";
+import { HardDeleteDialog } from "@/components/admin/HardDeleteDialog";
 
 interface AdminListing {
   id: string;
@@ -41,6 +42,7 @@ export default function AdminListingPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [reason, setReason] = useState("");
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -72,16 +74,16 @@ export default function AdminListingPage() {
       setBusy(false);
     }
   };
-  const remove = async () => {
-    if (!(await confirm({ title: "Retirer cette annonce ?", text: "Suppression définitive, ou simple désactivation si une transaction y est rattachée. Le motif saisi est transmis au vendeur.", confirmLabel: "Retirer l'annonce", danger: true }))) return;
-    setBusy(true);
+  // Suppression définitive : motif + saisie du mot SUPPRIMER (HardDeleteDialog), journalisée ; simple mise en
+  // pause si une transaction y est rattachée (jamais effacée dans ce cas)
+  const remove = async (deleteReason: string) => {
     try {
-      await api(`/admin/listings/${id}?reason=${encodeURIComponent(reason || "Retirée par la modération")}`, { method: "DELETE" });
-      toast("Annonce retirée.", "success");
+      await api(`/admin/listings/${id}`, { method: "DELETE", body: { reason: deleteReason, confirm: "SUPPRIMER" } });
+      toast("Annonce supprimée.", "success");
+      setDeleteOpen(false);
       router.push("/admin/annonces");
     } catch (e) {
       toast((e as Error).message, "error");
-      setBusy(false);
     }
   };
 
@@ -109,8 +111,16 @@ export default function AdminListingPage() {
             {l.status !== "en_ligne" && <button className="a-btn ok" disabled={busy} onClick={() => patch({ status: "en_ligne" }, "Annonce publiée.")}>Approuver et publier</button>}
             {l.status !== "refusee" && <button className="a-btn danger" disabled={busy || reason.trim().length < 3} onClick={() => patch({ status: "refusee", moderationReason: reason.trim() }, "Annonce refusée.")}>Refuser</button>}
             {l.status === "en_ligne" && <button className="a-btn" disabled={busy} onClick={() => patch({ status: "desactivee", moderationReason: reason.trim() || "Mise en pause par la modération" }, "Annonce mise en pause.")}>Mettre en pause</button>}
-            <button className="a-btn" disabled={busy} onClick={remove} style={{ color: "var(--a-danger)" }}>Supprimer</button>
+            <button className="a-btn" disabled={busy} onClick={() => setDeleteOpen(true)} style={{ color: "var(--a-danger)" }} data-testid="delete-listing">Supprimer définitivement</button>
           </div>
+          <HardDeleteDialog
+            open={deleteOpen}
+            onClose={() => setDeleteOpen(false)}
+            title="Supprimer définitivement cette annonce ?"
+            text="L'annonce, ses photos et ses favoris seront effacés (si une transaction y est rattachée, elle est seulement mise en pause et conservée pour la vente). Le motif est transmis au vendeur et conservé dans le journal."
+            confirmLabel="Supprimer l'annonce"
+            onConfirm={remove}
+          />
           <h2 className="h3">Vendeur</h2>
           {l.owner ? (
             <dl className="a-kv">
