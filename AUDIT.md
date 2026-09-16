@@ -2168,3 +2168,5 @@ avec des données réelles (taux de litiges, délais moyens), pas avant.
    Transfer dans le Dashboard Stripe (Connect → Transfers) et sa réversion après un remboursement admin.
 4. Les notifications de l'ancien modèle (« encaissé avant l'expiration de l'autorisation ») ne
    s'affichent plus que pour les ventes antérieures.
+
+Déploiement : CI verte (migration `SequestrePlateforme` jouée sur Postgres 16 puis Render : les ventes existantes passent en `destination`, les nouvelles naissent en `platform`), API en **1.19.0** (`/health` : postgres ok), front Vercel à jour (aide « encaisse et conserve » présente dans le bundle). Aucun compte de test créé en production pour ce tour ; la première vente réelle en mode test Stripe (carte de test saisie par vous) doit faire apparaître un Transfer dans Connect → Transfers à la confirmation.
