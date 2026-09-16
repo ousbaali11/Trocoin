@@ -517,7 +517,9 @@ function summarizeHours(openingDays: unknown): string | undefined {
     for (const [day, slots] of Object.entries(days)) {
       if (Array.isArray(slots) && slots.length) parts.push(`${day.slice(0, 3).toLowerCase()} ${slots.map((s) => `${s.start ?? ''}-${s.end ?? ''}`).join(', ')}`);
     }
-    return parts.length ? parts.join(' · ').slice(0, 160) : undefined;
+    // Les créneaux réels arrivent parfois sans heures (« - ») : on n'affiche rien plutôt qu'une ligne de tirets
+    const useful = parts.filter((p) => /\d/.test(p));
+    return useful.length ? useful.join(' · ').slice(0, 160) : undefined;
   } catch {
     return undefined;
   }

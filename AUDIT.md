@@ -1645,3 +1645,38 @@ de barre) ; sous-catégories en **colonnes de 8 au plus**, sans retour à la lig
 35034817807 verte ; production : Électronique → panneau x = 666 = onglet x, largeur 240, 1 colonne ;
 Services → 2 colonnes (8 + 7), bord droit 1264 ≤ 1280, ramené à gauche de l'onglet ; mobile → un
 seul bord gauche (16 px) pour tous les liens. Captures avant / après bureau (deux familles) et mobile.
+
+## 31. Étiquettes transporteur, phase 2 : Boxtal, adresse au paiement, parcours complet — 16 septembre 2026
+
+- **Fournisseur réel** `BoxtalShippingProvider` derrière `IShippingProvider` (cotation v1 en GET +
+  XML, jeton v3 en cache, commande, document PDF, suivi, points relais, annulation), erreurs typées
+  (`non_configure`, `adresse_invalide`, `etiquette_impossible`, `transporteur_indisponible`,
+  `reseau`) rendues 503 / 400 / 502 sans toucher à la vente ; `mock` conservé.
+- **Adresse de livraison** saisie par l'acheteur au paiement pour un envoi (bouton « Payer » inactif
+  tant qu'elle est incomplète), enregistrée sur la vente, vue des deux parties seulement, transmise
+  au prestataire ; **facultative pour l'API** : les ventes antérieures et les anciens clients
+  continuent sans étiquette, le vendeur saisit l'adresse ou son numéro de suivi comme avant.
+  **Colis déclaré au dépôt** (poids, dimensions, facultatifs) prérempli dans le panneau vendeur.
+  Migration `AdresseLivraisonEtColis` (colonnes toutes facultatives).
+- **Parcours** : vendeur (mode domicile / point relais, colis, adresses, « Calculer le tarif »,
+  choix du relais, « Acheter l'étiquette (x €) », PDF, numéro repris) ; acheteur (« Suivi de
+  l'envoi » : transporteur, mode, numéro, lien, état, historique).
+- **Diagnostic sandbox** `GET /shipping/diagnostic` pour vérifier la connexion avec les clés qui
+  vivent sur Render, sans les copier.
+
+**Preuves d'exécution (16 septembre 2026)**
+- `npm test` : **135 tests réussis, 1 ignoré** (`phase20` +6 : faux Boxtal v1/v3 — cotation par
+  transporteur et par mode avec prix TTC en centimes et code d'offre, points relais filtrés par
+  réseau, commande → document → PDF → suivi → annulation, identifiants refusés, adresse refusée,
+  indisponibilité ; adresse au paiement validée et ignorée en main propre ; colis au dépôt borné).
+- Playwright : **99 scénarios** (`17-expedition` +2 : parcours complet avec téléchargement du PDF et
+  suivi côté acheteur ; refus d'adresse → message, nouvel essai, saisie manuelle acceptée) ; 04, 05,
+  07 verts ; CI runs 35037532126, 35038188268 et 35038904859 vertes (PostgreSQL avec la migration).
+- **Test réel** (`GET https://api.trocoin.fr/shipping/diagnostic`, clés Render) : sandbox → 401 sur
+  les deux API ; **hôte de production** → jeton v3 200, cotation v1 200 avec 27 offres (Mondial
+  Relay relais 4,21 €, Colissimo retrait 9,14 €, Colissimo domicile 11,04 €), points relais réels
+  autour de 75017. **Achat d'étiquette non tenté** : les applications sont dans le compte de
+  production ; le bac à sable Boxtal est un compte séparé (`shipping.boxtal.build`). Détail et
+  marche à suivre : `docs/etiquettes-transporteur.md` §8.
+- Captures (pile locale, fournisseur simulé) : adresse au paiement, panneau vendeur avec tarif et
+  point relais, étiquette prête avec PDF, suivi côté acheteur.

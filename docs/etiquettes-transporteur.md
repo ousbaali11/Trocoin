@@ -175,3 +175,58 @@ consultés le 15 septembre 2026 ; le portail lui-même se charge en JavaScript e
 Le démarrage de l'API vérifie la présence des quatre identifiants quand `SHIPPING_PROVIDER=boxtal`
 et refuse toute valeur de `BOXTAL_ENV` autre que `sandbox` ou `production`. Aucune de ces valeurs
 n'est journalisée ni renvoyée par une route.
+
+## 8. Phase 2 — état au 16 septembre 2026
+
+### Livré dans le code
+
+- `BoxtalShippingProvider` (`src/shipping/boxtal-shipping.provider.ts`) derrière `IShippingProvider`,
+  `MockShippingProvider` conservé (`SHIPPING_PROVIDER=mock`, pile e2e). API v1 : cotation en `GET
+  api/v1/cotation` (HTTP Basic identifiant + mot de passe de l'application, en-tête `Api-Version 1.3.7`,
+  réponse XML lue sans dépendance) ; API v3 : `POST /iam/account-app/token` (Basic clé d'accès : clé
+  secrète → jeton porteur mis en cache), `POST /shipping/v3.1/shipping-order` (colis en kg / cm,
+  adresses, `pickupPointCode` pour un relais, étiquette `PDF_10x15`), `GET …/shipping-document`
+  (téléchargement du PDF), `GET …/tracking`, `DELETE …` (annulation), `GET /shipping/v3.1/parcel-point`.
+  Codes d'offre v3 : `BOXTAL_OFFER_*` s'ils sont renseignés, sinon `opérateur_service` de la cotation.
+- Adresse de livraison de l'acheteur au paiement (`transactions.shippingAddress`, vue des deux
+  parties, transmise au prestataire, jamais publique) ; colis déclaré au dépôt (`listings.weightGrams`,
+  `lengthCm`, `widthCm`, `heightCm`, facultatifs). Ventes antérieures sans adresse : parcours manuel
+  inchangé, le vendeur peut saisir l'adresse dans le panneau d'étiquette.
+- Parcours vendeur (mode, colis prérempli, adresses, tarif, point relais, achat, PDF, numéro repris
+  dans « Confirmer l'expédition ») et acheteur (état, numéro et lien de suivi). Erreurs du
+  prestataire affichées dans le panneau, sans jamais bloquer la vente.
+- `GET /shipping/diagnostic` (sandbox seulement, 5 appels / 10 min) : jeton, cotation, points relais,
+  essais d'hôte et d'ordre des clés, lectures sans effet sur l'hôte de production si le sandbox refuse,
+  et `?label=1` pour une commande de test avec annulation.
+- Tests : `test/phase20.e2e-spec.ts` (faux Boxtal v1 + v3 : cotation, points relais, étiquette,
+  suivi, annulation, erreurs typées ; adresse au paiement ; colis au dépôt) et
+  `e2e/17-expedition.spec.ts` (parcours complet et échec géré, fournisseur simulé).
+
+### Premier test réel (clés Render, 16 septembre 2026)
+
+| Étape | Hôte sandbox | Hôte de production | Constat |
+|---|---|---|---|
+| Jeton v3 (clé d'accès : clé secrète) | `api.boxtal.build` → 401 | `api.boxtal.com` → **200** | les clés sont valides, mais pour l'API de production |
+| Cotation v1 (identifiant + mot de passe) | `test.envoimoinscher.com` → 401 | `www.envoimoinscher.com` → **200, 27 offres** | dont Mondial Relay point relais 4,21 €, Colissimo point retrait 9,14 €, Colissimo domicile 11,04 € (colis 900 g, Lyon → Paris) |
+| Points relais v3 | — | `api.boxtal.com` → **200** | relais réels autour de 75017 (lockers à 370–490 m) |
+| Achat d'étiquette | non tenté | **non tenté** | une commande sur l'hôte de production est un vrai achat |
+
+Lecture : les deux applications « transport-test » et « Trocoin - Test » ont été créées dans le
+compte Boxtal ordinaire (production). Le bac à sable Boxtal est un **compte à part**, ouvert sur
+`shipping.boxtal.build`, dont les applications parlent à `api.boxtal.build` /
+`test.envoimoinscher.com`. Avec `BOXTAL_ENV=sandbox`, Trocoin n'achètera jamais d'étiquette sur
+l'hôte de production : les formats d'échange sont validés par les lectures ci-dessus, l'achat de test
+attend des clés de bac à sable.
+
+### À faire côté utilisateur pour finir le test d'achat
+
+1. Créer un compte de test sur `shipping.boxtal.build` (distinct du compte boxtal.com).
+2. Y créer une application API v3 et une application API v1, comme précédemment.
+3. Remplacer sur Render `BOXTAL_V3_ACCESS_KEY`, `BOXTAL_V3_SECRET_KEY`, `BOXTAL_V1_LOGIN`,
+   `BOXTAL_V1_PASSWORD` par les valeurs du compte de test (`BOXTAL_ENV=sandbox` inchangé).
+4. Signaler que c'est fait : `GET /shipping/diagnostic?label=1` achètera alors une étiquette de test
+   (Lyon → Paris, 900 g), téléchargera le PDF, lira le suivi et annulera la commande.
+
+Passage en production, plus tard : garder les applications actuelles (elles fonctionnent sur
+`api.boxtal.com`), mettre `BOXTAL_ENV=production`, et décider qui paie l'étiquette (prélevée sur le
+versement du vendeur ou facturée à part).
