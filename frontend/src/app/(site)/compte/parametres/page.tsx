@@ -31,6 +31,8 @@ export default function ParametresPage() {
   const [pro, setPro] = useState({ siret: "", shopName: "" });
   const [prefs, setPrefs] = useState<NotificationPrefs | null>(null);
   const [globals, setGlobals] = useState({ notifyPush: true, notifySms: false });
+  // Case « Afficher mon numéro » : état local immédiat, enregistré aussitôt (rétabli si l'API refuse)
+  const [phonePublic, setPhonePublic] = useState(true);
   const [blocks, setBlocks] = useState<SellerSummary[]>([]);
   const [busy, setBusy] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -43,6 +45,7 @@ export default function ParametresPage() {
     setForm({ displayName: user.displayName, city: user.city ?? "", postalCode: user.postalCode ?? "" });
     setShop({ shopName: user.shopName ?? "", shopDescription: user.shopDescription ?? "", shopAddress: user.shopAddress ?? "", shopHours: user.shopHours ?? "", shopWebsite: user.shopWebsite ?? "" });
     setGlobals({ notifyPush: user.notifyPush, notifySms: user.notifySms });
+    setPhonePublic(user.phonePublic !== false);
     if (user.notificationPrefs) setPrefs(user.notificationPrefs);
     api<SellerSummary[]>("/users/me/blocks").then(setBlocks).catch(() => null);
   }, [user]);
@@ -230,6 +233,32 @@ export default function ParametresPage() {
           <button className="btn btn-primary" disabled={pwBusy || pw.current.length === 0 || pw.next.length < 8 || pw.next !== pw.confirm}>{pwBusy ? "Enregistrement…" : "Changer le mot de passe"}</button>
           <p className="small muted" style={{ marginTop: 8 }}>Compte créé par SMS sans mot de passe ? Utilisez <Link href="/mot-de-passe-oublie">Mot de passe oublié</Link> pour en définir un.</p>
         </form>
+      </section>
+
+      <section className="panel" id="telephone">
+        <h2 className="h3">Numéro sur mes annonces</h2>
+        <p className="small muted">Votre numéro ({phone}) est celui du compte : il sert à toutes vos annonces. Quand il est affiché, les membres connectés peuvent le révéler avec le bouton « Voir le numéro » ; il n&apos;apparaît jamais dans la page ni sur les cartes.</p>
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={phonePublic}
+            disabled={busy}
+            data-testid="phone-public"
+            onChange={async (e) => {
+              const next = e.target.checked;
+              setPhonePublic(next);
+              try {
+                await api("/users/me", { method: "PATCH", body: { phonePublic: next } });
+                await refresh();
+                toast(next ? "Numéro affiché sur vos annonces." : "Numéro masqué sur vos annonces.", "success");
+              } catch (err) {
+                setPhonePublic(!next);
+                toast((err as Error).message, "error");
+              }
+            }}
+          />
+          Afficher mon numéro sur mes annonces
+        </label>
       </section>
 
       <section className="panel" id="notifications">

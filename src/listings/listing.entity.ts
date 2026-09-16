@@ -113,6 +113,10 @@ export class Listing {
   @Column({ default: 0 })
   viewsCount: number;
 
+  /** Clics sur « Voir le numéro » (statistique du propriétaire, jamais publique). */
+  @Column({ default: 0 })
+  phoneClicksCount: number;
+
   // ----- Mise en avant (gratuite tant que la monétisation est désactivée) -----
   /** Remontée en tête des résultats jusqu'à cette date. */
   @Index()

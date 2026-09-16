@@ -38,9 +38,9 @@ cd frontend && npm install && cp .env.example .env.local && npm run dev -- -p 30
 ## Tests
 
 ```bash
-npm test                 # 135 tests e2e (API, supertest)
+npm test                 # 138 tests e2e (API, supertest)
 npm run e2e:build        # construit l'API (dist/) et le front (next build) pour les tests navigateur
-npm run e2e              # 108 scénarios Playwright dans Chromium (desktop 1280 px + mobile 375 px) : parcours, accessibilité (axe) site + back-office, clavier, SEO
+npm run e2e              # 110 scénarios Playwright dans Chromium (desktop 1280 px + mobile 375 px) : parcours, accessibilité (axe) site + back-office, clavier, SEO
 node scripts/charge.js --api https://api.trocoin.fr --front https://www.trocoin.fr --vus 10 --minutes 3   # test de charge léger (lectures publiques)
 SOURCE_DATABASE_URL=… TARGET_DATABASE_URL=… node scripts/migrer-base.js   # copie intégrale d'une base Postgres vers une autre, preuve par comptages + empreintes (DEPLOIEMENT.md §6b) (Jest + supertest, SQLite en mémoire)
 # Les mêmes tests sur PostgreSQL (schéma créé par les migrations) :
@@ -59,7 +59,7 @@ manuel : Playwright démarre et arrête les deux serveurs (`e2e/start-api.js`, `
 ```bash
 npx playwright install chromium   # une fois
 npm run e2e:build                 # API + front (≈ 2 min)
-npm run e2e                       # 108 scénarios (≈ 4 min 30)
+npm run e2e                       # 110 scénarios (≈ 4 min 30)
 npx playwright show-report        # rapport HTML, traces et captures des échecs
 npm run e2e:ui                    # mode interactif pas à pas
 ```
@@ -89,6 +89,7 @@ la construction ET l'exécution (l'URL de l'API est figée dans le build du fron
 | `e2e/17-expedition.spec.ts` | étiquette d'envoi : adresse de livraison exigée au paiement, panneau vendeur (colis prérempli, tarif, point relais, achat de l'étiquette, PDF téléchargé, numéro repris), confirmation d'expédition, suivi côté acheteur ; refus du transporteur affiché sans bloquer la vente, saisie manuelle | desktop |
 | `e2e/18-fiche.spec.ts` | fiche annonce complète (bureau) : fil d'Ariane à six niveaux (région, département, ville) et `BreadcrumbList`, galerie (favoris, partage, « Voir les photos » plein écran), repères de catégorie sous le titre, position du prix par rapport au marché, « Publiée aujourd'hui », « Les + de cette annonce », informations clés en grille dépliable, équipements, description « Voir plus », carte zoom 13 avec cercle visible, « Signaler l'annonce » en bas, carrousel « Ces annonces peuvent vous intéresser » ; badge « Déjà vu » (visiteur puis membre) ; « Suivre » le vendeur (alerte dans Mes recherches) |
 | `e2e/19-session.spec.ts` | rester connecté (bureau et mobile) : fermeture du navigateur puis retour avec un jeton d'accès expiré → toujours connecté, session renouvelée en silence, ancien jeton toléré 30 s sans casser la session ; « Se déconnecter » efface les deux jetons et le serveur refuse l'ancien ; double authentification demandée à la connexion par mot de passe seulement, pas au retour |
+| `e2e/20-telephone-stats.spec.ts` | téléphone au dépôt : un compte sans numéro est bloqué à l'aperçu (champ obligatoire, numéro invalide refusé) puis publie avec un mobile français enregistré sur le compte ; un compte avec numéro ne le retape pas (case « Afficher mon numéro ») ; statistiques par annonce sur Mes annonces (vues, favoris, messages, clics « Voir le numéro »), mises à jour au retour sur l'onglet, jamais publiques ; numéro masqué depuis les paramètres → bouton absent de la fiche | desktop |
 
 Les pages d'inscription et de recherche vérifient en plus l'absence de défilement horizontal
 (`expectNoHorizontalOverflow`) : c'est la régression trouvée lors du tour de polish. Les données
@@ -195,6 +196,16 @@ les 30 s qui suivent sa rotation (`REFRESH_REUSE_GRACE_MS` : deux onglets ou une
 ne sont pas un vol ; le second appel est simplement refusé).
 `GET /auth/sessions` liste les sessions actives, `DELETE /auth/sessions` les ferme toutes.
 
+**Téléphone et annonces** (AUDIT §35) : le numéro de mobile français est **celui du compte**
+(unique, `users.phoneNumber`), réutilisé pour toutes les annonces ; il n'est pas stocké par annonce.
+Publier exige un numéro valide (un compte qui n'en a pas le saisit à l'aperçu du dépôt, `PATCH
+/users/me { phoneNumber }`, accepté seulement si le compte n'en a pas encore) ; les brouillons restent
+possibles sans. `users.phonePublic` (vrai par défaut, réglable au dépôt et dans les paramètres)
+propose le bouton « Voir le numéro » sur les annonces en ligne : le numéro n'est jamais dans le HTML
+ni sur les cartes, il est délivré par `POST /listings/:id/phone` à un membre connecté et chaque clic
+incrémente `listings.phoneClicksCount`. `GET /listings/mine` renvoie par annonce `stats`
+(vues, favoris, conversations, clics), visibles du propriétaire seul.
+
 **Rester connecté** (depuis le 16 septembre 2026, AUDIT §34) : la session vit dans le stockage
 local du navigateur (`trocoin_token`, `trocoin_refresh`), donc elle survit à la fermeture du
 navigateur ou de l'application. Au retour, le front renouvelle d'abord le jeton d'accès s'il a
@@ -247,6 +258,7 @@ GET  /settings/public · GET /plans · /users/me/entitlements · /users/me/subsc
 /users/me/shop/members · /users/me/shops · POST /listings/import · POST /listings/:id/promote
 /listings/history · GET /listings/history/ids · /conversations/:id/images · /conversations/:id/offers · GET /pages/:slug
 /admin/settings · /admin/plans · /admin/pages
+POST /listings/:id/phone (« Voir le numéro », connecté, compté pour le vendeur) · GET /listings/mine (avec `stats` par annonce)
 GET  /listings (filtres, dont `region=` et `postal_code=` préfixe) · POST /listings · GET/PATCH/DELETE /listings/:id · POST /listings/bulk
 POST /listings/:id/photos · PATCH /listings/:id/photos/order · /listings/:id/similar
 /listings/:id/favorite · /conversations · /transactions (quote, ship, handover, dispute…)

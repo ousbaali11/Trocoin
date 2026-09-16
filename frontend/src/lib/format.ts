@@ -70,6 +70,19 @@ export function daysAgo(iso?: string | null, now: Date = new Date()): string {
   return `le ${formatDate(iso)}`;
 }
 
+/** +33612345678 → « 06 12 34 56 78 » ; toute autre valeur rendue telle quelle. */
+export function formatPhone(phone?: string | null): string {
+  if (!phone) return "";
+  const national = phone.replace(/^\+33/, "0");
+  return /^0\d{9}$/.test(national) ? national.replace(/(\d{2})(?=\d)/g, "$1 ") : phone;
+}
+
+/** Numéro de mobile français (06 / 07) sous ses formes courantes ; même règle que l'API (french-phone.ts). */
+export function isFrenchMobile(raw: string): boolean {
+  const cleaned = raw.replace(/[\s.\-()]/g, "");
+  return /^(\+33|0033|33|0)[67]\d{8}$/.test(cleaned);
+}
+
 export function memberSince(iso?: string | null): string {
   if (!iso) return "";
   return new Intl.DateTimeFormat("fr-FR", { month: "long", year: "numeric" }).format(new Date(iso));

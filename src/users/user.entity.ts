@@ -21,6 +21,14 @@ export class User {
   @Column({ default: false })
   phoneVerified: boolean;
 
+  /**
+   * Numéro affiché sur les annonces (bouton « Voir le numéro », visiteurs connectés) : réglable
+   * au dépôt et dans les paramètres. Le numéro lui-même reste celui du compte, unique et réutilisé
+   * pour toutes les annonces ; il n'est jamais inscrit dans le HTML public ni dans les cartes.
+   */
+  @Column({ default: true })
+  phonePublic: boolean;
+
   @Column({ nullable: true, unique: true })
   email?: string;
 

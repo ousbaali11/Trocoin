@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast-context";
-import { formatEuros } from "@/lib/format";
+import { formatEuros, formatPhone } from "@/lib/format";
 import type { ListingDetail, Quote } from "@/lib/types";
 import { FavoriteButton } from "@/components/ui/FavoriteButton";
 import { Modal } from "@/components/ui/Modal";
@@ -27,7 +27,22 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
   const setAddr = (k: keyof typeof address, v: string) => setAddress((a) => ({ ...a, [k]: v }));
   const addressOk = delivery === "main_propre" || (address.name.trim().length >= 2 && address.line1.trim().length >= 3 && /^\d{5}$/.test(address.postalCode) && address.city.trim().length >= 1);
   const [busy, setBusy] = useState(false);
+  // Numéro du vendeur : jamais dans la page, délivré au clic à un membre connecté (et compté pour le vendeur)
+  const [phone, setPhone] = useState<string | null>(null);
   const isOwner = user?.id === listing.userId;
+
+  const revealPhone = async () => {
+    if (!requireAuth(`/annonces/${listing.id}`)) return;
+    setBusy(true);
+    try {
+      const res = await api<{ phoneNumber: string }>(`/listings/${listing.id}/phone`, { method: "POST" });
+      setPhone(res.phoneNumber);
+    } catch (e) {
+      toast((e as Error).message, "error");
+    } finally {
+      setBusy(false);
+    }
+  };
   const active = listing.status === "en_ligne";
 
   useEffect(() => {
@@ -102,6 +117,17 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
             </>
           )}
           {quote && !quote.eligible && quote.reason && <p className="small muted" style={{ margin: 0 }}>{quote.reason}</p>}
+          {listing.phoneAvailable && (
+            phone ? (
+              <a href={`tel:${phone}`} className="btn btn-outline btn-block" data-testid="phone-number" aria-label={`Appeler le ${formatPhone(phone)}`}>
+                <PhoneIcon /> {formatPhone(phone)}
+              </a>
+            ) : (
+              <button className="btn btn-outline btn-block" onClick={revealPhone} disabled={busy} data-testid="phone-reveal" title="Le numéro n'est communiqué qu'aux membres connectés">
+                <PhoneIcon /> Voir le numéro
+              </button>
+            )
+          )}
         </>
       ) : (
         <p className="muted" style={{ margin: 0 }}>Cette annonce n&apos;est plus disponible.</p>
@@ -172,5 +198,13 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
         )}
       </Modal>
     </div>
+  );
+}
+
+function PhoneIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2" />
+    </svg>
   );
 }

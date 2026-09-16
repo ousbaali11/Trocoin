@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError, mediaUrl } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast-context";
-import { CONDITION_LABELS, formatPrice, PRICE_TYPE_LABELS } from "@/lib/format";
+import { CONDITION_LABELS, formatPhone, formatPrice, isFrenchMobile, PRICE_TYPE_LABELS } from "@/lib/format";
 import { fieldOptions, type CategoryNode, type Condition, type FieldSchema, type ListingDetail, type ListingPhoto, type ManagedShop, type PriceType } from "@/lib/types";
 import { CityInput, type CityValue } from "@/components/ui/CityInput";
 import { PhotoCropper } from "./PhotoCropper";
@@ -41,8 +41,15 @@ const STEPS = ["Titre et catégorie", "Description", "Photos", "Localisation", "
 
 export function ListingForm({ existing }: { existing?: ListingDetail }) {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, refresh: refreshUser } = useAuth();
   const { toast } = useToast();
+  // Téléphone : celui du compte (unique, réutilisé pour toutes les annonces). Sans numéro valide, la
+  // publication est bloquée tant qu'un mobile français n'est pas saisi ; l'affichage sur l'annonce est réglable.
+  const hasPhone = !!user && isFrenchMobile(user.phoneNumber || "");
+  const [phoneInput, setPhoneInput] = useState("");
+  const [phoneVisible, setPhoneVisible] = useState<boolean | null>(null);
+  const showPhone = phoneVisible ?? user?.phonePublic !== false;
+  const phoneOk = hasPhone || isFrenchMobile(phoneInput);
   const [tree, setTree] = useState<CategoryNode[]>([]);
   const [shops, setShops] = useState<ManagedShop[]>([]);
   const [schema, setSchema] = useState<FieldSchema[]>([]);
@@ -201,6 +208,19 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
     setBusy(true);
     setError(null);
     try {
+      if (!draft) {
+        // Numéro de mobile obligatoire pour publier (compte sans numéro : saisi ici, enregistré sur le compte)
+        if (!hasPhone) {
+          if (!isFrenchMobile(phoneInput)) {
+            setError("Un numéro de mobile français (06 ou 07) est requis pour publier votre annonce.");
+            setStep(4);
+            return;
+          }
+          await api("/users/me", { method: "PATCH", body: { phoneNumber: phoneInput.trim() } });
+        }
+        if (showPhone !== (user?.phonePublic !== false)) await api("/users/me", { method: "PATCH", body: { phonePublic: showPhone } });
+        if (!hasPhone || showPhone !== (user?.phonePublic !== false)) await refreshUser();
+      }
       let id = listingId;
       if (existing) {
         await api(`/listings/${existing.id}`, { method: "PATCH", body: payload(false) });
@@ -511,6 +531,25 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
               )}
             </div>
           </div>
+          <div className="card" style={{ marginTop: 12 }} data-testid="phone-block">
+            {hasPhone ? (
+              <>
+                <p className="small" style={{ margin: "0 0 8px" }}><strong>Numéro de téléphone</strong> <span className="muted">— celui de votre compte, {formatPhone(user?.phoneNumber)}, réutilisé pour toutes vos annonces.</span></p>
+                <label className="checkbox">
+                  <input type="checkbox" checked={showPhone} onChange={(e) => setPhoneVisible(e.target.checked)} data-testid="phone-visible" />
+                  Afficher mon numéro sur cette annonce (bouton « Voir le numéro », réservé aux membres connectés)
+                </label>
+                {!showPhone && <p className="small muted" style={{ margin: "6px 0 0" }}>Numéro masqué : les acheteurs vous écrivent par la messagerie. Ce réglage vaut pour toutes vos annonces (modifiable dans les paramètres).</p>}
+              </>
+            ) : (
+              <div className="field" style={{ marginBottom: 0 }} data-testid="phone-required">
+                <label htmlFor="phoneNumber"><strong>Numéro de mobile</strong> (obligatoire pour publier)</label>
+                <input id="phoneNumber" className="input" type="tel" inputMode="tel" autoComplete="tel" placeholder="06 12 34 56 78" value={phoneInput} onChange={(e) => setPhoneInput(e.target.value)} aria-invalid={phoneInput !== "" && !isFrenchMobile(phoneInput)} aria-describedby="phone-help" />
+                <p id="phone-help" className="small muted" style={{ margin: "6px 0 0" }}>Mobile français (06 ou 07), enregistré sur votre compte et réutilisé pour vos prochaines annonces. Les membres connectés pourront le révéler avec « Voir le numéro » ; vous pourrez le masquer dans les paramètres.</p>
+                {phoneInput !== "" && !isFrenchMobile(phoneInput) && <p className="small" style={{ color: "var(--brick)", margin: "6px 0 0" }} role="alert">Numéro de mobile français invalide (06 ou 07 attendu).</p>}
+              </div>
+            )}
+          </div>
           {typeof form.location.latitude === "number" && typeof form.location.longitude === "number" && (
             <div className="card" style={{ marginTop: 12 }} data-testid="preview-map">
               <p className="small" style={{ margin: "0 0 8px" }}><strong>Localisation affichée</strong> <span className="muted">— zone approximative telle que les visiteurs la verront, jamais votre adresse exacte.</span></p>
@@ -534,7 +573,7 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
         {step < STEPS.length - 1 ? (
           <button className="btn btn-primary" onClick={next}>Continuer</button>
         ) : (
-          <button className="btn btn-primary btn-lg" onClick={() => submit(false)} disabled={busy}>
+          <button className="btn btn-primary btn-lg" onClick={() => submit(false)} disabled={busy || !phoneOk} title={phoneOk ? undefined : "Indiquez votre numéro de mobile pour publier"}>
             {busy ? "Publication…" : existing ? "Enregistrer les modifications" : "Publier l'annonce"}
           </button>
         )}

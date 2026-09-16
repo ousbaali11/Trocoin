@@ -1828,3 +1828,71 @@ si l'utilisateur n'ouvre pas le site pendant 7 jours de navigation).
 - Safari : stockage local purgé après 7 jours de navigation sans visite du site (limite du navigateur).
 
 Déploiement : CI verte, API Render en **1.15.1** (`/health`), front Vercel servant le nouveau client de session (verrou `trocoin-refresh` présent dans le bundle), vérifiés le 16 septembre 2026.
+
+## 35. Numéro de téléphone au dépôt, « Voir le numéro », statistiques par annonce — 16 septembre 2026
+
+### Où est stocké le numéro
+
+**Au niveau du compte, pas par annonce.** `users.phoneNumber` est déjà obligatoire et unique à
+l'inscription (règle « un compte = un numéro de mobile français », normalisé `+33 6/7…`, validateur
+`src/common/validators/french-phone.ts` réutilisé). Toutes les annonces d'un compte partagent donc ce
+numéro ; il n'y a rien à ressaisir au dépôt et aucune colonne par annonce. Ce qui a été ajouté :
+
+- **Garde-fou à la publication** : `POST /listings` (hors brouillon) et le passage d'une annonce en
+  ligne refusent (400) un compte sans numéro valide — cas d'un compte importé ou d'une donnée
+  corrompue, pas d'un compte créé par le formulaire. Le dépôt affiche alors, à l'étape « Aperçu »,
+  un champ **Numéro de mobile (obligatoire pour publier)** ; le bouton « Publier » reste désactivé
+  tant qu'un mobile français n'est pas saisi (06/07, formes courantes acceptées, même règle que
+  l'API), puis le numéro est enregistré sur le compte (`PATCH /users/me { phoneNumber }`, accepté
+  seulement si le compte n'en a pas encore ; unicité vérifiée) et réutilisé pour les annonces
+  suivantes. Les brouillons restent possibles sans numéro.
+- **Masquage** : `users.phonePublic` (vrai par défaut, migration `1789470000000-TelephoneEtStatistiques`).
+  Au dépôt, un compte avec numéro voit « Afficher mon numéro sur cette annonce » (case cochée,
+  réglage valable pour toutes ses annonces) ; le même interrupteur existe dans Paramètres › « Numéro
+  sur mes annonces ».
+- **« Voir le numéro »** sur la fiche (bloc d'actions, sous « Contacter le vendeur ») : proposé si
+  le vendeur affiche son numéro et l'annonce est en ligne (`phoneAvailable` sur le détail) ; le
+  numéro n'est **jamais dans le HTML** ni sur les cartes : il est délivré par
+  `POST /listings/:id/phone` à un membre connecté (visiteur → connexion avec retour), puis affiché
+  en lien `tel:`. Chaque clic incrémente `listings.phoneClicksCount` (sauf le propriétaire).
+
+### Statistiques par annonce (« Mes annonces »)
+
+Ligne sous chaque annonce publiée (pas sur les brouillons) : **vues · favoris · messages · appels**
+(icônes œil, cœur, bulle, téléphone), fournie par `GET /listings/mine` (`stats`) au propriétaire seul.
+- **Vues** : le compteur existait (`viewsCount`, agrégé sur le tableau de bord) mais il était
+  incrémenté par la lecture API `GET /listings/:id`, donc par le rendu serveur (deux fois par
+  affichage : métadonnées + page), les préchargements, l'aperçu rapide et les robots. Il est
+  maintenant alimenté par `POST /listings/:id/view`, envoyé par le navigateur une fois la fiche
+  affichée (`ViewedMarker`) : **une vue par affichage réel**, jamais pour le propriétaire, seulement
+  pour une annonce en ligne. Le même appel alimente l'historique « Annonces consultées » d'un membre
+  (la page étant rendue sans jeton, l'API ne le savait pas autrement : le badge « Déjà vu » et
+  l'historique reposaient jusque-là sur des lectures API directes).
+- **Messages** : nombre de conversations sur cette annonce (`conversations.listingId`), pas le total
+  de la messagerie.
+- **Appels** : clics sur « Voir le numéro » (`phoneClicksCount`).
+- **Favoris** : nombre de membres l'ayant en favori.
+- Jamais publiques : `phoneClicksCount` est retiré des cartes et de la fiche (`Omit` sur
+  `ListingCard`), `stats` n'existe que sur `/listings/mine` ; vérifié par les tests.
+- À jour à chaque chargement et **au retour sur l'onglet** (`visibilitychange` / `focus`
+  rechargent la liste), sans WebSocket.
+
+### Vérification
+
+| Contrôle | Résultat |
+|---|---|
+| `npm test` | 138 réussis, 1 ignoré ; nouveau `test/phase21.e2e-spec.ts` (3 tests : garde-fou et numéro normalisé / unique / non modifiable, « Voir le numéro » réservé et masquable, statistiques exactes et privées) ; `listings` adapté (vues via `POST view`, numéro non modifiable) |
+| `npx playwright test` (bureau + mobile) | 110 scénarios : 99 réussis, 11 ignorés, 0 échec |
+| Nouveau `e2e/20-telephone-stats.spec.ts` | dépôt bloqué sans numéro (champ obligatoire, numéro invalide refusé, capture `depot-sans-numero.png`) puis accepté avec un mobile français enregistré sur le compte (`depot-avec-numero.png`) ; compte avec numéro : rien à ressaisir, case « Afficher » ; « Mes annonces » : 4 compteurs exacts après consultation, favori, message et deux « Voir le numéro » d'un membre (`mes-annonces-statistiques.png`, `fiche-voir-le-numero.png`), mise à jour au retour sur l'onglet, rien de public, bouton absent une fois le numéro masqué |
+| Migration Postgres | jouée par le job CI Postgres 16 (`phonePublic`, `phoneClicksCount`) avant le déploiement Render |
+
+### Choix et limites
+
+- **Numéro visible par défaut** (`phonePublic = true`, y compris pour les comptes existants) : c'est
+  ce que le brief demande (« Voir le numéro » sur les annonces, avec possibilité de masquer) ; la
+  case du dépôt et le réglage des paramètres rendent le choix explicite. Passer le défaut à « masqué »
+  tient en une valeur (`default: false` dans l'entité + migration).
+- Le numéro n'est délivré qu'aux membres connectés (comme sur leboncoin), ce qui limite le
+  moissonnage ; il reste joignable par les membres tant que l'annonce est en ligne.
+- Les vues d'avant ce tour (comptées par lecture API) restent dans le compteur ; les nouvelles sont
+  comptées par affichage réel, donc plus basses à trafic égal.

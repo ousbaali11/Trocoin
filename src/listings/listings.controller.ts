@@ -151,6 +151,22 @@ export class ListingsController {
     return this.listingsService.findOne(id, req.user);
   }
 
+  /** Fiche affichée dans un navigateur : compte une vue (hors propriétaire) et, pour un membre, alimente « Annonces consultées ». */
+  @UseGuards(OptionalJwtAuthGuard)
+  @Post(':id/view')
+  @HttpCode(200)
+  view(@Req() req: any, @Param('id', ParseUUIDPipe) id: string) {
+    return this.listingsService.recordView(id, req.user?.userId);
+  }
+
+  /** « Voir le numéro » : membre connecté seulement ; compte le clic pour le vendeur. */
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/phone')
+  @HttpCode(200)
+  revealPhone(@Req() req: any, @Param('id', ParseUUIDPipe) id: string) {
+    return this.listingsService.revealPhone(id, req.user.userId);
+  }
+
   @Get(':id/similar')
   similar(@Param('id', ParseUUIDPipe) id: string) {
     return this.listingsService.findSimilar(id);

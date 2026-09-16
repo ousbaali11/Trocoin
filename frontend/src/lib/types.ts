@@ -96,6 +96,8 @@ export interface ListingCard {
   shopOwnerId?: string;
   createdBy?: string | null;
   seller?: { id: string; displayName: string; accountType: AccountType; shopName?: string; identityVerified: boolean; ratingAvg?: number; ratingCount?: number };
+  /** Présent uniquement sur « Mes annonces » */
+  stats?: ListingStats;
 }
 
 export interface ListingPhoto {
@@ -120,6 +122,16 @@ export interface ListingDetail extends Omit<ListingCard, "coverUrl" | "photosCou
   isUrgent: boolean;
   /** Région et département dérivés du code postal (fil d'Ariane) ; `postalPrefix` sert au filtre `postal_code=` */
   location?: { departmentCode: string; department: string; postalPrefix: string; region: string; regionSlug: string } | null;
+  /** Bouton « Voir le numéro » proposé (vendeur avec numéro visible) ; le numéro vient de POST /listings/:id/phone */
+  phoneAvailable?: boolean;
+}
+
+/** Statistiques d'une annonce, vues du propriétaire seul (GET /listings/mine). */
+export interface ListingStats {
+  views: number;
+  favorites: number;
+  messages: number;
+  phoneClicks: number;
 }
 
 export interface SearchResult {
@@ -142,6 +154,8 @@ export interface Me {
   id: string;
   phoneNumber: string;
   phoneVerified: boolean;
+  /** Numéro proposé sur les annonces (« Voir le numéro ») ; réglable au dépôt et dans les paramètres */
+  phonePublic?: boolean;
   email?: string | null;
   /** Adresse confirmée via le lien reçu par e-mail. */
   emailVerified?: boolean;

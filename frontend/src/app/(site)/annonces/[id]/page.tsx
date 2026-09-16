@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { cache } from "react";
 import { notFound } from "next/navigation";
 import { api, ApiError, mediaUrl, SITE_URL } from "@/lib/api";
 import { CONDITION_LABELS, daysAgo, formatDate, formatPrice } from "@/lib/format";
@@ -18,14 +19,18 @@ import { ViewedMarker } from "@/components/listing/ViewedMarker";
 import { ApproxMapDynamic } from "@/components/ui/DynamicMap";
 import styles from "./listing.module.css";
 
-async function getListing(id: string): Promise<ListingDetail | null> {
+/**
+ * Une seule lecture de l'annonce par affichage (métadonnées + page partagent le résultat grâce à
+ * `cache`) : l'API compte une vue par appel, la fiche ne doit en compter qu'une par chargement.
+ */
+const getListing = cache(async (id: string): Promise<ListingDetail | null> => {
   try {
     return await api<ListingDetail>(`/listings/${id}`, { token: null, revalidate: 0 });
   } catch (err) {
     if (err instanceof ApiError && (err.status === 404 || err.status === 400)) return null;
     throw err;
   }
-}
+});
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;

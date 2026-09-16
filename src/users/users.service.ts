@@ -8,7 +8,7 @@ import { Review } from '../reviews/review.entity';
 import { Transaction } from '../payments/transaction.entity';
 import { Favorite } from '../favorites/favorite.entity';
 import { deleteUploadedFile } from '../common/upload/image-upload';
-import { normalizeFrenchMobile } from '../common/validators/french-phone';
+import { isFrenchMobileNumber, normalizeFrenchMobile } from '../common/validators/french-phone';
 import { UserBlock } from './user-block.entity';
 import { SiretVerificationService } from './siret-verification.service';
 import { effectivePrefs, sanitizePrefs, type NotificationPrefs } from '../notifications/notification-prefs';
@@ -229,6 +229,21 @@ export class UsersService {
 
   async updateProfile(id: string, patch: Partial<Omit<User, 'notificationPrefs' | 'recentLocations'>> & { notificationPrefs?: unknown; recentLocations?: unknown }): Promise<User> {
     const clean: Record<string, unknown> = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
+    if (clean.phoneNumber !== undefined) {
+      // Numéro de mobile français exigé pour publier : ajoutable seulement sur un compte qui n'en a pas
+      const current = await this.findById(id);
+      if (!current) throw new NotFoundException('Utilisateur introuvable.');
+      if (isFrenchMobileNumber(current.phoneNumber)) {
+        if (normalizeFrenchMobile(String(clean.phoneNumber)) === current.phoneNumber) delete clean.phoneNumber;
+        else throw new BadRequestException('Le numéro de mobile identifie le compte et ne se modifie pas ici.');
+      } else {
+        const normalized = normalizeFrenchMobile(String(clean.phoneNumber));
+        if (!normalized) throw new BadRequestException('Numéro de mobile français invalide (06 ou 07 attendu).');
+        const taken = await this.usersRepo.findOne({ where: { phoneNumber: normalized } });
+        if (taken && taken.id !== id) throw new ConflictException('Ce numéro de téléphone est déjà associé à un compte.');
+        clean.phoneNumber = normalized;
+      }
+    }
     if (clean.notificationPrefs !== undefined) {
       try {
         clean.notificationPrefs = JSON.stringify(sanitizePrefs(clean.notificationPrefs));

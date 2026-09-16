@@ -21,6 +21,8 @@ import { Transaction } from '../payments/transaction.entity';
 import { SettingsService } from '../settings/settings.service';
 import { ShopsService } from '../shops/shops.service';
 import { User } from '../users/user.entity';
+import { Conversation } from '../conversations/conversation.entity';
+import { isFrenchMobileNumber } from '../common/validators/french-phone';
 import { UsersService } from '../users/users.service';
 import { CreateListingDto } from './dto/create-listing.dto';
 import { SearchListingsDto } from './dto/search-listings.dto';
@@ -36,7 +38,8 @@ export const BOOST_DAYS = 7;
 export const URGENT_DAYS = 7;
 const NO_DELIVERY_ROOTS = ['immobilier', 'vehicules', 'emploi', 'services', 'vacances', 'animaux'];
 
-export interface ListingCard extends Listing {
+/** Carte publique : l'annonce sans ses compteurs privés (les clics « Voir le numéro » ne sortent que dans `stats` de GET /listings/mine). */
+export interface ListingCard extends Omit<Listing, 'phoneClicksCount'> {
   coverUrl: string | null;
   photosCount: number;
   categorySlug?: string;
@@ -89,6 +92,7 @@ export class ListingsService {
     @InjectRepository(Favorite) private favoritesRepo: Repository<Favorite>,
     @InjectRepository(Transaction) private transactionsRepo: Repository<Transaction>,
     @InjectRepository(User) private usersRepo: Repository<User>,
+    @InjectRepository(Conversation) private conversationsRepo: Repository<Conversation>,
     private categoriesService: CategoriesService,
     private usersService: UsersService,
     private settings: SettingsService,
@@ -187,7 +191,10 @@ export class ListingsService {
     if (!dto.draft) this.validatePrice(priceType, dto.price);
     const attributes = this.validateAttributesFor(category, root, dto.attributes, !dto.draft);
     const coords = this.resolveCoordinates(dto);
-    if (!dto.draft) await this.assertQuota(ownerId);
+    if (!dto.draft) {
+      await this.assertPhone(ownerId);
+      await this.assertQuota(ownerId);
+    }
 
     const { status, reason } = this.decideInitialStatus(dto.draft, dto.title, dto.description);
     const now = new Date();
@@ -224,14 +231,54 @@ export class ListingsService {
   // ------------------------------------------------------------ propriétaire
 
   /** Mes annonces + celles des boutiques que je gère (marquées `shopOwnerId`). */
-  async findMine(userId: string): Promise<Array<ListingCard & { shopOwnerId?: string }>> {
+  /**
+   * Publier exige un numéro de mobile français sur le compte (le numéro est celui du compte,
+   * réutilisé pour toutes les annonces ; il n'est pas stocké par annonce). Les brouillons restent
+   * possibles sans numéro.
+   */
+  private async assertPhone(ownerId: string) {
+    const owner = await this.usersRepo.findOne({ where: { id: ownerId } });
+    if (!owner || !isFrenchMobileNumber(owner.phoneNumber)) {
+      throw new BadRequestException('Un numéro de mobile français (06 ou 07) est requis sur votre compte pour publier une annonce.');
+    }
+  }
+
+  /** Statistiques par annonce, réservées au propriétaire : vues, favoris, conversations, clics « Voir le numéro ». */
+  private async statsFor(listings: Listing[]): Promise<Map<string, { views: number; favorites: number; messages: number; phoneClicks: number }>> {
+    const stats = new Map<string, { views: number; favorites: number; messages: number; phoneClicks: number }>();
+    if (listings.length === 0) return stats;
+    for (const l of listings) stats.set(l.id, { views: l.viewsCount, favorites: 0, messages: 0, phoneClicks: l.phoneClicksCount });
+    const ids = listings.map((l) => l.id);
+    const favs = await this.favoritesRepo.createQueryBuilder('f').select('f.listingId', 'listingId').addSelect('COUNT(*)', 'n').where('f.listingId IN (:...ids)', { ids }).groupBy('f.listingId').getRawMany<{ listingId: string; n: string }>();
+    for (const r of favs) stats.get(r.listingId)!.favorites = Number(r.n);
+    const convs = await this.conversationsRepo.createQueryBuilder('c').select('c.listingId', 'listingId').addSelect('COUNT(*)', 'n').where('c.listingId IN (:...ids)', { ids }).groupBy('c.listingId').getRawMany<{ listingId: string; n: string }>();
+    for (const r of convs) stats.get(r.listingId)!.messages = Number(r.n);
+    return stats;
+  }
+
+  async findMine(userId: string): Promise<Array<ListingCard & { shopOwnerId?: string; stats: { views: number; favorites: number; messages: number; phoneClicks: number } }>> {
     const managed = await this.shops.managedOwnerIds(userId);
     const listings = await this.listingsRepo.find({
       where: { userId: In([userId, ...managed]) },
       order: { createdAt: 'DESC' },
     });
-    const cards = await this.toCards(listings);
-    return cards.map((c) => ({ ...c, shopOwnerId: c.userId !== userId ? c.userId : undefined }));
+    const [cards, stats] = await Promise.all([this.toCards(listings), this.statsFor(listings)]);
+    return cards.map((c) => ({ ...c, shopOwnerId: c.userId !== userId ? c.userId : undefined, stats: stats.get(c.id)! }));
+  }
+
+  /**
+   * « Voir le numéro » : renvoie le numéro du vendeur à un membre connecté (jamais dans le HTML
+   * public) si le vendeur l'a laissé visible, et compte le clic pour ses statistiques.
+   */
+  async revealPhone(listingId: string, viewerId: string): Promise<{ phoneNumber: string }> {
+    const listing = await this.listingsRepo.findOne({ where: { id: listingId } });
+    if (!listing || listing.status !== 'en_ligne') throw new NotFoundException('Annonce introuvable.');
+    const seller = await this.usersRepo.findOne({ where: { id: listing.userId } });
+    if (!seller || seller.deletedAt || !seller.phonePublic || !isFrenchMobileNumber(seller.phoneNumber)) {
+      throw new NotFoundException('Le vendeur ne communique pas son numéro : utilisez la messagerie.');
+    }
+    if (viewerId !== listing.userId) await this.listingsRepo.increment({ id: listingId }, 'phoneClicksCount', 1);
+    return { phoneNumber: seller.phoneNumber };
   }
 
   /** Annonce que `userId` a le droit de gérer (propriétaire ou membre de sa boutique). */
@@ -296,7 +343,10 @@ export class ListingsService {
         if (!['brouillon', 'desactivee', 'expiree', 'en_ligne', 'vendue'].includes(from)) {
           throw new BadRequestException(`Impossible de publier depuis le statut "${from}".`);
         }
-        if (from !== 'en_ligne') await this.assertQuota(listing.userId);
+        if (from !== 'en_ligne') {
+          await this.assertPhone(listing.userId);
+          await this.assertQuota(listing.userId);
+        }
       }
       patch.status = dto.status;
     }
@@ -496,10 +546,8 @@ export class ListingsService {
     if (listing.status !== 'en_ligne' && !isOwner && !isAdmin && !['vendue', 'expiree'].includes(listing.status)) {
       throw new NotFoundException('Annonce introuvable.');
     }
-    if (!isOwner && listing.status === 'en_ligne') {
-      await this.listingsRepo.increment({ id }, 'viewsCount', 1);
-      listing.viewsCount += 1;
-    }
+    // Les vues ne sont plus comptées ici (rendu serveur, préchargements, aperçus et robots passent par cette
+    // lecture) mais par POST /listings/:id/view, envoyé par le navigateur quand la fiche est réellement affichée.
     if (viewer && !isOwner) {
       // Historique de consultation (une ligne par annonce, date rafraîchie)
       await this.viewsRepo.save(this.viewsRepo.create({ userId: viewer.userId, listingId: id, viewedAt: new Date() }));
@@ -508,6 +556,7 @@ export class ListingsService {
     const category = await this.categoriesService.findById(listing.categoryId);
     const root = category?.parentId ? await this.categoriesService.findById(category.parentId) : category;
     const seller = await this.usersService.findPublicSummary(listing.userId);
+    const sellerUser = await this.usersRepo.findOne({ where: { id: listing.userId } });
     const favoritesCount = await this.favoritesRepo.count({ where: { listingId: id } });
     const schema = category ? getSchemaForSlugs(category.slug, root && root.slug !== category.slug ? root.slug : undefined) : [];
     const attributesLabeled = (schema || [])
@@ -515,8 +564,10 @@ export class ListingsService {
       .map((f) => ({ key: f.key, label: f.label, value: listing.attributes![f.key], unit: f.unit }));
     const now = Date.now();
 
+    const { phoneClicksCount: _privateClicks, ...publicListing } = listing; // statistique du propriétaire, jamais dans la fiche
+    void _privateClicks;
     return {
-      ...listing,
+      ...publicListing,
       latitude: isOwner ? listing.latitude : listing.latitude != null ? Math.round(listing.latitude * 100) / 100 : listing.latitude,
       longitude: isOwner ? listing.longitude : listing.longitude != null ? Math.round(listing.longitude * 100) / 100 : listing.longitude,
       photos,
@@ -531,6 +582,8 @@ export class ListingsService {
       completeness: computeCompleteness(listing, photos.length, schema || []),
       // Fil d'Ariane « Région › Département › Ville » (dérivé du code postal, jamais de l'adresse exacte)
       location: adminLocationFromPostalCode(listing.postalCode),
+      // « Voir le numéro » proposé (le numéro lui-même n'est délivré que par POST /listings/:id/phone, connecté)
+      phoneAvailable: listing.status === 'en_ligne' && !!sellerUser && !sellerUser.deletedAt && sellerUser.phonePublic && isFrenchMobileNumber(sellerUser.phoneNumber),
     };
   }
 
@@ -635,6 +688,20 @@ export class ListingsService {
     const order = new Map(views.map((v, i) => [v.listingId, i]));
     listings.sort((a, b) => order.get(a.id)! - order.get(b.id)!);
     return this.toCards(listings);
+  }
+
+  /**
+   * Une vue = la fiche affichée dans un navigateur (appel du client au chargement) : compteur « Vues »
+   * de l'annonce en ligne, et historique « Annonces consultées » pour un membre. Le propriétaire ne
+   * compte pas. Les lectures API (rendu serveur, aperçu rapide, robots) ne comptent rien.
+   */
+  async recordView(listingId: string, userId?: string): Promise<{ counted: boolean }> {
+    const listing = await this.listingsRepo.findOne({ where: { id: listingId } });
+    if (!listing || listing.userId === userId) return { counted: false };
+    if (userId) await this.viewsRepo.save(this.viewsRepo.create({ userId, listingId, viewedAt: new Date() }));
+    if (listing.status !== 'en_ligne') return { counted: false };
+    await this.listingsRepo.increment({ id: listingId }, 'viewsCount', 1);
+    return { counted: true };
   }
 
   /** Identifiants des annonces déjà consultées (badge « Déjà vu » sur les cartes de résultats). */
@@ -929,8 +996,10 @@ export class ListingsService {
       const ph = photosByListing.get(l.id) || [];
       const u = usersById.get(l.userId);
       const c = catById.get(l.categoryId);
+      const { phoneClicksCount: _privateClicks, ...pub } = l; // statistique du propriétaire (GET /listings/mine → stats), jamais sur une carte
+      void _privateClicks;
       return {
-        ...l,
+        ...pub,
         latitude: l.latitude != null ? Math.round(l.latitude * 100) / 100 : l.latitude,
         longitude: l.longitude != null ? Math.round(l.longitude * 100) / 100 : l.longitude,
         coverUrl: ph[0]?.thumbUrl || ph[0]?.url || null,

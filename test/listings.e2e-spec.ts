@@ -102,9 +102,11 @@ describe('Annonces : dépôt, validation, recherche, photos, contrôle d\'accès
     await request(server).post(`/listings/${listing.id}/renew`).set(other.auth).expect(403);
     await request(server).patch(`/listings/${listing.id}`).set(owner.auth).send({ title: 'Canapé trois places (modifié)' }).expect(200);
 
-    await request(server).get(`/listings/${listing.id}`).set(owner.auth).expect(200);
-    await request(server).get(`/listings/${listing.id}`).expect(200);
+    // Une vue = fiche affichée dans un navigateur (POST /listings/:id/view), jamais pour le propriétaire ; la lecture API ne compte pas
     await request(server).get(`/listings/${listing.id}`).set(other.auth).expect(200);
+    await request(server).post(`/listings/${listing.id}/view`).set(owner.auth).expect(200);
+    await request(server).post(`/listings/${listing.id}/view`).expect(200);
+    await request(server).post(`/listings/${listing.id}/view`).set(other.auth).expect(200);
     const mine = await request(server).get('/listings/mine').set(owner.auth).expect(200);
     expect(mine.body.find((l: any) => l.id === listing.id).viewsCount).toBe(2);
 
@@ -244,7 +246,11 @@ describe('Annonces : dépôt, validation, recherche, photos, contrôle d\'accès
     const user = await login(app);
     const bad = await request(server).patch('/users/me').set(user.auth).send({ displayName: '<script>', accountType: 'admin' });
     expect(bad.status).toBe(400);
-    const ok = await request(server).patch('/users/me').set(user.auth).send({ displayName: 'Camille', city: 'Nantes', postalCode: '44000', accountType: 'admin', phoneNumber: '+33600000000' }).expect(200);
+    // Un numéro déjà enregistré ne se change pas par le profil (phase 21 : le champ sert seulement à un compte sans numéro)
+    const phoneChange = await request(server).patch('/users/me').set(user.auth).send({ phoneNumber: '+33600000000' });
+    expect(phoneChange.status).toBe(400);
+    expect(phoneChange.body.message).toMatch(/identifie le compte/);
+    const ok = await request(server).patch('/users/me').set(user.auth).send({ displayName: 'Camille', city: 'Nantes', postalCode: '44000', accountType: 'admin' }).expect(200);
     expect(ok.body.displayName).toBe('Camille');
     expect(ok.body.accountType).toBe('particulier');
     expect(ok.body.phoneNumber).toBe(user.phone);

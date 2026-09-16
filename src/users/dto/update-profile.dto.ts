@@ -13,10 +13,17 @@ import {
 
 /**
  * Seuls ces champs sont modifiables par l'utilisateur lui-même.
- * phoneNumber, phoneVerified, accountType, identityVerified, ratings,
- * suspendedAt, stripe* sont réservés au système / à l'admin.
+ * phoneVerified, accountType, identityVerified, ratings, suspendedAt, stripe* sont réservés au
+ * système / à l'admin. phoneNumber n'est acceptable que pour un compte qui n'en a pas encore
+ * (dépôt d'annonce) : un numéro déjà enregistré ne se modifie pas ici.
  */
 export class UpdateProfileDto {
+  @IsOptional() @IsString() @MinLength(10) @MaxLength(20)
+  phoneNumber?: string;
+
+  @IsOptional() @IsBoolean()
+  phonePublic?: boolean;
+
   @IsOptional() @IsString() @MinLength(2) @MaxLength(50)
   @Matches(/^[^<>{}\[\]\\\/]+$/, { message: 'Le pseudo contient des caractères interdits.' })
   displayName?: string;

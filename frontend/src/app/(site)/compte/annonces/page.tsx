@@ -6,8 +6,46 @@ import { api, mediaUrl } from "@/lib/api";
 import { useToast } from "@/lib/toast-context";
 import { useConfirm } from "@/lib/confirm-context";
 import { formatDate, formatPrice, LISTING_STATUS_LABELS } from "@/lib/format";
-import type { Entitlements, ListingCard, ListingStatus } from "@/lib/types";
+import type { Entitlements, ListingCard, ListingStats, ListingStatus } from "@/lib/types";
 import { EmptyState } from "@/components/ui/EmptyState";
+
+/**
+ * Statistiques d'une annonce (propriétaire seul) : vues, favoris, messages, clics « Voir le numéro »,
+ * icône + nombre, dans l'ordre des grands sites d'annonces.
+ */
+function ListingStatsRow({ stats }: { stats: ListingStats }) {
+  const items: Array<{ key: keyof ListingStats; label: string; icon: React.ReactNode }> = [
+    { key: "views", label: "vue", icon: <EyeIcon /> },
+    { key: "favorites", label: "favori", icon: <HeartIcon /> },
+    { key: "messages", label: "message", icon: <BubbleIcon /> },
+    { key: "phoneClicks", label: "appel", icon: <PhoneIcon /> },
+  ];
+  const plural = (n: number, w: string) => `${n} ${w}${n > 1 ? "s" : ""}`;
+  return (
+    <ul className="small" style={{ listStyle: "none", padding: 0, margin: "8px 0 0", display: "flex", flexWrap: "wrap", gap: "4px 16px", color: "var(--ink-soft)" }} data-testid="listing-stats" aria-label="Statistiques de l'annonce">
+      {items.map((it) => (
+        <li key={it.key} style={{ display: "inline-flex", alignItems: "center", gap: 5 }} title={it.key === "phoneClicks" ? plural(stats[it.key], "clic") + " sur « Voir le numéro »" : it.key === "messages" ? plural(stats[it.key], "conversation") + " sur cette annonce" : plural(stats[it.key], it.label)} data-testid={`stat-${it.key}`}>
+          {it.icon}
+          <strong style={{ color: "var(--ink)" }}>{stats[it.key]}</strong>
+          <span className="sr-only">{` ${it.label}${stats[it.key] > 1 ? "s" : ""}`}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+const iconProps = { width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
+function EyeIcon() {
+  return <svg {...iconProps}><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>;
+}
+function HeartIcon() {
+  return <svg {...iconProps}><path d="M12 20.5s-7.5-4.6-9.3-9.2C1.4 8 3.3 4.5 6.8 4.5c2 0 3.4 1.1 4.2 2.3.8-1.2 2.2-2.3 4.2-2.3 3.5 0 5.4 3.5 4.1 6.8C19.5 15.9 12 20.5 12 20.5z" /></svg>;
+}
+function BubbleIcon() {
+  return <svg {...iconProps}><path d="M4 5h16v11H9l-5 4z" /></svg>;
+}
+function PhoneIcon() {
+  return <svg {...iconProps}><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2" /></svg>;
+}
 
 const TABS: Array<{ key: string; label: string; statuses: ListingStatus[] }> = [
   { key: "all", label: "Toutes", statuses: [] },
@@ -37,6 +75,18 @@ export default function MesAnnoncesPage() {
   useEffect(() => {
     load();
     api<Entitlements>("/users/me/entitlements").then(setEnt).catch(() => null);
+  }, [load]);
+  // Statistiques à jour au retour sur l'onglet (vues, favoris, messages, clics « Voir le numéro »)
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
   }, [load]);
 
   const act = async (fn: () => Promise<unknown>, ok: string) => {
@@ -177,10 +227,11 @@ export default function MesAnnoncesPage() {
                   </div>
                   <Link href={`/annonces/${l.id}`} style={{ fontWeight: 600, display: "block", margin: "4px 0" }}>{l.title}</Link>
                   <div className="small muted">
-                    {formatPrice(l.price, l.priceType)} · {l.viewsCount} vue{l.viewsCount > 1 ? "s" : ""} · {l.photosCount} photo{l.photosCount > 1 ? "s" : ""}
+                    {formatPrice(l.price, l.priceType)} · {l.photosCount} photo{l.photosCount > 1 ? "s" : ""}
                     {l.expiresAt && l.status === "en_ligne" && ` · expire le ${formatDate(l.expiresAt)}`}
                     {l.externalRef && ` · réf. ${l.externalRef}`}
                   </div>
+                  {l.stats && l.status !== "brouillon" && <ListingStatsRow stats={l.stats} />}
                   {l.moderationReason && <div className="small" style={{ color: "var(--brick)", marginTop: 4 }}>{l.moderationReason}</div>}
                   {!selecting && (
                     <div className="row" style={{ marginTop: 10 }}>
