@@ -2093,3 +2093,5 @@ pages légales) · Traçabilité (journal). URL et thème inchangés (`docs/desi
 3. **Réactivation d'un compte suspendu** : les annonces restent en pause (le membre les remet en
    ligne) — à documenter dans l'interface ou à automatiser.
 4. Pré-modération : ajouter « urgent », « whatsapp » à la liste surveillée (tour dédié).
+
+Déploiement : CI verte (typecheck, tests API SQLite et PostgreSQL 16, image Docker, Playwright, Render), API en **1.18.0** (`/health` : postgres ok), `DELETE /admin/users/:id`, `DELETE /admin/listings/:id` et `GET /admin/transactions/:id` répondent 401 sans jeton, front Vercel à jour (menu regroupé `admin-nav-title` présent dans le bundle, `/admin/litiges/:id` servi). Aucun compte de test créé en production pour ce tour.
