@@ -2336,3 +2336,5 @@ d'activation** côté Dashboard Stripe (constaté §40, inchangé).
 | `npm test` | 171 réussis, 1 ignoré |
 | Playwright (achat, messagerie, marges mobiles, console admin, accessibilité admin) | rejoués sur la pile locale ; suite complète par la CI |
 | Typecheck API et front, lint des pages modifiées | sans erreur |
+
+Déploiement : CI verte (suite Playwright complète, tests API SQLite et Postgres 16, image Docker, Render), API en **1.22.0** (`/health` : postgres ok), front Vercel à jour (accueil : « 1 annonce en ligne » au singulier, bandeau de réassurance et carte « Vendez le vôtre » présents). Aucun compte de test créé en production pour ce tour.
