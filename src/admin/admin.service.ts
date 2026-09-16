@@ -248,6 +248,7 @@ export class AdminService {
       patch.suspendedAt = null as any;
       patch.suspensionReason = null as any;
       changed.suspended = { to: false };
+      changed.listingsRestored = await this.restoreListingsAfterSuspension(id);
     }
     if (Object.keys(patch).length === 0) return this.userView(user);
 
@@ -519,6 +520,23 @@ export class AdminService {
    * bloqué), les annonces sont retirées, puis le compte est anonymisé (même routine que l'auto-suppression
    * RGPD). Irréversible : motif obligatoire, confirmation explicite côté interface, journal d'audit.
    */
+  /**
+   * Réactivation : les annonces mises en pause par la suspension (et seulement elles) reviennent en ligne ;
+   * celles dont la durée de vie s'est écoulée entre-temps passent « expirée » (le membre les renouvelle).
+   */
+  private async restoreListingsAfterSuspension(userId: string): Promise<{ republished: number; expired: number }> {
+    const paused = await this.listingsRepo.find({ where: { userId, status: 'desactivee', moderationReason: 'Compte suspendu' } });
+    const now = Date.now();
+    let republished = 0;
+    let expired = 0;
+    for (const l of paused) {
+      const isExpired = !!l.expiresAt && new Date(l.expiresAt).getTime() < now;
+      await this.listingsRepo.update(l.id, { status: isExpired ? 'expiree' : 'en_ligne', moderationReason: null as any });
+      if (isExpired) expired += 1; else republished += 1;
+    }
+    return { republished, expired };
+  }
+
   async deleteUser(ctx: AdminContext, id: string, reason: string) {
     const user = await this.usersRepo.findOne({ where: { id } });
     if (!user) throw new NotFoundException('Utilisateur introuvable.');
@@ -530,6 +548,15 @@ export class AdminService {
       .where('(t.buyerId = :id OR t.sellerId = :id)', { id })
       .andWhere('t.status IN (:...statuses)', { statuses: ['sequestre', 'livree', 'litige'] })
       .getMany();
+    // Une vente déjà expédiée (ou remise en attente de confirmation) ou en litige bloque la suppression : l'autre
+    // partie attend un colis, une confirmation ou une décision. Suspendre le compte (réversible) reste possible.
+    const blocking = open.filter((t) => t.status === 'livree' || t.status === 'litige');
+    if (blocking.length > 0) {
+      const shipped = blocking.filter((t) => t.status === 'livree').length;
+      const disputed = blocking.length - shipped;
+      const parts = [shipped ? `${shipped} vente${shipped > 1 ? 's' : ''} expédiée${shipped > 1 ? 's' : ''} ou remise${shipped > 1 ? 's' : ''} en attente de confirmation` : '', disputed ? `${disputed} litige${disputed > 1 ? 's' : ''} en cours` : ''].filter(Boolean).join(' et ');
+      throw new BadRequestException(`Suppression impossible : ${parts}. Attendez la confirmation de réception (ou tranchez le litige) avant de supprimer ce compte ; pour agir tout de suite, suspendez-le (réversible).`);
+    }
     const cancelled: string[] = [];
     for (const tx of open) {
       const note = `Compte ${tx.sellerId === id ? 'vendeur' : 'acheteur'} supprimé par la modération : ${reason}`;

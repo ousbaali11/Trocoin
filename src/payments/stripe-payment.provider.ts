@@ -103,10 +103,12 @@ export class StripePaymentProvider implements IPaymentProvider {
             ? { transfer_group: params.transferGroup }
             : {}),
       },
-      // Autorisation prolongée (jusqu'à 30 jours) demandée « si disponible » : accordée seulement avec la
-      // tarification IC+ et selon le réseau ; sinon fenêtre standard de 7 jours. La date réelle est relue
-      // dans `capture_before` (syncCheckout) et pilote les échéances du séquestre (PaymentsService).
-      payment_method_options: { card: { request_extended_authorization: 'if_available' } as unknown as Stripe.Checkout.SessionCreateParams.PaymentMethodOptions.Card },
+      // Moyens de paiement : volontairement AUCUN `payment_method_types` ni `payment_method_options` — Stripe
+      // propose les moyens activés dans le Dashboard et compatibles avec la capture différée (carte, et PayPal
+      // via Stripe une fois la demande « place de marché » approuvée : même séquestre, même virement Connect ;
+      // AUDIT §40). L'autorisation prolongée de la carte (§37, paramètre absent des types Checkout du SDK 16 et
+      // refusé par l'API : « unknown parameter ») n'est plus demandée : le séquestre sur le solde (§39) capture
+      // sous 24 h, la date `capture_before` relue dans syncCheckout ne sert plus que de garde-fou.
       metadata: params.metadata,
       success_url: params.successUrl,
       cancel_url: params.cancelUrl,
@@ -123,9 +125,12 @@ export class StripePaymentProvider implements IPaymentProvider {
       // Date limite de capture réelle (réseau de la carte, autorisation prolongée ou non) : pilote les échéances du séquestre
       const charge = intent.latest_charge && typeof intent.latest_charge !== 'string' ? intent.latest_charge : null;
       const card = charge?.payment_method_details?.card as { capture_before?: number; extended_authorization?: { status?: string } } | undefined;
+      // Moyen réellement utilisé (card, paypal, …) : mémorisé sur la transaction, jamais supposé être une carte
+      const paymentMethodType = charge?.payment_method_details?.type ?? undefined;
       return {
         status: 'sequestre',
         providerPaymentId: intent.id,
+        paymentMethodType,
         captureBefore: card?.capture_before ? new Date(card.capture_before * 1000) : undefined,
         extendedAuthorization: card?.extended_authorization?.status === 'enabled',
       };

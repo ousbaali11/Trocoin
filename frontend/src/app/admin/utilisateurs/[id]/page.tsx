@@ -140,7 +140,7 @@ export default function AdminUserPage() {
           </dl>
           <h2 className="h3" style={{ color: "var(--a-danger)" }}>Suppression définitive</h2>
           <p className="small" style={{ margin: "0 0 8px", color: "var(--a-muted)" }}>
-            Irréversible : les transactions en cours sont annulées et remboursées, les annonces retirées, les données personnelles effacées (le numéro redevient utilisable). Différent de la suspension, qui est réversible. Motif obligatoire, action journalisée.
+            Irréversible : les ventes non expédiées sont annulées et remboursées, les annonces retirées, les données personnelles effacées (le numéro redevient utilisable). Refusée tant qu&apos;une vente expédiée (ou remise en attente de confirmation) ou un litige est en cours : suspendez le compte en attendant. Différent de la suspension, qui est réversible. Motif obligatoire, action journalisée.
           </p>
           <button className="a-btn danger" disabled={busy || u.deleted || u.accountType === "admin"} onClick={() => setDeleteOpen(true)} data-testid="delete-user">Supprimer définitivement ce compte</button>
           {u.accountType === "admin" && !u.deleted && <p className="small" style={{ margin: "6px 0 0", color: "var(--a-muted)" }}>Rétrogradez d&apos;abord ce compte administrateur.</p>}
@@ -148,7 +148,7 @@ export default function AdminUserPage() {
             open={deleteOpen}
             onClose={() => setDeleteOpen(false)}
             title="Supprimer définitivement ce compte ?"
-            text={`${u.displayName} (${u.phoneNumber}) : ses transactions en cours seront annulées et remboursées, ses annonces retirées et ses données personnelles effacées. Cette action ne peut pas être annulée.`}
+            text={`${u.displayName} (${u.phoneNumber}) : ses ventes non expédiées seront annulées et remboursées, ses annonces retirées et ses données personnelles effacées. Une vente déjà expédiée (ou remise en attente de confirmation) ou un litige en cours bloque la suppression jusqu'à sa résolution. Cette action ne peut pas être annulée.`}
             confirmLabel="Supprimer le compte"
             onConfirm={async (reason) => {
               try {

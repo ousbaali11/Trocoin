@@ -2170,3 +2170,55 @@ avec des données réelles (taux de litiges, délais moyens), pas avant.
    s'affichent plus que pour les ventes antérieures.
 
 Déploiement : CI verte (migration `SequestrePlateforme` jouée sur Postgres 16 puis Render : les ventes existantes passent en `destination`, les nouvelles naissent en `platform`), API en **1.19.0** (`/health` : postgres ok), front Vercel à jour (aide « encaisse et conserve » présente dans le bundle). Aucun compte de test créé en production pour ce tour ; la première vente réelle en mode test Stripe (carte de test saisie par vous) doit faire apparaître un Transfer dans Connect → Transfers à la confirmation.
+
+## 40. PayPal via Stripe, suppression bloquée par une vente expédiée, réactivation et pré-modération — 16 septembre 2026
+
+### 1. PayPal via Stripe (option 0 retenue)
+
+- **Constat sur le code** : la session Stripe Checkout ne fixait déjà aucun `payment_method_types`
+  (Stripe propose les moyens activés dans le Dashboard et compatibles avec la capture différée) ; il n'y
+  avait donc pas de restriction à la carte à retirer. L'intention est maintenant écrite dans le
+  fournisseur, et le moyen réellement utilisé (`payment_method_details.type` : `card`, `paypal`, …) est
+  relu à l'autorisation et mémorisé (`transactions.paymentMethod`, migration `MoyenDePaiement`), affiché
+  au membre (« Paiement sécurisé via PayPal ») et à l'admin. Aucun libellé, e-mail ou notification ne
+  parlait « de carte » : les textes disent « paiement », « autorisation », « moyen de paiement ».
+- **Rien de câblé sur des identifiants PayPal** : `paypal-payment.provider.ts` (simulé) et les variables
+  `PAYPAL_*` restent déclarés mais inutilisés, réservés à l'option Commerce Platform si elle devenait
+  utile ; `docs/paypal-integration.md` §7 documente l'option retenue et mise en œuvre.
+- **Découverte en testant en production** : la création de la page Checkout répondait **503** depuis le
+  tour §37. Cause : `payment_method_options.card.request_extended_authorization` (autorisation prolongée,
+  §37) n'existe pas dans les types Checkout du SDK Stripe 16 (le code le masquait par un `as unknown as`)
+  et l'API le refuse (« unknown parameter »). Le paramètre est retiré — il n'a plus d'objet depuis le
+  séquestre sur le solde (§39, capture sous 24 h). Le message 503 porte désormais le type et le code
+  d'erreur du fournisseur (jamais de secret) pour diagnostiquer sans accès aux logs.
+- **Test en mode test Stripe** : voir « Vérification » (page Checkout réelle ouverte depuis une transaction
+  de production, sans paiement).
+
+### 2. Suppression définitive bloquée par une vente expédiée ou un litige
+
+`AdminService.deleteUser` : une vente **expédiée** (ou remise en main propre déclarée prête, en attente du
+code) ou un **litige** en cours, où le compte est acheteur ou vendeur, fait refuser la suppression (400)
+avec le décompte et la marche à suivre : attendre la confirmation de réception ou trancher le litige, et
+**suspendre** en attendant (réversible, disponible sans condition). Une vente **non expédiée** est toujours
+annulée et remboursée d'office avant la suppression (comportement §38 conservé pour ce seul cas). Textes
+de la fiche utilisateur et du dialogue mis à jour.
+
+### 3. Corrections annexes
+
+- **Réactivation** : les annonces mises en pause **par la suspension** (marquées « Compte suspendu »)
+  reviennent en ligne ; celles dont la durée de vie s'est écoulée entre-temps passent « expirée » (le
+  membre les renouvelle) ; une annonce mise en pause par le membre lui-même reste en pause. Le journal
+  d'audit de la réactivation porte `listingsRestored { republished, expired }`.
+- **Pré-modération** : nouvelle règle « signaux d'arnaque (urgence, messagerie externe) » —
+  `urgent(e)(s)`, `urgence`, `whatsapp`, `whats app`, `wa.me`, `telegram` — l'annonce passe « à
+  vérifier » comme pour les autres mots surveillés. Un « urgent » légitime coûte une revue humaine
+  (philosophie du fichier `moderation.ts`).
+
+### Vérification
+
+| Contrôle | Résultat |
+|---|---|
+| `test/phase25.e2e-spec.ts` (5 tests) | suppression refusée pour vente expédiée (vendeur et acheteur), message avec décompte, rien remboursé, suspension immédiate possible, suppression acceptée après confirmation ; refus pour remise en attente du code et pour litige, vente non expédiée encore remboursée d'office ; réactivation (en ligne / expirée / pause du membre conservée, journal) ; « urgent » et « WhatsApp » en vérification, annonce ordinaire publiée ; moyen `paypal` relu et mémorisé via un faux Checkout, charge plateforme sans restriction de moyen |
+| `npm test` | 161 réussis, 1 ignoré |
+| Playwright (achat, console admin, accessibilité admin) | rejoués sur la pile locale ; suite complète par la CI |
+| Migration `MoyenDePaiement` | jouée par le job CI Postgres 16 puis Render |

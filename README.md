@@ -38,7 +38,7 @@ cd frontend && npm install && cp .env.example .env.local && npm run dev -- -p 30
 ## Tests
 
 ```bash
-npm test                 # 156 tests e2e (API, supertest)
+npm test                 # 161 tests e2e (API, supertest)
 npm run e2e:build        # construit l'API (dist/) et le front (next build) pour les tests navigateur
 npm run e2e              # 113 scénarios Playwright dans Chromium (desktop 1280 px + mobile 375 px) : parcours, accessibilité (axe) site + back-office, clavier, SEO
 node scripts/charge.js --api https://api.trocoin.fr --front https://www.trocoin.fr --vus 10 --minutes 3   # test de charge léger (lectures publiques)
@@ -120,7 +120,8 @@ utilisateurs (suspension, rôle, badge identité), annonces (approbation, refus 
 correction, retrait, suppression définitive avec motif et saisie du mot SUPPRIMER), signalements
 (traitement avec action), transactions (fiche détaillée `/admin/litiges/:id` ; arbitrage d'un litige
 et décision forcée sur toute vente ouverte : rembourser, libérer, annuler), comptes (suspension
-réversible ; suppression définitive avec motif + SUPPRIMER, transactions ouvertes remboursées, données
+réversible, annonces remises en ligne à la réactivation ; suppression définitive avec motif + SUPPRIMER,
+ventes non expédiées remboursées, refusée tant qu'une vente expédiée ou un litige est en cours, données
 personnelles effacées), journal d'audit consultable (filtre par cible). Menu regroupé par domaine.
 Audit page par page : `docs/audit-admin.md` ; intégration PayPal (options, recommandation) :
 `docs/paypal-integration.md`.
@@ -194,7 +195,9 @@ et `NOTIFICATION_PROVIDER=none` (in-app uniquement).
 
 ### Séquestre sur le solde de la plateforme (AUDIT §39)
 
-Modèle Stripe « paiements et transferts distincts » : l'autorisation de l'acheteur est **encaissée sur
+Modèle Stripe « paiements et transferts distincts » (carte, et **PayPal via Stripe** dès son activation dans
+le Dashboard : même session Checkout, même séquestre, aucun identifiant PayPal — `docs/paypal-integration.md`
+§7) : l'autorisation de l'acheteur est **encaissée sur
 le solde de Trocoin** au plus tard 24 h après le paiement (`ESCROW_CAPTURE_AFTER_HOURS`), plus tôt dès
 que le vendeur expédie, se déclare prêt pour la remise, ou qu'un litige s'ouvre — pendant ce court
 délai une annulation libère simplement l'autorisation (aucun débit, aucun frais). Le solde de la

@@ -110,7 +110,7 @@ export default function TransactionPage() {
         <section className="panel">
           <h2 className="h3">Chronologie</h2>
           <ul className="small" style={{ paddingLeft: 18, margin: 0 }}>
-            <li>Paiement sécurisé : {formatDateTime(tx.createdAt)}</li>
+            <li>Paiement sécurisé{tx.paymentMethod === "paypal" ? " via PayPal" : tx.paymentMethod === "card" ? " par carte" : ""} : {formatDateTime(tx.createdAt)}</li>
             {tx.shippedAt && <li>{tx.deliveryMethod === "main_propre" ? "Vendeur prêt pour la remise" : `Expédié${tx.deliveryTrackingNumber ? ` (suivi ${tx.deliveryTrackingNumber})` : ""}`} : {formatDateTime(tx.shippedAt)}</li>}
             {tx.confirmedAt && <li>Réception confirmée : {formatDateTime(tx.confirmedAt)}</li>}
             {tx.disputeReason && <li>Litige : « {tx.disputeReason} »</li>}

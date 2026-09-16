@@ -304,6 +304,8 @@ export interface Transaction {
    * ancien modèle (ventes antérieures à la bascule), capture à la confirmation.
    */
   escrowModel?: "destination" | "platform";
+  /** Moyen de paiement relu chez le fournisseur (`card`, `paypal`, …) ; absent si inconnu. */
+  paymentMethod?: string | null;
   capturedAt?: string | null;
   shipBy?: string | null;
   transferredAt?: string | null;

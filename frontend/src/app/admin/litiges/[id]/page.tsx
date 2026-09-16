@@ -34,6 +34,7 @@ interface AdminTxDetail {
   confirmedAt?: string | null;
   resolvedAt?: string | null;
   escrowModel?: "destination" | "platform";
+  paymentMethod?: string | null;
   capturedAt?: string | null;
   shipBy?: string | null;
   transferredAt?: string | null;
@@ -130,7 +131,7 @@ export default function AdminTransactionPage() {
           <h2 className="h3">Chronologie et échéances</h2>
           <ul className="small" style={{ margin: 0, paddingLeft: 18 }}>
             <li>Modèle de séquestre : {tx.escrowModel === "destination" ? "ancien (capture à la confirmation, fonds versés directement au vendeur)" : "solde de la plateforme (encaissé par Trocoin, virement au vendeur à la confirmation)"}</li>
-            {tx.paidAt && <li>Autorisation bancaire : {formatDateTime(tx.paidAt)}</li>}
+            {tx.paidAt && <li>Autorisation{tx.paymentMethod ? ` (${tx.paymentMethod === "card" ? "carte" : tx.paymentMethod === "paypal" ? "PayPal" : tx.paymentMethod})` : ""} : {formatDateTime(tx.paidAt)}</li>}
             {tx.escrowModel !== "destination" && (tx.capturedAt ? <li data-testid="admin-captured-at">Encaissé sur le solde de Trocoin : {formatDateTime(tx.capturedAt)}</li> : open && <li>Pas encore encaissé (capture sous 24 h, ou dès l&apos;expédition / la remise / un litige)</li>)}
             {tx.shippedAt && <li>Expédiée / prête : {formatDateTime(tx.shippedAt)}</li>}
             {tx.autoConfirmAt && tx.status === "livree" && <li>Réception présumée le {formatDateTime(tx.autoConfirmAt)}</li>}

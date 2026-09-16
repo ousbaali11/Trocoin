@@ -9,16 +9,15 @@ import {
 } from './payment-provider.interface';
 
 /**
- * Second fournisseur de l'architecture interchangeable : PayPal.
+ * Fournisseur PayPal EN DIRECT (option « Commerce Platform », docs/paypal-integration.md) : NON RETENU.
  *
- * ÉTAT : implémentation SIMULÉE (aucun appel réseau), sur le même modèle que
- * MockPaymentProvider, sélectionnée par PAYMENT_PROVIDER=paypal. La vraie
- * intégration (PayPal Orders API v2 : create order avec intent=AUTHORIZE,
- * authorize, capture authorization, refund captured payment ; PayPal Commerce
- * Platform pour le versement aux vendeurs) sera branchée quand le compte
- * marchand existera. Les identifiants attendus sont déjà déclarés
- * (PAYPAL_CLIENT_ID / PAYPAL_CLIENT_SECRET / PAYPAL_ENV) pour que la
- * configuration soit stable.
+ * Décision (AUDIT §40) : PayPal est proposé **à travers Stripe**, comme moyen de paiement
+ * supplémentaire de la session Stripe Checkout existante (même séquestre, même virement Connect) ;
+ * rien ici n'est utilisé pour cela et aucun identifiant PayPal n'est nécessaire. Cette classe reste
+ * une implémentation SIMULÉE (aucun appel réseau, même modèle que MockPaymentProvider,
+ * PAYMENT_PROVIDER=paypal) au cas où l'option Commerce Platform (Orders API v2 intent=AUTHORIZE,
+ * versement aux vendeurs onboardés) serait retenue plus tard ; les variables PAYPAL_CLIENT_ID /
+ * PAYPAL_CLIENT_SECRET / PAYPAL_ENV restent déclarées mais inutilisées.
  */
 @Injectable()
 export class PaypalPaymentProvider implements IPaymentProvider {

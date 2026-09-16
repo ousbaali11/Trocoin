@@ -60,6 +60,8 @@ export interface CheckoutSync {
   captureBefore?: Date;
   /** Autorisation prolongée accordée par le réseau (jusqu'à 30 jours) ; sinon fenêtre standard. */
   extendedAuthorization?: boolean;
+  /** Moyen de paiement utilisé par l'acheteur (Stripe : `card`, `paypal`, …) ; inconnu si le fournisseur ne le dit pas. */
+  paymentMethodType?: string;
 }
 
 /** Évènement de webhook normalisé (après vérification de la signature). */

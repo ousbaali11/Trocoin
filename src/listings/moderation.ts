@@ -19,6 +19,9 @@ const RULES: Array<{ label: string; pattern: RegExp }> = [
   { label: 'contenu adulte', pattern: /\b(escort|massage (?:coquin|érotique)|sextoy|porno|xxx)\b/i },
   { label: 'services financiers', pattern: /\b(prêt (?:rapide|entre particuliers|d'argent)|crédit sans justificatif|rachat de crédit|investissement garanti|crypto[- ]?arbitrage)\b/i },
   { label: 'coordonnées dans l\'annonce', pattern: /(?:\+33|0033|\b0)[67](?:[\s.\-]?\d{2}){4}\b|\b[\w.+-]+@[\w-]+\.[a-z]{2,}\b|https?:\/\/|www\./i },
+  // Signaux d'arnaque classiques (AUDIT §40) : pousser hors de la messagerie sécurisée (WhatsApp, Telegram)
+  // ou créer un faux sentiment d'urgence. Un « urgent » légitime coûte une revue humaine, c'est assumé.
+  { label: 'signaux d\'arnaque (urgence, messagerie externe)', pattern: /\b(urgent[es]?|urgence|whatsapp|whats ?app|wa\.me|telegram)\b/i },
   { label: 'animaux : chiots / chatons sans identification', pattern: /\b(chiot[s]?|chaton[s]?)\b(?![\s\S]*\b(?:i-?cad|siren|lof|loof|identifi))/i },
 ];
 

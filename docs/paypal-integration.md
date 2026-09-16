@@ -1,4 +1,4 @@
-# PayPal comme second moyen de paiement — conception (phase 1)
+# PayPal comme second moyen de paiement — conception (phase 1) et mise en œuvre (option 0)
 
 Date : 16 septembre 2026. Aucun code de paiement PayPal n'est écrit dans cette phase : ce document
 pose l'architecture, le compromis et ce qu'il faut obtenir avant la phase 2. Sources lues le jour
@@ -29,7 +29,7 @@ onboarding, Payouts), documentation Stripe (« Paiements PayPal », Connect, cap
 
 ## 3. Les options d'architecture
 
-### Option 0 — PayPal *à travers Stripe* (recommandée)
+### Option 0 — PayPal *à travers Stripe* (RETENUE et mise en œuvre le 16 septembre 2026, voir §7)
 
 Stripe propose PayPal comme moyen de paiement pour les comptes Stripe **français** (liste des pays
 prise en charge : AT, BE, …, **FR**, …). L'acheteur choisit PayPal sur la page Stripe Checkout, est
@@ -98,7 +98,9 @@ marché » ou si un besoin propre à PayPal apparaît (protection vendeur PayPal
 Aucune des deux ne demande à Trocoin d'encaisser sur son propre compte PayPal pour reverser ensuite :
 c'est le schéma que les conditions PayPal encadrent le plus strictement.
 
-Décision à prendre par l'utilisateur avant la phase 2 : **Option 0 ou Option A**.
+**Décision prise (16 septembre 2026) : Option 0.** L'option A (Commerce Platform en direct) reste possible
+plus tard si un besoin propre à PayPal apparaît ; son fournisseur simulé et ses variables restent
+déclarés mais inutilisés.
 
 ## 5. Ce que l'utilisateur doit faire de son côté
 
@@ -154,3 +156,27 @@ Décision à prendre par l'utilisateur avant la phase 2 : **Option 0 ou Option A
 - **Tests** : faux serveur PayPal (comme `test/phase20` pour Boxtal) — commande créée, approuvée,
   autorisée, capturée, remboursée, annulée, webhook signé / invalide ; puis un vrai passage sandbox
   avec les comptes de test PayPal, comme pour Boxtal.
+
+## 7. Mise en œuvre de l'option 0 (AUDIT §40)
+
+Rien de séparé à intégrer : PayPal est un moyen de paiement supplémentaire **de la session Stripe
+Checkout déjà utilisée**, avec le même séquestre sur le solde de la plateforme (AUDIT §39) et le
+même virement Connect au vendeur que la carte.
+
+- `src/payments/stripe-payment.provider.ts` : la session Checkout ne fixe volontairement **aucun**
+  `payment_method_types` ; Stripe propose les moyens activés dans le Dashboard et compatibles avec la
+  capture différée. Aucune restriction à la carte n'existait ; l'intention est désormais écrite noir sur
+  blanc. Le moyen réellement utilisé (`payment_method_details.type` : `card`, `paypal`, …) est relu à
+  l'autorisation et mémorisé (`transactions.paymentMethod`), affiché au membre et à l'admin.
+- Capture différée avec PayPal : autorisation valable 10 jours côté Stripe ; sans importance depuis le
+  séquestre sur le solde (capture au plus tard 24 h après le paiement).
+- Aucun texte ne suppose une carte : les libellés parlent de « paiement », d'« autorisation » et de
+  « moyen de paiement » ; `PAYPAL_CLIENT_ID` / `PAYPAL_CLIENT_SECRET` / `PAYPAL_ENV` ne sont pas lus
+  pour cette option.
+- Côté Dashboard Stripe (action de l'utilisateur, en cours) : *Paramètres → Moyens de paiement → PayPal
+  → Activer*, demande « place de marché » (Connect) à approuver par Stripe. Tant qu'elle n'est pas
+  approuvée, la page Checkout ne montre que la carte ; dès l'approbation, PayPal apparaît sans
+  déploiement, y compris en mode test (Stripe simule PayPal, aucun compte sandbox PayPal requis).
+- Vérification : test API `test/phase25.e2e-spec.ts` (moyen `paypal` relu et mémorisé) ; page Checkout
+  réelle en mode test ouverte depuis une transaction de production (voir AUDIT §40 pour le résultat
+  constaté : PayPal présent ou activation encore en attente).

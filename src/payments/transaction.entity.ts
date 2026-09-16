@@ -79,6 +79,10 @@ export class Transaction {
   @Column({ nullable: true })
   providerPaymentId?: string;
 
+  /** Moyen de paiement utilisé (Stripe : `card`, `paypal`, …) ; null si inconnu. Rien ne suppose une carte (AUDIT §40). */
+  @Column({ type: 'varchar', nullable: true })
+  paymentMethod?: string | null;
+
   @Column({ nullable: true })
   deliveryTrackingNumber?: string;
 

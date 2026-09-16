@@ -201,8 +201,11 @@ export class PaymentsService {
         return { transaction: this.viewFor(pending, buyerId, checkout.checkoutUrl), checkoutUrl: checkout.checkoutUrl, quote: q };
       } catch (e) {
         await this.transactionsRepo.delete(pending.id);
-        this.logger.error(`Page de paiement impossible pour ${listingId} : ${(e as Error).message}`);
-        throw new ServiceUnavailableException('Le service de paiement est momentanément indisponible. Réessayez dans quelques instants.');
+        const err = e as Error & { code?: string; param?: string; type?: string };
+        this.logger.error(`Page de paiement impossible pour ${listingId} : ${err.message}`);
+        // Code d'erreur du fournisseur (jamais de secret) dans la réponse : diagnostic possible sans accès aux logs
+        const hint = err.code || err.type ? ` (fournisseur : ${[err.type, err.code, err.param].filter(Boolean).join(' · ')})` : '';
+        throw new ServiceUnavailableException(`Le service de paiement est momentanément indisponible. Réessayez dans quelques instants.${hint}`);
       }
     }
 
@@ -521,6 +524,7 @@ export class PaymentsService {
     if (sync.status === 'sequestre') {
       tx.status = 'sequestre';
       if (sync.providerPaymentId) tx.providerPaymentId = sync.providerPaymentId;
+      if (sync.paymentMethodType) tx.paymentMethod = sync.paymentMethodType;
       this.enterEscrow(tx, sync.captureBefore);
       if (sync.extendedAuthorization) this.logger.log(`Transaction ${tx.id} : autorisation prolongée accordée (capture avant ${tx.captureBefore?.toISOString()})`);
       const saved = await this.transactionsRepo.save(tx);
