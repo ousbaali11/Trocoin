@@ -121,7 +121,10 @@ Champs de saisie : 16 px sur mobile (pas de zoom automatique), hauteur ≥ 46 px
   (icône au-dessus du libellé), compte, et « Déposer une annonce » (seule action verte). Plus de
   rangée de familles sous l'en-tête : sur l'accueil, la **grille d'icônes des catégories** (icône +
   libellé, 12 colonnes) est posée directement sous l'en-tête, avant la recherche large ; le bandeau
-  de réassurance a été retiré.
+  de réassurance a été retiré. Au survol d'une tuile (pointeur précis, ≥ 1024 px), le panneau des
+  sous-catégories de l'ancienne rangée s'ouvre **sous la tuile**, large comme son contenu, colonnes de
+  8 au plus (AUDIT §48) ; la tuile ne change pas d'aspect. Catégories, recherche, compte et « Déposer
+  une annonce » font tous **40 px** de haut.
 - **Mobile** (≤ 900 px) : la même rangée unique = marque (monogramme seul sous 560 px), recherche
   compacte, Messages, menu ; le menu glisse vers le bas et contient dépôt, liens personnels,
   catégories en accordéon (une colonne pleine largeur), compte. Sur l'accueil, la grille d'icônes

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { api, SITE_URL } from "@/lib/api";
 import type { CategoryNode, SearchResult } from "@/lib/types";
 import { ListingCard } from "@/components/ui/ListingCard";
-import { CategoryIcon } from "@/components/ui/CategoryIcon";
+import { CategoryTiles } from "@/components/home/CategoryTiles";
 import { HomeSearch } from "@/components/home/HomeSearch";
 import { RecentlyViewed } from "@/components/home/RecentlyViewed";
 import styles from "./home.module.css";
@@ -45,17 +45,9 @@ export default async function HomePage() {
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }} />
       {/* Grille d'icônes des catégories directement sous l'en-tête (AUDIT §47 : remplace l'ancienne
-          rangée de liens texte ; le bandeau de réassurance a été retiré) */}
-      <div className={styles.catBand}>
-        <nav className={`container ${styles.categories}`} aria-label="Catégories" data-testid="category-tiles">
-          {tree.map((c) => (
-            <Link key={c.slug} href={`/recherche?category=${c.slug}`} className={styles.category}>
-              <span className={styles.categoryIcon}><CategoryIcon name={c.icon} /></span>
-              <span>{c.name}</span>
-            </Link>
-          ))}
-        </nav>
-      </div>
+          rangée de liens texte ; le bandeau de réassurance a été retiré) ; panneau des sous-catégories
+          au survol sur bureau (AUDIT §48) */}
+      <CategoryTiles tree={tree} />
       <section className={styles.hero}>
         <div className="container">
           <div className={styles.heroHead}>

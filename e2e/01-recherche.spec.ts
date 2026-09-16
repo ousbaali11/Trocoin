@@ -186,6 +186,9 @@ test("en-tête bureau sur une seule rangée à 1280, 1440 et 1920 px : marque, C
     expect(search.width, `largeur de la recherche à ${width}px`).toBeGreaterThan(190);
     expect(search.width).toBeLessThanOrEqual(520);
     for (const name of ['Se connecter', 'Déposer une annonce']) expect((await header.getByRole('link', { name }).boundingBox())!.height).toBeGreaterThanOrEqual(40);
+    // Même hauteur (40 px, ± 1) pour Catégories, la pilule de recherche, Se connecter et Déposer une annonce (AUDIT §48)
+    const heights = [await header.getByRole('button', { name: 'Catégories' }).boundingBox(), await header.locator('form[role="search"] > div').first().boundingBox(), await header.getByRole('link', { name: 'Se connecter' }).boundingBox(), await header.getByRole('link', { name: 'Déposer une annonce' }).boundingBox()].map((b) => b!.height);
+    expect(Math.max(...heights) - Math.min(...heights), `hauteurs ${heights.join(' / ')} à ${width}px`).toBeLessThanOrEqual(1);
     for (const label of ['Mes recherches', 'Favoris', 'Messages', 'Catégories']) await expect(header.getByText(label, { exact: true })).toBeVisible();
     // L'invite de la recherche n'est pas tronquée
     const fits = await header.getByRole('combobox', { name: 'Rechercher une annonce' }).evaluate((el: HTMLInputElement) => {

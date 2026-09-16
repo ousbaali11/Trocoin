@@ -25,9 +25,59 @@
 }
 /* Bande des catégories directement sous l'en-tête (AUDIT §47), même apparence qu'avant : icône + libellé */
 .catBand {
+  position: relative;
   background: var(--white);
   border-bottom: 1px solid var(--line-soft);
   padding: 10px 0 8px;
+  z-index: 40;
+}
+/* Panneau des sous-catégories au survol d'une tuile (AUDIT §48, repris de l'ancienne rangée de familles) :
+   posé sous la tuile ouverte (left calculé par le composant), large comme son contenu, colonnes de 8 */
+.panel {
+  position: absolute;
+  top: calc(100% + 1px);
+  min-width: 240px;
+  max-width: calc(100% - 32px);
+  width: max-content;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 0 0 var(--radius) var(--radius);
+  box-shadow: var(--shadow-lg);
+  z-index: 45;
+}
+.panelInner {
+  padding: 16px 22px 20px;
+}
+.panelHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.panelTitle {
+  font-weight: 700;
+  color: var(--ink);
+}
+.columns {
+  display: flex;
+  gap: 36px;
+  flex-wrap: nowrap;
+}
+.column {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-width: 160px;
+}
+.column li {
+  padding: 4px 0;
+  font-size: 0.9rem;
+}
+.column a {
+  color: var(--ink-soft);
+}
+.column a:hover {
+  color: var(--accent);
 }
 .categories {
   display: grid;

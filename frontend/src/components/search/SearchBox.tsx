@@ -118,10 +118,11 @@ export function SearchBox({ compact = false, initial = "", onNavigate }: { compa
 
   return (
     <form role="search" onSubmit={(e) => { e.preventDefault(); submit(); }} style={{ position: "relative" }}>
-      <div style={{ display: "flex", border: "1px solid var(--ink-soft)", borderRadius: "var(--radius-pill)", overflow: "hidden", background: "var(--white)" }}>
+      {/* Compact (en-tête) : pilule de 40 px exactement, comme les boutons voisins (AUDIT §48) */}
+      <div style={{ display: "flex", border: "1px solid var(--ink-soft)", borderRadius: "var(--radius-pill)", overflow: "hidden", background: "var(--white)", height: compact ? 40 : undefined }}>
         <input
           className="input"
-          style={{ border: 0, minHeight: compact ? 40 : 48, borderRadius: 0, flex: 1, minWidth: 0, width: "100%", fontSize: compact ? "0.95rem" : undefined, paddingLeft: 18 }}
+          style={{ border: 0, minHeight: compact ? 0 : 48, height: compact ? 38 : undefined, padding: compact ? "0 12px 0 18px" : undefined, borderRadius: 0, flex: 1, minWidth: 0, width: "100%", fontSize: compact ? "0.95rem" : undefined, paddingLeft: 18 }}
           type="search"
           placeholder={compact ? "Rechercher" : "Que recherchez-vous ? (canapé, vélo, appartement…)"}
           value={q}

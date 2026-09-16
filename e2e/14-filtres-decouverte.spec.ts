@@ -166,6 +166,47 @@ test("accueil : grille d'icônes des catégories directement sous l'en-tête, pl
   await tile.click();
   await expect(page).toHaveURL(/category=vehicules/);
 });
+
+test('grille d\'icônes (bureau) : au survol d\'une tuile, panneau de sous-catégories en colonnes posé sous la tuile, fermé par Échap ; les tuiles restent identiques (AUDIT §48)', async ({ page, isMobile }) => {
+  test.skip(isMobile, 'Sur mobile, les catégories sont dans le menu principal (accordéon).');
+  await page.goto('/');
+  const tiles = page.getByTestId('category-tiles');
+  await expect.poll(async () => {
+    const n = await tiles.locator('a').count();
+    if (n === 0) await page.reload();
+    return n;
+  }, { timeout: 90_000, intervals: [3_000] }).toBeGreaterThan(0);
+  const vehicules = tiles.getByRole('link', { name: 'Véhicules', exact: true });
+  const before = (await vehicules.boundingBox())!;
+  await vehicules.hover();
+  const panel = page.getByRole('region', { name: 'Sous-catégories de Véhicules' });
+  await expect(panel).toBeVisible();
+  for (const c of ['Voitures', 'Motos', 'Utilitaires', 'Caravaning', 'Nautisme']) await expect(panel.getByRole('link', { name: c })).toBeVisible();
+  await panel.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)));
+  // Posé sous la tuile survolée (bord gauche aligné), large comme son contenu, une seule colonne jusqu'à 8
+  const panelBox = (await panel.boundingBox())!;
+  expect(Math.abs(panelBox.x - before.x)).toBeLessThanOrEqual(2);
+  expect(panelBox.y).toBeGreaterThanOrEqual(before.y + before.height - 2);
+  expect(panelBox.width).toBeLessThan(500);
+  await expect(panel.locator('ul')).toHaveCount(1);
+  await expect(panel.getByRole('link', { name: 'Tout Véhicules' })).toHaveAttribute('href', '/recherche?category=vehicules');
+  // La tuile n'a pas bougé ni changé de taille
+  const after = (await vehicules.boundingBox())!;
+  expect(after).toEqual(before);
+  await page.keyboard.press('Escape');
+  await expect(panel).toHaveCount(0);
+  // Famille en bout de grille, 15 sous-catégories : deux colonnes (8 + 7), panneau contenu dans la page
+  await tiles.getByRole('link', { name: 'Services', exact: true }).hover();
+  const services = page.getByRole('region', { name: 'Sous-catégories de Services' });
+  await expect(services.locator('ul')).toHaveCount(2);
+  await expect(services.locator('ul').nth(0).locator('li')).toHaveCount(8);
+  await expect(services.locator('ul').nth(1).locator('li')).toHaveCount(7);
+  await services.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)));
+  const servicesBox = (await services.boundingBox())!;
+  expect(servicesBox.x + servicesBox.width).toBeLessThanOrEqual(1280);
+  await services.getByRole('link', { name: 'Cours particuliers' }).click();
+  await expect(page).toHaveURL(/category=cours-particuliers/);
+});
 test('pied de page en quatre colonnes avec des liens qui aboutissent ; pas d\'avis ni d\'applications inventés', async ({ page }) => {
   await page.goto('/');
   const footer = page.getByRole('contentinfo');
