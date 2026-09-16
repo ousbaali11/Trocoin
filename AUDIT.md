@@ -2373,3 +2373,5 @@ au survol ou au focus ; bouton en `white-space: normal` (texte sur deux lignes s
 de la carte ; sur bureau la carte occupe deux colonnes de la grille. Mesures sur la pile locale au survol :
 bureau — carte 316 px, bouton 278 px, aucun débordement, 0 élément souligné ; mobile 375 px — carte 204 px,
 bouton 166 px, aucun débordement, 0 élément souligné. Captures avant / après dans le dossier de preuves.
+
+Déploiement : CI verte, API en **1.23.1**, front Vercel à jour ; mesure sur www.trocoin.fr au survol de la carte : largeur 316 px, aucun débordement du bouton, 0 élément souligné (capture).
