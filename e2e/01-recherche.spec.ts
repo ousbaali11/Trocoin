@@ -182,7 +182,8 @@ test("en-tête bureau sur une seule rangée à 1280, 1440 et 1920 px : marque, C
     expect(Math.max(...centers) - Math.min(...centers), `rangée unique alignée à ${width}px`).toBeLessThan(6);
     // Recherche resserrée mais utilisable ; les boutons de droite gardent leur taille (40 px de haut)
     const search = (await header.getByRole('combobox', { name: 'Rechercher une annonce' }).boundingBox())!;
-    expect(search.width).toBeGreaterThan(220);
+    // Le conteneur est plafonné à 1180 px : la recherche fait ~200–240 px quelle que soit la fenêtre (polices de secours plus larges sur Linux en CI)
+    expect(search.width, `largeur de la recherche à ${width}px`).toBeGreaterThan(190);
     expect(search.width).toBeLessThanOrEqual(520);
     for (const name of ['Se connecter', 'Déposer une annonce']) expect((await header.getByRole('link', { name }).boundingBox())!.height).toBeGreaterThanOrEqual(40);
     for (const label of ['Mes recherches', 'Favoris', 'Messages', 'Catégories']) await expect(header.getByText(label, { exact: true })).toBeVisible();

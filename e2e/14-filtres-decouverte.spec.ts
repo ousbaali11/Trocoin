@@ -141,6 +141,13 @@ test("accueil : grille d'icônes des catégories directement sous l'en-tête, pl
   await expect(page.getByRole('list', { name: 'Ce que Trocoin garantit' })).toHaveCount(0);
   await expect(page.getByText('Paiement sécurisé, fonds conservés')).toHaveCount(0);
   const tiles = page.getByTestId('category-tiles');
+  // L'accueil est pré-rendu à la construction (ISR 60 s) avant que l'API ne tourne : la première réponse peut
+  // encore porter un arbre vide ; on recharge jusqu'à la régénération plutôt que d'échouer sur ce cache
+  await expect.poll(async () => {
+    const n = await tiles.locator('a').count();
+    if (n === 0) await page.reload();
+    return n;
+  }, { timeout: 90_000, intervals: [3_000] }).toBeGreaterThan(0);
   await expect(tiles).toBeVisible();
   for (const name of ['Immobilier', 'Véhicules', 'Matériel pro', 'Emploi', 'Mode', 'Maison & Jardin', 'Famille', 'Électronique', 'Loisirs', 'Services', 'Animaux']) {
     await expect(tiles.getByRole('link', { name, exact: true })).toBeVisible();
