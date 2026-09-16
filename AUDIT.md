@@ -1896,3 +1896,5 @@ Ligne sous chaque annonce publiée (pas sur les brouillons) : **vues · favoris 
   moissonnage ; il reste joignable par les membres tant que l'annonce est en ligne.
 - Les vues d'avant ce tour (comptées par lecture API) restent dans le compteur ; les nouvelles sont
   comptées par affichage réel, donc plus basses à trafic égal.
+
+Déploiement : CI verte (migration `TelephoneEtStatistiques` jouée par le job Postgres 16, puis Render), API en **1.16.0** (`/health`) avec `POST /listings/:id/view` (200) et `POST /listings/:id/phone` / `GET /listings/mine` réservés aux membres (401), front Vercel servant la ligne de statistiques de « Mes annonces », vérifiés le 16 septembre 2026.
