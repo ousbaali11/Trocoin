@@ -2497,3 +2497,38 @@ Déposer une annonce) en une seule rangée, sur bureau et sur mobile.
     liens texte 0, bandeau 0, pas de débordement horizontal ;
   - mobile 375 px : en-tête **111 → 57 px** ; monogramme, recherche (161 px), Messages, menu centrés à
     y = 28 ; grille à y = 67 (4 colonnes, 283 px), titre à y = 379 ; A et C absents, pas de débordement.
+
+## 48. Barre du haut : hauteur uniforme ; panneau des sous-catégories au survol de la grille d'icônes — 17 septembre 2026
+
+Demande (capture annotée) : la pilule de recherche n'avait pas la hauteur des boutons Catégories, profil et
+« Déposer une annonce » ; rattacher à la grille d'icônes le menu déroulant des sous-catégories que portait
+l'ancienne rangée de liens texte, sans changer l'aspect des tuiles ; mobile inchangé.
+
+### Livré (1.25.1)
+
+- **Hauteur** : la pilule mesurait 45,6 px (la classe `.input` impose un padding vertical de 10 px que le
+  `min-height` compact ne plafonnait pas). En mode compact, le cadre fait maintenant **40 px** exactement et
+  le champ 38 px sans padding vertical (`SearchBox`). Catégories, recherche, Se connecter ou profil, et
+  Déposer une annonce : 40 px chacun, centrés à la même ligne.
+- **Panneau au survol** : nouveau composant client `CategoryTiles` (accueil) qui rend la même grille
+  (mêmes classes, même balisage, `data-family` en plus) et reprend tel quel le panneau de l'ancienne
+  `CategoryBar` : posé sous la tuile survolée (bord gauche aligné, borné au bord droit), large comme son
+  contenu, en-tête « Tout <famille> », sous-catégories en colonnes de 8 au plus, animation `menu-in` /
+  `menu-out`, fermeture par Échap (focus rendu à la tuile), clic hors panneau ou changement de page. Le
+  survol n'ouvre rien sans pointeur précis ou sous 1024 px (`matchMedia`), donc rien ne change sur mobile :
+  un tap navigue vers la catégorie, les sous-catégories restent dans l'accordéon du menu.
+- Tests : `01-recherche` (quatre hauteurs égales à ± 1 px), `14-filtres-decouverte` (survol → panneau
+  sous la tuile, 1 colonne pour Véhicules, 2 colonnes 8 + 7 pour Services contenues dans la page, Échap,
+  tuile identique avant/après survol, lien de sous-catégorie qui navigue). Suite complète locale :
+  106 réussis, 11 ignorés ; CI verte sur `144b615`.
+
+### Vérification en production (www.trocoin.fr, 1.25.1)
+
+- Non connecté, 1280 px : Catégories 40 px, pilule de recherche **45,6 → 40 px**, Se connecter 40 px,
+  Déposer une annonce 40 px, tous centrés à y = 30. Connecté (compte de démonstration) : Catégories,
+  recherche, profil « Sami C. », Déposer une annonce = 40 px, centrés à y = 30 (captures).
+- Survol de « Véhicules » : tuile 91 × 98 px avant et après survol (identique), panneau à x = 165 (bord
+  gauche de la tuile), y = 178 (sous la grille), 240 × 257 px, une colonne de 6 sous-catégories. Survol de
+  « Services » : deux colonnes (8 + 7), bord droit à 1264 px (dans la page). Échap : 0 panneau. Captures
+  et vidéo du survol dans le dossier de preuves.
+- Mobile 375 px : survol simulé → 0 panneau ; tap sur « Véhicules » → `/recherche?category=vehicules`.
