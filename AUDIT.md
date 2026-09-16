@@ -2360,3 +2360,16 @@ puis retour sur la page avec le bouton) ; captures : anonyme (message + bouton d
 (message + bouton de renvoi), après renvoi (« E-mail envoyé à … à 17:11 »), lien incomplet après connexion.
 
 Déploiement : CI verte (suite Playwright complète, tests API SQLite et Postgres 16, image Docker, Render), API en **1.23.0** (`/health` ok), front Vercel à jour : `/confirmer-email?token=invalide` en production affiche le nouveau message et le bouton de connexion (capture). Aucun compte de test créé en production.
+
+## 44. Accueil : carte « Vendez le vôtre » — bouton débordant et soulignement au survol — 16 septembre 2026
+
+Constat (capture de l'utilisateur, production) : dans la carte d'invitation ajoutée au §42, le texte du bouton
+« Déposer une annonce » dépassait du bouton (largeur d'une colonne de la grille, texte non retourné à la
+ligne), et le survol soulignait tout le texte de la carte (la carte entière est un lien, règle globale
+`a:hover`).
+
+Correction (`frontend/src/app/(site)/home.module.css`) : aucun soulignement sur la carte ni ses descendants
+au survol ou au focus ; bouton en `white-space: normal` (texte sur deux lignes si besoin) étiré à la largeur
+de la carte ; sur bureau la carte occupe deux colonnes de la grille. Mesures sur la pile locale au survol :
+bureau — carte 316 px, bouton 278 px, aucun débordement, 0 élément souligné ; mobile 375 px — carte 204 px,
+bouton 166 px, aucun débordement, 0 élément souligné. Captures avant / après dans le dossier de preuves.

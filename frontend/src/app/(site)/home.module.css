@@ -180,3 +180,36 @@
   align-self: flex-start;
   margin-top: 4px;
 }
+
+/* Carte d'invitation : c'est un lien entier — jamais de soulignement au survol, bouton qui reste dans la carte */
+.inviteCard,
+.inviteCard:hover,
+.inviteCard:focus-visible {
+  text-decoration: none;
+}
+.inviteCard * {
+  text-decoration: none;
+}
+.inviteCard .eyebrow {
+  margin-bottom: 0;
+}
+.inviteCard .eyebrow::after,
+.inviteCard .eyebrow::before {
+  content: none;
+}
+.inviteCard .btn {
+  white-space: normal;
+  text-align: center;
+  line-height: 1.25;
+  max-width: 100%;
+  align-self: stretch;
+}
+/* Sur bureau la carte prend deux colonnes de la grille : le bouton et le texte respirent */
+@media (min-width: 641px) {
+  .inviteCard {
+    grid-column: span 2;
+  }
+}
+.inviteCard .btn {
+  white-space: normal !important;
+}
