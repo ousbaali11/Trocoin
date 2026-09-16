@@ -2532,3 +2532,40 @@ l'ancienne rangée de liens texte, sans changer l'aspect des tuiles ; mobile inc
   « Services » : deux colonnes (8 + 7), bord droit à 1264 px (dans la page). Échap : 0 panneau. Captures
   et vidéo du survol dans le dossier de preuves.
 - Mobile 375 px : survol simulé → 0 panneau ; tap sur « Véhicules » → `/recherche?category=vehicules`.
+
+## 49. Panneau « Tous les filtres » : boutons qui débordaient ; panneau des sous-catégories arrondi et dégradé — 17 septembre 2026
+
+Demande (capture) : « Tout effacer » et « Rechercher » sortaient du cadre du panneau de filtres sur bureau,
+avec une barre de défilement horizontale ; à corriger sans élargir le panneau, vérifier les autres champs
+et le mobile. Et donner au panneau des sous-catégories (survol d'une tuile) des coins arrondis et un fond
+vert clair de la palette qui s'estompe vers le bas.
+
+### Cause et correction (1.25.2)
+
+- **Cause** : dans `SearchPage.module.css`, la règle `.panelFooter .btn` (deux boutons qui se partagent la
+  colonne) ciblait `.btn`, classe **globale** : le module CSS hachait ce nom en `…__btn`, donc la règle ne
+  s'appliquait à rien et les boutons gardaient leur largeur naturelle (129 + 147 px + 10 px d'écart dans
+  239 px utiles → `scrollWidth` 307 pour 278). Même défaut latent sur `.filters .field`, `.drawerBody
+  .field` et, sur l'accueil, `.inviteVisual .eyebrow` et `.inviteCard .btn` (carte d'invitation, visible
+  seulement avec moins de 4 annonces) : tous passés en `:global(...)`. Aucun autre champ ne débordait
+  (localisation, prix : contrôlés par script, 0 élément hors cadre).
+- **Boutons** : `flex: 1 1 0`, `min-width: 0`, marges internes 8 px, police 0,86 rem, texte coupé avec
+  points de suspension plutôt que de déborder si la place venait à manquer. Largeur du panneau inchangée
+  (280 px).
+- **Panneau des sous-catégories** : `border-radius: var(--radius-lg)` (16 px) sur les quatre coins, fond
+  `linear-gradient(180deg, var(--accent-tint) 0%, var(--white) 100%)` — `--accent-tint` (#e4f3ee) est la
+  teinte de la palette déjà utilisée pour les encarts positifs et le survol des menus.
+- Tests : `14-filtres-decouverte` — nouveau scénario bureau + mobile (aucun conteneur à défilement
+  horizontal dans le panneau ou le volet, aucun champ ni bouton hors du cadre, texte entier des deux
+  boutons) et assertions de style du panneau (rayon 16 px, dégradé de rgb(228, 243, 238) vers le blanc).
+  Suite complète locale : 108 réussis, 11 ignorés ; CI verte sur `60f14a9`.
+
+### Vérification en production (www.trocoin.fr, 1.25.2)
+
+- Bureau 1280 px : panneau `clientWidth` 278 = `scrollWidth` 278 (**307 avant**), 0 conteneur à
+  défilement horizontal, 0 champ hors cadre ; « Tout effacer » 114 px (bord droit 205) et « Rechercher
+  (6) » 114 px (bord droit 329) dans le cadre (350), textes entiers.
+- Mobile 375 px (volet) : `clientWidth` 375 = `scrollWidth` 375, page sans défilement horizontal,
+  boutons 167 px chacun dans le cadre, textes entiers.
+- Survol de « Maison & Jardin » : rayon 16 px / 16 px, fond `linear-gradient(rgb(228, 243, 238) 0%,
+  rgb(255, 255, 255) 100%)`. Captures avant/après dans le dossier de preuves.
