@@ -11,9 +11,10 @@ const fraunces = Fraunces({ subsets: ["latin"], variable: "--font-fraunces", dis
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: { default: "Trocoin — Petites annonces entre particuliers et professionnels en France", template: "%s · Trocoin" },
+  // Résultat Google sur le nom « Trocoin » : titre court qui dit ce qu'est le site, description fidèle (149 caractères)
+  title: { default: "Trocoin — Les petites annonces entre voisins, en France", template: "%s · Trocoin" },
   description:
-    "Achetez, vendez, donnez ou échangez près de chez vous. Trocoin est la plateforme d'annonces réservée aux numéros de mobile français, avec paiement sécurisé et messagerie intégrée.",
+    "Trocoin, le site de petites annonces entre voisins : achetez, vendez, donnez ou échangez près de chez vous, paiement sécurisé et messagerie intégrée.",
   openGraph: { siteName: "Trocoin", locale: "fr_FR", type: "website" },
   robots: { index: true, follow: true },
 };

@@ -30,7 +30,16 @@ export default async function HomePage() {
   const { tree, recent, pro, total, ok, free } = await load();
   const jsonLd = [
     { "@context": "https://schema.org", "@type": "WebSite", name: "Trocoin", url: SITE_URL, inLanguage: "fr-FR", potentialAction: { "@type": "SearchAction", target: { "@type": "EntryPoint", urlTemplate: `${SITE_URL}/recherche?q={search_term_string}` }, "query-input": "required name=search_term_string" } },
-    { "@context": "https://schema.org", "@type": "Organization", name: "Trocoin", url: SITE_URL, logo: `${SITE_URL}/favicon.ico` },
+    // Organisation : logo PNG 512 px net (le favicon .ico ne convient pas aux résultats de recherche) ; aucun
+    // « sameAs » : Trocoin n'a pas encore de profil public sur un réseau social (à ajouter le jour où il existe).
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      name: "Trocoin",
+      url: SITE_URL,
+      logo: { "@type": "ImageObject", url: `${SITE_URL}/logo.png`, width: 512, height: 512 },
+      description: "Site français de petites annonces entre voisins : achat, vente, don et échange près de chez soi, paiement sécurisé et messagerie intégrée.",
+    },
   ];
   return (
     <>

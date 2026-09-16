@@ -43,3 +43,27 @@ curl -s https://www.trocoin.fr/sitemap.xml | grep -c "<loc>"
 curl -s -o /dev/null -w "%{http_code}\n" https://www.trocoin.fr/annonces/00000000-0000-4000-8000-000000000000
 curl -s "https://www.trocoin.fr/recherche?category=velos" | grep -o '<script type="application/ld+json">[^<]*'
 ```
+
+## Recherche du nom « Trocoin » : ce qui est contrôlable et ce qui ne l'est pas
+
+Mis à jour le 16 septembre 2026.
+
+**Pas activable techniquement, ne pas le redemander au code :**
+- Les **liens de site** (sitelinks) sous le premier résultat : Google les génère seul, à partir de la
+  structure du site et de la popularité de ses pages, quand la marque est recherchée souvent. Aucune
+  balise ne les déclenche ; il n'existe plus de réglage dans Search Console pour les demander.
+- L'**encadré de connaissance** (fiche à droite avec logo, description, réseaux) : il vient du
+  graphe de connaissances de Google, alimenté par des sources externes (Wikipédia, Wikidata, presse,
+  profils officiels). Il dépend de la notoriété, pas du site.
+
+**Fait, parce que c'est sous contrôle :**
+| Point | Statut | Détail |
+|---|---|---|
+| `WebSite` + `SearchAction` sur l'accueil | en place | cible `/recherche?q={search_term_string}` : si Google l'affiche un jour, la barre de recherche du résultat mène bien à la recherche Trocoin |
+| `Organization` sur l'accueil | ajusté | nom exact, URL, **logo PNG 512 × 512** (`/logo.png`, le `.ico` ne convenait pas), description ; **pas de `sameAs`** tant qu'aucun profil public sur un réseau social n'existe (rien d'inventé) |
+| Titre et description de l'accueil pour une recherche « trocoin » | ajusté | `Trocoin — Les petites annonces entre voisins, en France` (55 caractères) ; description de 149 caractères qui décrit ce que fait le site (achat, vente, don, échange, paiement sécurisé, messagerie) |
+| Nom de marque dans le titre des autres pages | en place | modèle `%s · Trocoin` |
+
+Ce qui aide, hors code : des pages citées ailleurs (annuaires, presse, partenaires), un profil
+officiel par réseau social utilisé réellement (à ajouter ensuite en `sameAs`), et la propriété
+vérifiée dans Search Console pour suivre les requêtes sur la marque.
