@@ -135,46 +135,30 @@ test('bas de page de catégorie : recherches suggérées, localisations les plus
   await expect(pagination.getByRole('button', { name: /Suivant/ }).or(pagination.getByRole('link', { name: /Suivant/ }))).toBeVisible();
 });
 
-test('barre des familles (bureau) : chaque famille ouvre un panneau de sous-catégories en colonnes, fermé par Échap', async ({ page, isMobile }) => {
-  test.skip(isMobile, 'Sur mobile, les catégories sont dans le menu principal (accordéon).');
+test("accueil : grille d'icônes des catégories directement sous l'en-tête, plus de rangée de liens texte ni de bandeau de réassurance (AUDIT §47)", async ({ page, isMobile }) => {
   await page.goto('/');
-  const bar = page.getByRole('navigation', { name: 'Familles de catégories' });
-  await expect(bar).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Familles de catégories' })).toHaveCount(0);
+  await expect(page.getByRole('list', { name: 'Ce que Trocoin garantit' })).toHaveCount(0);
+  await expect(page.getByText('Paiement sécurisé, fonds conservés')).toHaveCount(0);
+  const tiles = page.getByTestId('category-tiles');
+  await expect(tiles).toBeVisible();
   for (const name of ['Immobilier', 'Véhicules', 'Matériel pro', 'Emploi', 'Mode', 'Maison & Jardin', 'Famille', 'Électronique', 'Loisirs', 'Services', 'Animaux']) {
-    await expect(bar.getByRole('button', { name, exact: true })).toBeVisible();
+    await expect(tiles.getByRole('link', { name, exact: true })).toBeVisible();
   }
-  await bar.getByRole('button', { name: 'Véhicules', exact: true }).click();
-  const panel = page.getByRole('region', { name: 'Sous-catégories de Véhicules' });
-  await expect(panel).toBeVisible();
-  for (const c of ['Voitures', 'Motos', 'Utilitaires', 'Caravaning', 'Nautisme']) await expect(panel.getByRole('link', { name: c })).toBeVisible();
-  // Le panneau est posé sous la famille ouverte (bord gauche aligné avec son onglet), large comme son contenu,
-  // et une famille de 8 sous-catégories ou moins tient dans une seule colonne
-  await panel.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)));
-  const tabBox = (await bar.getByRole('button', { name: 'Véhicules', exact: true }).boundingBox())!;
-  const panelBox = (await panel.boundingBox())!;
-  expect(Math.abs(panelBox.x - tabBox.x)).toBeLessThanOrEqual(2);
-  expect(panelBox.width).toBeLessThan(500);
-  await expect(panel.locator('ul')).toHaveCount(1);
-  await expect(panel.getByRole('link', { name: 'Tout Véhicules' })).toHaveAttribute('href', '/recherche?category=vehicules');
-  await page.keyboard.press('Escape');
-  await expect(panel).toHaveCount(0);
-  await bar.getByRole('button', { name: 'Services', exact: true }).hover();
-  const services = page.getByRole('region', { name: 'Sous-catégories de Services' });
-  await expect(services.locator('ul')).toHaveCount(2); // 15 sous-catégories → colonnes de 8 puis 7
-  await expect(services.locator('ul').nth(0).locator('li')).toHaveCount(8);
-  await expect(services.locator('ul').nth(1).locator('li')).toHaveCount(7);
-  // Famille en bout de barre : le panneau reste dans la page (pas de débordement à droite)
-  await services.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)));
-  const servicesBox = (await services.boundingBox())!;
-  expect(servicesBox.x + servicesBox.width).toBeLessThanOrEqual(1280);
-  const servicesTab = (await bar.getByRole('button', { name: 'Services', exact: true }).boundingBox())!;
-  expect(servicesBox.x).toBeLessThanOrEqual(servicesTab.x + 2);
-  // Le panneau glisse en place (menu-in) : on attend la fin de l'animation avant de cliquer dedans
-  await services.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)));
-  await services.getByRole('link', { name: 'Cours particuliers' }).click();
-  await expect(page).toHaveURL(/category=cours-particuliers/);
+  // La grille est posée directement sous l'en-tête, avant la recherche large
+  const header = (await page.locator('header').boundingBox())!;
+  const box = (await tiles.boundingBox())!;
+  expect(box.y - (header.y + header.height)).toBeLessThanOrEqual(12);
+  const hero = (await page.getByRole('heading', { name: 'Rechercher une annonce' }).boundingBox())!;
+  expect(hero.y).toBeGreaterThan(box.y + box.height);
+  // Icône au-dessus du libellé (apparence conservée)
+  const tile = tiles.getByRole('link', { name: 'Véhicules', exact: true });
+  await expect(tile.locator('svg')).toBeVisible();
+  const tileBox = (await tile.boundingBox())!;
+  expect(tileBox.width).toBeLessThanOrEqual(isMobile ? 100 : 110);
+  await tile.click();
+  await expect(page).toHaveURL(/category=vehicules/);
 });
-
 test('pied de page en quatre colonnes avec des liens qui aboutissent ; pas d\'avis ni d\'applications inventés', async ({ page }) => {
   await page.goto('/');
   const footer = page.getByRole('contentinfo');

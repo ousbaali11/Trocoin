@@ -163,29 +163,28 @@ test("carte d'annonce « fiche » Trocoin : prix sous la photo dans le bloc de t
   expect(await card.locator('a[class*="media"]').evaluate((el) => getComputedStyle(el).borderRadius)).toBe('12px');
 });
 
-test("en-tête bureau sur deux rangées à 1280, 1440 et 1920 px : identité et compte en haut, recherche large en dessous ; barre d'accueil réduite", async ({ page, isMobile }) => {
+test("en-tête bureau sur une seule rangée à 1280, 1440 et 1920 px : marque, Catégories, recherche, liens et dépôt alignés ; barre d'accueil réduite (AUDIT §47)", async ({ page, isMobile }) => {
   test.skip(!!isMobile, 'bureau uniquement');
   for (const width of [1280, 1440, 1920]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/');
     const header = page.locator('header');
     const box = (await header.boundingBox())!;
-    expect(box.height, `hauteur de l'en-tête à ${width}px`).toBeLessThan(120);
-    // Rangée 1 : logo, liens personnels (icône au-dessus du libellé), connexion, dépôt — mêmes centres (± 6 px)
-    const top = [header.locator('a[title="Accueil"]'), header.getByRole('link', { name: 'Mes recherches' }), header.getByRole('link', { name: 'Favoris' }), header.getByRole('link', { name: 'Messages' }), header.getByRole('link', { name: 'Se connecter' }), header.getByRole('link', { name: 'Déposer une annonce' })];
+    expect(box.height, `hauteur de l'en-tête à ${width}px`).toBeLessThan(70);
+    // Une seule rangée : logo, Catégories, recherche, liens personnels (icône au-dessus du libellé), connexion, dépôt — mêmes centres (± 6 px)
+    const top = [header.locator('a[title="Accueil"]'), header.getByRole('button', { name: 'Catégories' }), header.getByRole('combobox', { name: 'Rechercher une annonce' }), header.getByRole('link', { name: 'Mes recherches' }), header.getByRole('link', { name: 'Favoris' }), header.getByRole('link', { name: 'Messages' }), header.getByRole('link', { name: 'Se connecter' }), header.getByRole('link', { name: 'Déposer une annonce' })];
     const centers: number[] = [];
     for (const it of top) {
       await expect(it).toBeVisible();
       const b = (await it.boundingBox())!;
       centers.push(b.y + b.height / 2);
     }
-    expect(Math.max(...centers) - Math.min(...centers), `rangée 1 alignée à ${width}px`).toBeLessThan(6);
-    // Rangée 2 : Catégories et recherche, sous la première rangée
-    const cats = (await header.getByRole('button', { name: 'Catégories' }).boundingBox())!;
+    expect(Math.max(...centers) - Math.min(...centers), `rangée unique alignée à ${width}px`).toBeLessThan(6);
+    // Recherche resserrée mais utilisable ; les boutons de droite gardent leur taille (40 px de haut)
     const search = (await header.getByRole('combobox', { name: 'Rechercher une annonce' }).boundingBox())!;
-    expect(cats.y).toBeGreaterThan(Math.max(...centers));
-    expect(Math.abs(cats.y + cats.height / 2 - (search.y + search.height / 2))).toBeLessThan(6);
-    expect(search.width).toBeGreaterThan(300);
+    expect(search.width).toBeGreaterThan(220);
+    expect(search.width).toBeLessThanOrEqual(520);
+    for (const name of ['Se connecter', 'Déposer une annonce']) expect((await header.getByRole('link', { name }).boundingBox())!.height).toBeGreaterThanOrEqual(40);
     for (const label of ['Mes recherches', 'Favoris', 'Messages', 'Catégories']) await expect(header.getByText(label, { exact: true })).toBeVisible();
     // L'invite de la recherche n'est pas tronquée
     const fits = await header.getByRole('combobox', { name: 'Rechercher une annonce' }).evaluate((el: HTMLInputElement) => {

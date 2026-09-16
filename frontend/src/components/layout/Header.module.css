@@ -22,9 +22,10 @@
   z-index: 50;
   border-bottom: 1px solid var(--line);
 }
-/* Rangée 1 : identité et compte */
+/* Une seule rangée (AUDIT §47) : marque, Catégories, recherche compacte, puis liens et dépôt.
+   Les boutons de droite gardent leurs dimensions ; seuls Catégories et la recherche sont resserrés. */
 .top {
-  min-height: 52px;
+  min-height: 60px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -33,17 +34,10 @@
   display: flex;
   align-items: center;
   flex-shrink: 0;
+  margin-right: 4px;
 }
 .logo:hover {
   text-decoration: none;
-}
-/* Rangée 2 : catégories et recherche large */
-.bar {
-  min-height: 56px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding-bottom: 8px;
 }
 .cats {
   position: relative;
@@ -52,16 +46,16 @@
 .catsBtn {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-height: 40px;
-  padding: 6px 14px;
+  padding: 6px 12px;
   white-space: nowrap;
   border-radius: var(--radius-pill);
   border: 1px solid var(--ink-soft);
   background: var(--white);
   color: var(--ink);
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 0.86rem;
   cursor: pointer;
 }
 .catsBtn:hover {
@@ -117,7 +111,7 @@
 .search {
   flex: 1 1 auto;
   min-width: 0;
-  max-width: 720px;
+  max-width: 520px;
 }
 .nav {
   margin-left: auto;
@@ -321,12 +315,17 @@
 }
 
 @media (max-width: 900px) {
+  /* Mobile : une seule rangée aussi — marque, recherche, Messages, menu ; Catégories vit dans le menu
+     et dans la grille d'icônes de l'accueil. Sous 560 px, la marque se réduit à son monogramme. */
   .top {
     min-height: 56px;
+    gap: 6px;
   }
-  .bar {
-    min-height: 52px;
-    padding-bottom: 8px;
+  .logo {
+    margin-right: 0;
+  }
+  .nav {
+    margin-left: 0;
   }
   .cats,
   .navLink:not(.navMessages),
@@ -348,6 +347,7 @@
   }
   .search {
     max-width: none;
+    min-width: 120px;
   }
   .mobileMenu {
     display: flex;
@@ -410,9 +410,17 @@
   }
 }
 
-@media (max-width: 400px) {
+@media (max-width: 560px) {
   .logo > span {
     font-size: 1.2rem !important;
-    gap: 6px !important;
+    gap: 0 !important;
+  }
+  .logo [data-brand] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
   }
 }

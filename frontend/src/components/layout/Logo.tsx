@@ -17,7 +17,7 @@ export function Logo({ dark = true }: { dark?: boolean }) {
       >
         T
       </span>
-      Trocoin
+      <span data-brand="">Trocoin</span>
     </span>
   );
 }

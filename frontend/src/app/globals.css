@@ -31,7 +31,7 @@
   --font-body: var(--font-public-sans), "Segoe UI", system-ui, sans-serif;
   --font-display: var(--font-fraunces), Georgia, serif;
   --container: 1180px;
-  --header-h: 108px;
+  --header-h: 61px; /* en-tête sur une seule rangée (AUDIT §47) : 60 px + bordure ; 57 px sur mobile, voir plus bas */
   /* Marge horizontale de sécurité de toutes les pages : jamais de texte, carte ou bouton collé au bord */
   --page-padding-x: 20px;
 
@@ -967,4 +967,10 @@ h2 {
 .quick-filters { max-width: 100%; }
 @media (max-width: 640px) {
   .quick-filters::after { content: ""; flex: 0 0 8px; }
+}
+
+@media (max-width: 900px) {
+  :root {
+    --header-h: 57px;
+  }
 }

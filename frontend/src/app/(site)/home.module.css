@@ -23,13 +23,16 @@
   color: var(--ink-soft);
   margin: 0;
 }
+/* Bande des catégories directement sous l'en-tête (AUDIT §47), même apparence qu'avant : icône + libellé */
+.catBand {
+  background: var(--white);
+  border-bottom: 1px solid var(--line-soft);
+  padding: 10px 0 8px;
+}
 .categories {
   display: grid;
   grid-template-columns: repeat(12, 1fr);
   gap: 4px;
-  margin-top: 22px;
-  padding-top: 18px;
-  border-top: 1px solid var(--line-soft);
 }
 .category {
   display: flex;
@@ -138,22 +141,6 @@
   flex-wrap: wrap;
 }
 
-/* Bandeau de réassurance sous la recherche (audit §42 : première impression) */
-.trust {
-  list-style: none;
-  margin: 14px 0 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 24px;
-  font-size: 0.86rem;
-  color: var(--ink-soft);
-}
-.trust li {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
 /* Carte d'invitation dans la grille des dernières annonces (site jeune, moins de 4 annonces) :
    mêmes dimensions qu'une carte d'annonce — même colonne, même structure (visuel carré + corps) et
    hauteur égale à la rangée (étirement de la grille). Lien entier : jamais de soulignement. */

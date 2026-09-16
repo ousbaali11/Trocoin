@@ -115,15 +115,17 @@ Champs de saisie : 16 px sur mobile (pas de zoom automatique), hauteur ≥ 46 px
 
 ## 6. En-tête et navigation
 
-- **Bureau** : rangée 1 = logo à gauche ; à droite Mes recherches, Favoris, Messages (icône au-dessus
-  du libellé), compte, puis « Déposer une annonce » (seule action verte). Rangée 2 = bouton
-  « Catégories » et **recherche large en pilule** avec suggestions (annonces, catégories,
-  communes, vos recherches récentes). Rangée 3 = familles de catégories : au survol ou au clic, un panneau posé **sous l'onglet de la
-  famille**, large comme son contenu (jamais pleine largeur), sous-catégories en **colonnes de
-  8 au plus** (une seule colonne jusqu'à 8) ; sur mobile, les catégories du menu tiennent sur une
-  colonne pleine largeur.
-- **Mobile** (≤ 900 px) : rangée 1 = logo, Messages, menu ; rangée 2 = recherche pleine largeur ;
-  le menu glisse vers le bas et contient dépôt, liens personnels, catégories en accordéon, compte.
+- **Bureau** (AUDIT §47) : **une seule rangée** de 60 px = logo, bouton « Catégories » (panneau en
+  colonnes), **recherche compacte en pilule** (au plus 520 px) avec suggestions (annonces,
+  catégories, communes, vos recherches récentes), puis à droite Mes recherches, Favoris, Messages
+  (icône au-dessus du libellé), compte, et « Déposer une annonce » (seule action verte). Plus de
+  rangée de familles sous l'en-tête : sur l'accueil, la **grille d'icônes des catégories** (icône +
+  libellé, 12 colonnes) est posée directement sous l'en-tête, avant la recherche large ; le bandeau
+  de réassurance a été retiré.
+- **Mobile** (≤ 900 px) : la même rangée unique = marque (monogramme seul sous 560 px), recherche
+  compacte, Messages, menu ; le menu glisse vers le bas et contient dépôt, liens personnels,
+  catégories en accordéon (une colonne pleine largeur), compte. Sur l'accueil, la grille d'icônes
+  passe à 6 puis 4 colonnes.
 
 ## 7. Mouvement
 

@@ -58,20 +58,18 @@ test("carte : clic long à la souris ouvre l'aperçu rapide, un clic simple ouvr
   await expect(page).toHaveURL(new RegExp(`/annonces/${L.vtt.id}`));
 });
 
-test('menus animés : le panneau des familles et le menu compte apparaissent avec une transition et se referment sans apparition brute', async ({ page, isMobile }) => {
+test('menus animés : le panneau Catégories de l\'en-tête apparaît avec une transition et se referme sans apparition brute', async ({ page, isMobile }) => {
   test.skip(isMobile, 'bureau');
   await page.goto('/');
-  await page.getByRole('navigation', { name: 'Familles de catégories' }).getByRole('button', { name: 'Loisirs', exact: true }).click();
-  const panel = page.getByRole('region', { name: 'Sous-catégories de Loisirs' });
-  await expect(panel).toBeVisible();
-  expect(await panel.evaluate((el) => getComputedStyle(el).animationName)).toBe('menu-in');
-  await page.keyboard.press('Escape');
-  // Pendant la sortie, l'élément reste monté avec l'animation de fermeture, puis disparaît
-  await expect.poll(async () => (await page.getByRole('region', { name: 'Sous-catégories de Loisirs' }).count()) === 0 || (await page.getByRole('region', { name: 'Sous-catégories de Loisirs' }).evaluate((el) => getComputedStyle(el).animationName)) === 'menu-out').toBe(true);
-  await expect(panel).toHaveCount(0);
   await page.getByRole('button', { name: 'Catégories' }).click();
   const mega = page.getByRole('menu').first();
+  await expect(mega).toBeVisible();
   expect(await mega.evaluate((el) => getComputedStyle(el).animationName)).toBe('menu-in');
+  await expect(mega.getByRole('menuitem', { name: 'Loisirs' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  // Pendant la sortie, l'élément reste monté avec l'animation de fermeture, puis disparaît
+  await expect.poll(async () => (await page.getByRole('menu').count()) === 0 || (await page.getByRole('menu').first().evaluate((el) => getComputedStyle(el).animationName)) === 'menu-out').toBe(true);
+  await expect(page.getByRole('menu')).toHaveCount(0);
 });
 
 test('menu mobile : ouverture et fermeture avec transition, contenu complet', async ({ page, isMobile }) => {

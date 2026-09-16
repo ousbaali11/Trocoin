@@ -44,6 +44,18 @@ export default async function HomePage() {
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }} />
+      {/* Grille d'icônes des catégories directement sous l'en-tête (AUDIT §47 : remplace l'ancienne
+          rangée de liens texte ; le bandeau de réassurance a été retiré) */}
+      <div className={styles.catBand}>
+        <nav className={`container ${styles.categories}`} aria-label="Catégories" data-testid="category-tiles">
+          {tree.map((c) => (
+            <Link key={c.slug} href={`/recherche?category=${c.slug}`} className={styles.category}>
+              <span className={styles.categoryIcon}><CategoryIcon name={c.icon} /></span>
+              <span>{c.name}</span>
+            </Link>
+          ))}
+        </nav>
+      </div>
       <section className={styles.hero}>
         <div className="container">
           <div className={styles.heroHead}>
@@ -53,19 +65,6 @@ export default async function HomePage() {
             </p>
           </div>
           <HomeSearch total={total} />
-          <ul className={styles.trust} aria-label="Ce que Trocoin garantit">
-            <li><span aria-hidden="true">🔒</span> Paiement sécurisé, fonds conservés jusqu&apos;à la réception</li>
-            <li><span aria-hidden="true">💬</span> Messagerie intégrée, numéro jamais affiché sans votre accord</li>
-            <li><span aria-hidden="true">🛡️</span> Annonces vérifiées, modération humaine</li>
-          </ul>
-          <nav className={styles.categories} aria-label="Catégories">
-            {tree.map((c) => (
-              <Link key={c.slug} href={`/recherche?category=${c.slug}`} className={styles.category}>
-                <span className={styles.categoryIcon}><CategoryIcon name={c.icon} /></span>
-                <span>{c.name}</span>
-              </Link>
-            ))}
-          </nav>
         </div>
       </section>
 

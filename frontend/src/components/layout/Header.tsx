@@ -13,12 +13,11 @@ import { Logo } from "./Logo";
 import styles from "./Header.module.css";
 
 /**
- * En-tête sur deux rangées (docs/design-system.md §6) :
- *  - rangée 1 : logo, puis à droite Mes recherches · Favoris · Messages (icône au-dessus du
- *    libellé), compte ou connexion, et la seule action verte de la page « Déposer une annonce » ;
- *  - rangée 2 : bouton « Catégories » (panneau) et recherche large en pilule.
- * Sur mobile : logo, Messages et menu sur la première rangée, recherche pleine largeur dessous,
- * menu qui glisse vers le bas. Les pages personnelles déclenchent la connexion si besoin.
+ * En-tête sur une seule rangée (docs/design-system.md §6, AUDIT §47) : logo, bouton « Catégories »
+ * (panneau), recherche compacte en pilule, puis à droite Mes recherches · Favoris · Messages (icône
+ * au-dessus du libellé), compte ou connexion, et la seule action verte de la page « Déposer une
+ * annonce ». Sur mobile : même rangée réduite à la marque, la recherche, Messages et le menu ;
+ * le menu glisse vers le bas. Les pages personnelles déclenchent la connexion si besoin.
  */
 export function Header() {
   const { user, loading, unreadMessages, unreadNotifications, logout, requireAuth } = useAuth();
@@ -99,11 +98,37 @@ export function Header() {
     <header className={styles.header}>
       <a href="#contenu" className={styles.skip}>Aller au contenu</a>
 
-      {/* Rangée 1 : identité et compte */}
+      {/* Une seule rangée : marque, catégories, recherche, puis compte et dépôt */}
       <div className={`container ${styles.top}`}>
-        <Link href="/" className={styles.logo} title="Accueil">
+        <Link href="/" className={styles.logo} title="Accueil" aria-label="Trocoin, accueil">
           <Logo dark />
         </Link>
+
+        <div className={styles.cats} ref={catsRef}>
+          <button className={styles.catsBtn} onClick={() => setCatsOpen((o) => !o)} aria-expanded={catsOpen} aria-haspopup="true" aria-label="Catégories" aria-controls={catsOpen ? "mega-categories" : undefined}>
+            <MenuIcon /> <span>Catégories</span>
+          </button>
+          {cats.mounted && (
+            <div className={`${styles.mega} ${cats.leaving ? "menu-leave" : "menu-enter"}`} role="menu" id="mega-categories">
+              {tree.map((root) => (
+                <div key={root.slug} className={styles.megaCol}>
+                  <Link href={`/recherche?category=${root.slug}`} className={styles.megaRoot} role="menuitem">
+                    <CategoryIcon name={root.icon} size={18} /> {root.name}
+                  </Link>
+                  {root.children.map((c) => (
+                    <Link key={c.slug} href={`/recherche?category=${c.slug}`} className={styles.megaChild} role="menuitem">
+                      {c.name}
+                    </Link>
+                  ))}
+                  {root.children.length === 0 && <Link href={`/recherche?category=${root.slug}`} className={styles.megaChild}>Toutes les annonces</Link>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className={styles.search}>
+          <SearchBox compact />
+        </div>
 
         <nav className={styles.nav} aria-label="Navigation principale">
           {personalLinks}
@@ -146,35 +171,6 @@ export function Header() {
             <span />
           </button>
         </nav>
-      </div>
-
-      {/* Rangée 2 : catégories et recherche */}
-      <div className={`container ${styles.bar}`}>
-        <div className={styles.cats} ref={catsRef}>
-          <button className={styles.catsBtn} onClick={() => setCatsOpen((o) => !o)} aria-expanded={catsOpen} aria-haspopup="true" aria-label="Catégories" aria-controls={catsOpen ? "mega-categories" : undefined}>
-            <MenuIcon /> <span>Catégories</span>
-          </button>
-          {cats.mounted && (
-            <div className={`${styles.mega} ${cats.leaving ? "menu-leave" : "menu-enter"}`} role="menu" id="mega-categories">
-              {tree.map((root) => (
-                <div key={root.slug} className={styles.megaCol}>
-                  <Link href={`/recherche?category=${root.slug}`} className={styles.megaRoot} role="menuitem">
-                    <CategoryIcon name={root.icon} size={18} /> {root.name}
-                  </Link>
-                  {root.children.map((c) => (
-                    <Link key={c.slug} href={`/recherche?category=${c.slug}`} className={styles.megaChild} role="menuitem">
-                      {c.name}
-                    </Link>
-                  ))}
-                  {root.children.length === 0 && <Link href={`/recherche?category=${root.slug}`} className={styles.megaChild}>Toutes les annonces</Link>}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-        <div className={styles.search}>
-          <SearchBox compact />
-        </div>
       </div>
 
       {mobile.mounted && (
