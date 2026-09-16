@@ -2013,3 +2013,5 @@ rappels, action par défaut) resteraient identiques après la bascule.
 - Un remboursement après capture automatique suppose un solde suffisant sur le compte Connect du
   vendeur, sinon la plateforme avance les fonds (cf. compromis). Le passage au séquestre sur solde
   de plateforme lève cette limite.
+
+Déploiement : CI verte (migration `SequestreEcheances` jouée sur Postgres 16 puis Render), API en **1.17.0** (`/health`), tâche `runEscrowSchedule` active toutes les 15 minutes, `GET /admin/transactions?due=1` réservé aux administrateurs (401 anonyme), vérifiés le 16 septembre 2026.
