@@ -2450,3 +2450,50 @@ admin, identifiants transmis hors dépôt.
 - Confirmer (ou non) les 10 adresses e-mail depuis les liens reçus sur la boîte Gmail.
 
 Déploiement : CI verte, API en **1.24.0**, front Vercel à jour (case dans Paramètres et fiche admin livrées).
+
+## 47. En-tête sur une seule rangée, grille d'icônes sous l'en-tête, bandeau de réassurance retiré — 17 septembre 2026
+
+Demande (captures annotées) : remplacer la rangée de liens texte des catégories (A) par la grille d'icônes
+(B) posée directement sous la barre du haut, supprimer le bandeau de réassurance (C) sans laisser de vide,
+fusionner « Catégories » + recherche avec la ligne du haut (Mes recherches, Favoris, Messages, compte,
+Déposer une annonce) en une seule rangée, sur bureau et sur mobile.
+
+### Livré (1.25.0)
+
+- **A supprimé** : composant `CategoryBar` (familles au survol, bureau ≥ 1024 px) retiré du layout et du
+  dépôt. Les sous-catégories restent accessibles par le bouton « Catégories » (panneau en colonnes) et,
+  sur mobile, par l'accordéon du menu.
+- **B déplacé** : la grille d'icônes (icône + libellé, apparence inchangée, 12 colonnes → 6 → 4) est
+  rendue par l'accueil dans une bande blanche directement sous l'en-tête, avant le bloc « Rechercher une
+  annonce ». Choix assumé : A était présent sur toutes les pages mais B n'existait que sur l'accueil ;
+  B ne prend donc la place de A que sur l'accueil (une grille de 100 px sur chaque page aurait alourdi
+  le dépôt, les fiches et le compte). Facile à généraliser si souhaité.
+- **C supprimé** : liste « Ce que Trocoin garantit » et son style retirés ; la recherche large remonte.
+- **En-tête fusionné** : une rangée de 60 px (61 avec la bordure) = logo, « Catégories » (padding et
+  police resserrés : 120 px), recherche compacte (`max-width: 520px`, flexible), puis Mes recherches,
+  Favoris, Messages, Se connecter / compte, Déposer une annonce, **inchangés** (mêmes classes, 40 px de
+  haut). `--header-h` passe de 108 à 61 px (57 sur mobile) pour les éléments collants (filtres, menu
+  compte, fil de messages).
+- **Mobile (≤ 900 px)** : une seule rangée aussi. Choix retenu parmi les adaptations possibles : garder
+  un vrai champ de recherche (l'action principale, sans tap supplémentaire) et gagner la place sur la
+  marque, réduite à son monogramme « T » sous 560 px (le nom reste pour les lecteurs d'écran) ;
+  Messages et le menu gardent leurs 44 px ; « Catégories » vit dans le menu et dans la grille de
+  l'accueil. Écarté : la recherche réduite à une icône qui s'ouvre au tap (un geste de plus pour
+  l'action la plus fréquente).
+- Tests navigateur adaptés : `01-recherche` (rangée unique alignée à 1280/1440/1920 px, recherche
+  entre 190 et 520 px, boutons de droite ≥ 40 px), `14-filtres-decouverte` (grille sous l'en-tête,
+  A et C absents, attente de la régénération ISR de l'accueil), `15-experience` (animation du panneau
+  Catégories). `docs/design-system.md` §6 et README mis à jour.
+
+### Vérification
+
+- Playwright local : 104 réussis, 1 échec isolé de `19-session` (renouvellement de session, sans lien
+  avec l'en-tête), qui passe seul (5/5) ; CI verte sur `f155736` (104 réussis, 10 ignorés, 1 instable
+  réessayé avec succès sur le premier commit, 0 sur le second).
+- Production (www.trocoin.fr, 1.25.0, captures avant/après dans le dossier de preuves) :
+  - bureau 1280 px : en-tête **109 → 61 px** ; logo, Catégories, recherche (235 px), Mes recherches,
+    Favoris, Messages, Se connecter, Déposer une annonce tous centrés à y = 30 ; grille des catégories à
+    y = 71 juste sous l'en-tête (98 px de haut), titre « Rechercher une annonce » à y = 206 ; rangée de
+    liens texte 0, bandeau 0, pas de débordement horizontal ;
+  - mobile 375 px : en-tête **111 → 57 px** ; monogramme, recherche (161 px), Messages, menu centrés à
+    y = 28 ; grille à y = 67 (4 colonnes, 283 px), titre à y = 379 ; A et C absents, pas de débordement.
