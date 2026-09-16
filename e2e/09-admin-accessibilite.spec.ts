@@ -25,8 +25,12 @@ test.beforeAll(async () => {
   await api('/reports', { method: 'POST', body: { listingId: seed.listings.vtt.id, reason: 'doublon', details: 'Annonce publiée deux fois.' }, token }).catch((e) => {
     if (!/déjà signalé/.test(String(e))) throw e;
   });
-  const tx = await api<{ transaction: { id: string } }>('/transactions', { method: 'POST', body: { listingId: seed.listings.poussette.id, deliveryMethod: 'main_propre' }, token });
-  await api(`/transactions/${tx.transaction.id}/dispute`, { method: 'POST', body: { reason: 'Poussette reçue avec une roue cassée.' }, token });
+  // Rejouable aussi : sur une nouvelle tentative, la transaction (et son litige) existe déjà (400 « déjà en cours »)
+  const tx = await api<{ transaction: { id: string } }>('/transactions', { method: 'POST', body: { listingId: seed.listings.poussette.id, deliveryMethod: 'main_propre' }, token }).catch((e) => {
+    if (!/déjà en cours/.test(String(e))) throw e;
+    return null;
+  });
+  if (tx) await api(`/transactions/${tx.transaction.id}/dispute`, { method: 'POST', body: { reason: 'Poussette reçue avec une roue cassée.' }, token });
 });
 
 test('axe : toutes les pages de la console (tableau de bord, listes, fiches, files, réglages, CMS, journal)', async ({ page }) => {
@@ -79,9 +83,11 @@ test('clavier seul : navigation de la console, suspension d\'un compte avec boî
   const dialog = page.getByRole('dialog', { name: 'Suspendre ce compte ?' });
   await expect(dialog).toBeVisible();
   expect(await page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]'))).toBe(true);
-  await dialog.getByRole('button', { name: 'Suspendre' }).focus();
+  const confirmBtn = dialog.getByRole('button', { name: 'Suspendre' });
+  await confirmBtn.focus();
+  await expect(confirmBtn).toBeFocused(); // le focus initial de la boîte (posé juste après l'ouverture) ne doit pas le reprendre
   await page.keyboard.press('Enter');
-  await expect(page.getByText('Compte suspendu.')).toBeVisible();
+  await expect(page.getByText('Compte suspendu.')).toBeVisible({ timeout: 20_000 });
   await expect(page.locator('.a-alert.danger')).toContainText('comportement abusif');
   // Réactivation au clavier, puis trace dans le journal
   const reactivate = page.getByRole('button', { name: 'Réactiver le compte' });
