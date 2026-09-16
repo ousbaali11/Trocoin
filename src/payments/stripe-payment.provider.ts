@@ -9,6 +9,7 @@ import {
   IPaymentProvider,
   PaymentIntentResult,
   PaymentWebhookEvent,
+  TransferParams,
 } from './payment-provider.interface';
 
 import { CHECKOUT_TTL_MINUTES } from './payments.constants';
@@ -16,12 +17,20 @@ import { CHECKOUT_TTL_MINUTES } from './payments.constants';
 /**
  * Implémentation réelle via Stripe (Checkout hébergé + Connect).
  *
- * Modèle : « destination charges » avec capture manuelle. L'acheteur paie sur la page Stripe
- * Checkout (aucune clé publiable ni formulaire de carte côté front) ; le montant est seulement
- * AUTORISÉ (séquestre) puis capturé quand l'acheteur confirme la réception (PaymentsService).
- * La part plateforme (commission + frais acheteur) est retenue via application_fee_amount,
- * le reste est transféré au compte Connect du vendeur (StripeConnectService) quand il existe ;
- * sinon la plateforme encaisse et reverse manuellement.
+ * Modèle (AUDIT §39) : « paiements et transferts distincts » avec capture manuelle. L'acheteur paie
+ * sur la page Stripe Checkout (aucune clé publiable ni formulaire de carte côté front) ; le montant
+ * est AUTORISÉ puis capturé rapidement **sur le solde de la plateforme** (PaymentsService : à
+ * l'expédition, à la remise, au litige ou au plus tard ESCROW_CAPTURE_AFTER_HOURS après le
+ * paiement). Le vendeur n'est payé qu'à la confirmation, par un Transfer (`transfer`) rattaché à la
+ * charge d'origine (`source_transaction`, donc indépendant du solde disponible de la plateforme) et
+ * regroupé avec elle (`transfer_group`). Un remboursement avant transfert part du solde de la
+ * plateforme ; après transfert, le transfert est d'abord annulé (`reverseTransfer`, le compte du
+ * vendeur est débité) puis l'acheteur remboursé.
+ *
+ * Ancien modèle « destination charge » (`sellerConnectedAccountId` fourni à la création :
+ * application_fee_amount + transfer_data.destination, fonds versés au vendeur à la capture) : plus
+ * utilisé pour les nouvelles ventes, conservé pour terminer celles créées avant la bascule
+ * (`refund` annule alors le transfert avec reverse_transfer).
  *
  * Webhook : POST /transactions/webhook/stripe, signature vérifiée avec STRIPE_WEBHOOK_SECRET
  * (constructEvent). Évènements utiles : checkout.session.completed / expired,
@@ -61,7 +70,9 @@ export class StripePaymentProvider implements IPaymentProvider {
       metadata: params.metadata,
       ...(params.sellerConnectedAccountId
         ? { application_fee_amount: this.toCents(params.applicationFeeEuros), transfer_data: { destination: params.sellerConnectedAccountId } }
-        : {}),
+        : params.transferGroup
+          ? { transfer_group: params.transferGroup }
+          : {}),
     });
     return {
       providerPaymentId: intent.id,
@@ -88,7 +99,9 @@ export class StripePaymentProvider implements IPaymentProvider {
         metadata: params.metadata,
         ...(params.sellerConnectedAccountId
           ? { application_fee_amount: this.toCents(params.applicationFeeEuros), transfer_data: { destination: params.sellerConnectedAccountId } }
-          : {}),
+          : params.transferGroup
+            ? { transfer_group: params.transferGroup }
+            : {}),
       },
       // Autorisation prolongée (jusqu'à 30 jours) demandée « si disponible » : accordée seulement avec la
       // tarification IC+ et selon le réseau ; sinon fenêtre standard de 7 jours. La date réelle est relue
@@ -161,7 +174,8 @@ export class StripePaymentProvider implements IPaymentProvider {
   }
 
   async refund(providerPaymentId: string) {
-    // Une autorisation non capturée est annulée ; un paiement capturé est remboursé.
+    // Une autorisation non capturée est annulée ; un paiement capturé est remboursé (modèle platform :
+    // depuis le solde de la plateforme ; ancien modèle destination : avec annulation du transfert).
     const intent = await this.stripe.paymentIntents.retrieve(providerPaymentId);
     if (intent.status === 'requires_capture') {
       await this.stripe.paymentIntents.cancel(providerPaymentId);
@@ -169,5 +183,30 @@ export class StripePaymentProvider implements IPaymentProvider {
       await this.stripe.refunds.create({ payment_intent: providerPaymentId, ...(intent.transfer_data ? { reverse_transfer: true, refund_application_fee: true } : {}) });
     }
     return { status: 'rembourse' as const };
+  }
+
+  async transfer(params: TransferParams) {
+    // `source_transaction` : le transfert est adossé à la charge de l'acheteur ; Stripe l'exécute quand ces
+    // fonds sont disponibles, sans dépendre du solde disponible global de la plateforme (sinon le virement
+    // serait refusé tant que la charge n'est pas réglée, environ 7 jours en France).
+    const intent = await this.stripe.paymentIntents.retrieve(params.providerPaymentId);
+    if (intent.status !== 'succeeded') throw new Error(`Paiement ${params.providerPaymentId} non capturé (${intent.status}) : transfert impossible.`);
+    const chargeId = typeof intent.latest_charge === 'string' ? intent.latest_charge : intent.latest_charge?.id;
+    if (!chargeId) throw new Error(`Paiement ${params.providerPaymentId} sans charge : transfert impossible.`);
+    const transfer = await this.stripe.transfers.create({
+      amount: this.toCents(params.amountEuros),
+      currency: 'eur',
+      destination: params.sellerConnectedAccountId,
+      source_transaction: chargeId,
+      transfer_group: params.transactionId,
+      description: params.description,
+      metadata: { transactionId: params.transactionId },
+    });
+    return { transferId: transfer.id };
+  }
+
+  async reverseTransfer(transferId: string) {
+    // Annulation intégrale : le compte connecté du vendeur est débité (solde négatif possible, la plateforme en répond).
+    await this.stripe.transfers.createReversal(transferId, {});
   }
 }

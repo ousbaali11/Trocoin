@@ -21,4 +21,10 @@ export class DisabledPaymentProvider implements IPaymentProvider {
   async refund(): Promise<never> {
     throw new ServiceUnavailableException(PAYMENT_DISABLED_MESSAGE);
   }
+  async transfer(): Promise<never> {
+    throw new ServiceUnavailableException(PAYMENT_DISABLED_MESSAGE);
+  }
+  async reverseTransfer(): Promise<never> {
+    throw new ServiceUnavailableException(PAYMENT_DISABLED_MESSAGE);
+  }
 }

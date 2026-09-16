@@ -33,6 +33,10 @@ interface AdminTxDetail {
   shippedAt?: string | null;
   confirmedAt?: string | null;
   resolvedAt?: string | null;
+  escrowModel?: "destination" | "platform";
+  capturedAt?: string | null;
+  shipBy?: string | null;
+  transferredAt?: string | null;
   buyer: Party | null;
   seller: Party | null;
   listing: { id: string; title: string; price?: number | null; status: string } | null;
@@ -125,11 +129,15 @@ export default function AdminTransactionPage() {
           </dl>
           <h2 className="h3">Chronologie et échéances</h2>
           <ul className="small" style={{ margin: 0, paddingLeft: 18 }}>
+            <li>Modèle de séquestre : {tx.escrowModel === "destination" ? "ancien (capture à la confirmation, fonds versés directement au vendeur)" : "solde de la plateforme (encaissé par Trocoin, virement au vendeur à la confirmation)"}</li>
             {tx.paidAt && <li>Autorisation bancaire : {formatDateTime(tx.paidAt)}</li>}
+            {tx.escrowModel !== "destination" && (tx.capturedAt ? <li data-testid="admin-captured-at">Encaissé sur le solde de Trocoin : {formatDateTime(tx.capturedAt)}</li> : open && <li>Pas encore encaissé (capture sous 24 h, ou dès l&apos;expédition / la remise / un litige)</li>)}
             {tx.shippedAt && <li>Expédiée / prête : {formatDateTime(tx.shippedAt)}</li>}
             {tx.autoConfirmAt && tx.status === "livree" && <li>Réception présumée le {formatDateTime(tx.autoConfirmAt)}</li>}
-            {tx.captureBefore && open && <li>Date limite de capture de l&apos;autorisation : {formatDateTime(tx.captureBefore)} (action automatique la veille)</li>}
-            {tx.confirmedAt && <li>Confirmée / capturée : {formatDateTime(tx.confirmedAt)}</li>}
+            {tx.escrowModel !== "destination" && tx.shipBy && (tx.status === "sequestre" || (tx.status === "livree" && tx.deliveryMethod === "main_propre")) && <li data-testid="admin-ship-by">Expédition / remise attendue avant le {formatDateTime(tx.shipBy)} (sinon annulation et remboursement automatiques)</li>}
+            {tx.escrowModel === "destination" && tx.captureBefore && open && <li>Date limite de capture de l&apos;autorisation : {formatDateTime(tx.captureBefore)} (action automatique la veille)</li>}
+            {tx.confirmedAt && <li>Confirmée{tx.escrowModel === "destination" ? " / capturée" : ""} : {formatDateTime(tx.confirmedAt)}</li>}
+            {tx.escrowModel !== "destination" && tx.status === "confirme" && (tx.transferredAt ? <li data-testid="admin-transferred-at">Virement au vendeur : {formatDateTime(tx.transferredAt)}</li> : <li className="a-pill danger" style={{ display: "inline-block" }}>Virement au vendeur en attente (compte de versement absent) — retenté automatiquement</li>)}
             {tx.disputeAllowedUntil && tx.status === "confirme" && <li>Litige encore possible pour l&apos;acheteur jusqu&apos;au {formatDateTime(tx.disputeAllowedUntil)}</li>}
             {tx.resolvedAt && <li>Résolue : {formatDateTime(tx.resolvedAt)}</li>}
           </ul>

@@ -38,7 +38,7 @@ cd frontend && npm install && cp .env.example .env.local && npm run dev -- -p 30
 ## Tests
 
 ```bash
-npm test                 # 148 tests e2e (API, supertest)
+npm test                 # 156 tests e2e (API, supertest)
 npm run e2e:build        # construit l'API (dist/) et le front (next build) pour les tests navigateur
 npm run e2e              # 113 scénarios Playwright dans Chromium (desktop 1280 px + mobile 375 px) : parcours, accessibilité (axe) site + back-office, clavier, SEO
 node scripts/charge.js --api https://api.trocoin.fr --front https://www.trocoin.fr --vus 10 --minutes 3   # test de charge léger (lectures publiques)
@@ -192,16 +192,24 @@ absent/faible, `CORS_ORIGINS` absent, `DB_TYPE≠postgres`, un fournisseur (`SMS
 Modes autorisés en production sans prestataire : `PAYMENT_PROVIDER=disabled` (503 explicite)
 et `NOTIFICATION_PROVIDER=none` (in-app uniquement).
 
-### Échéances du séquestre (AUDIT §37)
+### Séquestre sur le solde de la plateforme (AUDIT §39)
 
-Une autorisation de carte non capturée expire (Stripe : 7 jours en ligne, 5 pour Visa initiée par le
-marchand ; la date exacte `capture_before` est enregistrée sur la transaction). Tâche
-`runEscrowSchedule` toutes les 15 minutes : réception présumée 4 jours après l'expédition (rappels à
-l'acheteur 48 h et 24 h avant, puis capture, litige encore possible 7 jours), et 24 h avant
-l'expiration une action par défaut — capture si l'article est expédié ou en litige, annulation avec
-remboursement s'il n'a été ni expédié ni remis (rappels aux deux parties 48 h et 24 h avant). Filet de
-sécurité admin : compteur « Séquestres à échéance (48 h) » et `GET /admin/transactions?due=1`.
-Variables `ESCROW_*` dans `.env.example`.
+Modèle Stripe « paiements et transferts distincts » : l'autorisation de l'acheteur est **encaissée sur
+le solde de Trocoin** au plus tard 24 h après le paiement (`ESCROW_CAPTURE_AFTER_HOURS`), plus tôt dès
+que le vendeur expédie, se déclare prêt pour la remise, ou qu'un litige s'ouvre — pendant ce court
+délai une annulation libère simplement l'autorisation (aucun débit, aucun frais). Le solde de la
+plateforme n'expire pas : le vendeur n'est payé que par un **virement séparé** (Stripe Transfer
+rattaché à la charge d'origine) à la confirmation — réception confirmée, code de remise saisi,
+décision admin « libérer », ou réception présumée 7 jours après l'expédition (rappels à l'acheteur
+48 h et 24 h avant, litige encore possible 7 jours après). Sans expédition ni remise sous 7 jours
+(`ESCROW_SHIP_DEADLINE_DAYS`, rappels 48 h et 24 h avant) : annulation et remboursement. Un
+remboursement avant virement part du solde de Trocoin ; après virement, le virement est d'abord
+annulé (compte du vendeur débité) puis l'acheteur remboursé. Un vendeur sans compte de versement est
+payé par la tâche périodique dès qu'il l'a créé. Tâche `runEscrowSchedule` toutes les 15 minutes ;
+filet admin « Séquestres à échéance (48 h) » (`GET /admin/transactions?due=1`). Les ventes créées
+avant la bascule (`escrowModel = destination`) se terminent avec l'ancienne logique (AUDIT §37 :
+capture à la confirmation, action par défaut avant l'expiration de l'autorisation). Variables
+`ESCROW_*` dans `.env.example`.
 
 ### Sessions
 

@@ -298,6 +298,15 @@ export interface Transaction {
   autoResolution?: "reception_presumee" | "capture_echeance" | "annulation_echeance" | null;
   /** Après une capture automatique, litige encore possible jusqu'à cette date. */
   disputeAllowedUntil?: string | null;
+  /**
+   * Séquestre sur le solde de Trocoin (AUDIT §39) : « platform » = fonds encaissés par Trocoin (capturedAt),
+   * vendeur à payer avant shipBy, virement au vendeur à la confirmation (transferredAt) ; « destination » =
+   * ancien modèle (ventes antérieures à la bascule), capture à la confirmation.
+   */
+  escrowModel?: "destination" | "platform";
+  capturedAt?: string | null;
+  shipBy?: string | null;
+  transferredAt?: string | null;
   /** Paiement hébergé (Stripe Checkout) encore ouvert : URL pour reprendre le paiement (acheteur, statut en_attente). */
   checkoutUrl?: string;
   role?: "acheteur" | "vendeur";

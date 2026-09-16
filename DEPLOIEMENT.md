@@ -190,12 +190,23 @@ comparer à l'e-mail reçu.
 ## 5c. Paiement (Stripe)
 
 Modèle : **Stripe Checkout** (page de paiement hébergée, aucune clé publiable ni formulaire de
-carte côté front) avec **capture différée** : l'acheteur autorise le montant, la transaction passe
-« Fonds bloqués » (`sequestre`), la capture n'a lieu qu'à la confirmation de réception ; une
-annulation avant envoi libère l'autorisation (rien n'est débité). Quand le vendeur a terminé son
-onboarding Stripe Connect (Express, `/compte/paiements`), le paiement est une « destination
-charge » : la part plateforme (commission 8 % + frais acheteur) est retenue, le reste transféré
-au compte du vendeur ; sinon la plateforme encaisse et reverse manuellement.
+carte côté front) en « **paiements et transferts distincts** » (AUDIT §39) : l'acheteur autorise le
+montant, la transaction passe « Fonds bloqués » (`sequestre`), Trocoin **encaisse sur son propre
+solde** au plus tard 24 h après (plus tôt à l'expédition, à la remise ou au litige) ; une annulation
+dans ce délai libère l'autorisation (rien n'est débité). Le vendeur (onboarding Stripe Connect
+Express, `/compte/paiements`) est payé par un **Transfer** du montant net (prix − commission 8 %) à
+la confirmation seulement ; les frais acheteur et la commission restent sur le solde de la
+plateforme. Un vendeur sans compte est payé dès qu'il l'a créé (tâche périodique).
+
+Points d'attention trésorerie (le compte plateforme détient temporairement l'argent des acheteurs) :
+les transferts sont adossés à la charge d'origine (`source_transaction`) et n'exigent donc pas de
+solde disponible ; en revanche un **remboursement** après que les fonds ont été reversés sur le compte
+bancaire de Trocoin (virements automatiques Stripe) tire le solde en négatif et Stripe prélève le
+compte bancaire. Régler le calendrier des virements Stripe (*Balance → Payout schedule*) avec un
+délai ou une réserve couvrant les fonds en séquestre, et tenir un suivi comptable des fonds détenus
+pour compte de tiers (sujet comptable / juridique à traiter avec un conseil, non tranché ici). Les
+ventes créées avant cette bascule (`escrowModel = destination`) restent des « destination charges »
+et se terminent avec l'ancienne logique.
 
 1. Stripe → *Developers* → *API keys* : `STRIPE_SECRET_KEY` (`sk_test_…` tant que l'on teste ;
    `sk_live_…` après activation du compte).

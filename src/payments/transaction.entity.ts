@@ -31,6 +31,17 @@ export type TransactionStatus =
 
 export type DeliveryMethod = 'main_propre' | 'colissimo' | 'mondial_relay';
 
+/**
+ * Modèle de séquestre (AUDIT §39) :
+ *  destination : ancien modèle « destination charge » — capture manuelle à la confirmation, les fonds
+ *                partent directement chez le vendeur à la capture ; conservé pour les ventes créées avant
+ *                la bascule, qui se terminent avec l'ancienne logique.
+ *  platform    : « paiements et transferts distincts » — capture rapide sur le solde de Trocoin (qui
+ *                n'expire pas), transfert au vendeur seulement à la confirmation (réception, code de
+ *                remise, décision admin, réception présumée) ; remboursement depuis le solde de Trocoin.
+ */
+export type EscrowModel = 'destination' | 'platform';
+
 @Entity('transactions')
 export class Transaction {
   @PrimaryGeneratedColumn('uuid')
@@ -126,6 +137,27 @@ export class Transaction {
   /** Après une capture automatique, l'acheteur peut encore ouvrir un litige jusqu'à cette date. */
   @Column({ type: DATE_TYPE, nullable: true })
   disputeAllowedUntil?: Date;
+
+  // ----- Séquestre sur le solde de la plateforme (AUDIT §39) -----
+  /** Modèle de séquestre de cette vente ; les ventes antérieures à la bascule restent en « destination ». */
+  @Index()
+  @Column({ type: 'varchar', default: 'platform' })
+  escrowModel: EscrowModel;
+
+  /** Fonds encaissés sur le solde de Trocoin (modèle platform) : plus aucune expiration possible. */
+  @Column({ type: DATE_TYPE, nullable: true })
+  capturedAt?: Date;
+
+  /** Modèle platform : le vendeur doit avoir expédié (ou saisi le code de remise) avant cette date, sinon annulation et remboursement. */
+  @Column({ type: DATE_TYPE, nullable: true })
+  shipBy?: Date;
+
+  /** Virement Stripe (Transfer) du solde de Trocoin vers le compte du vendeur, créé à la confirmation ; remis à null si le virement est annulé (remboursement). */
+  @Column({ type: 'varchar', nullable: true })
+  transferId?: string | null;
+
+  @Column({ type: DATE_TYPE, nullable: true })
+  transferredAt?: Date | null;
 
   @CreateDateColumn({ type: DATE_TYPE })
   createdAt: Date;

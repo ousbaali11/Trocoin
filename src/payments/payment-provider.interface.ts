@@ -3,8 +3,25 @@ export interface CreatePaymentIntentParams {
   amountEuros: number;
   /** Part conservée par la plateforme (commission vendeur + frais acheteur). */
   applicationFeeEuros: number;
+  /**
+   * Ancien modèle « destination charge » : les fonds partent chez le vendeur à la capture. Absent
+   * (modèle « platform », AUDIT §39) : la charge reste sur le solde de la plateforme et le vendeur est
+   * payé plus tard par `transfer`.
+   */
   sellerConnectedAccountId?: string;
+  /** Modèle platform : identifiant qui relie la charge et le transfert ultérieur (Stripe `transfer_group`). */
+  transferGroup?: string;
   metadata: Record<string, string>;
+}
+
+/** Modèle platform : virement du solde de la plateforme vers le compte du vendeur, à la confirmation. */
+export interface TransferParams {
+  providerPaymentId: string;
+  sellerConnectedAccountId: string;
+  /** Montant net versé au vendeur (prix moins commission). */
+  amountEuros: number;
+  transactionId: string;
+  description?: string;
 }
 
 export interface PaymentIntentResult {
@@ -57,8 +74,14 @@ export interface PaymentWebhookEvent {
 
 export interface IPaymentProvider {
   createPaymentIntent(params: CreatePaymentIntentParams): Promise<PaymentIntentResult>;
+  /** Encaisse l'autorisation (modèle platform : sur le solde de la plateforme ; destination : versé au vendeur). */
   capture(providerPaymentId: string): Promise<{ status: 'succeeded' }>;
+  /** Annule l'autorisation si elle n'est pas capturée, sinon rembourse l'acheteur (modèle destination : avec annulation du transfert). */
   refund(providerPaymentId: string): Promise<{ status: 'rembourse' }>;
+  /** Modèle platform : paie le vendeur depuis le solde de la plateforme (Stripe Transfer, rattaché à la charge d'origine). */
+  transfer(params: TransferParams): Promise<{ transferId: string }>;
+  /** Modèle platform : annule un transfert déjà fait (remboursement après versement) ; le compte du vendeur est débité. */
+  reverseTransfer(transferId: string): Promise<void>;
   /**
    * Paiement hébergé. Quand il est présent, la transaction naît « en_attente », l'acheteur est
    * envoyé sur checkoutUrl, et elle passe « sequestre » au retour (syncCheckout) ou par webhook.

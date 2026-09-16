@@ -4,6 +4,7 @@ import {
   CreatePaymentIntentParams,
   IPaymentProvider,
   PaymentIntentResult,
+  TransferParams,
 } from './payment-provider.interface';
 
 /**
@@ -32,5 +33,15 @@ export class MockPaymentProvider implements IPaymentProvider {
   async refund(providerPaymentId: string) {
     this.logger.log(`Remboursement simulé : ${providerPaymentId}`);
     return { status: 'rembourse' as const };
+  }
+
+  async transfer(params: TransferParams) {
+    const transferId = `mock_tr_${randomUUID()}`;
+    this.logger.log(`Virement simulé de ${params.amountEuros} € vers ${params.sellerConnectedAccountId} (paiement ${params.providerPaymentId}) réf ${transferId}`);
+    return { transferId };
+  }
+
+  async reverseTransfer(transferId: string) {
+    this.logger.log(`Annulation de virement simulée : ${transferId}`);
   }
 }

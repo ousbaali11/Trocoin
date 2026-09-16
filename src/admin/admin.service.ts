@@ -448,10 +448,11 @@ export class AdminService {
     const qb = this.transactionsRepo.createQueryBuilder('t').orderBy('t.createdAt', 'DESC');
     if (query.status) qb.andWhere('t.status = :status', { status: query.status });
     if (query.due === '1') {
-      // Séquestres à échéance : non résolus et date limite de capture sous ESCROW_ADMIN_ALERT_HOURS
+      // Séquestres à échéance sous ESCROW_ADMIN_ALERT_HOURS : ancien modèle → date limite de capture ;
+      // modèle platform → délai d'expédition / de remise ou réception présumée (mêmes règles que PaymentsService.escrowDueSoon)
       qb.andWhere('t.status IN (:...open)', { open: ['sequestre', 'livree', 'litige'] })
-        .andWhere('t.captureBefore < :limit', { limit: new Date(Date.now() + ESCROW_ADMIN_ALERT_HOURS * 3_600_000) })
-        .orderBy('t.captureBefore', 'ASC');
+        .andWhere(`((t.escrowModel = 'destination' AND t.captureBefore < :limit) OR (t.escrowModel = 'platform' AND t.status IN ('sequestre', 'livree') AND COALESCE(t.autoConfirmAt, t.shipBy) < :limit))`, { limit: new Date(Date.now() + ESCROW_ADMIN_ALERT_HOURS * 3_600_000) })
+        .orderBy('COALESCE(t.autoConfirmAt, t.shipBy, t.captureBefore)', 'ASC');
     }
     qb.skip((page - 1) * pageSize).take(pageSize);
     const [items, total] = await qb.getManyAndCount();

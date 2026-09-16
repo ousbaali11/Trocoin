@@ -48,6 +48,8 @@ describe('Phase 22 : échéances du séquestre (expiration de l\'autorisation ba
     const listing = await createListing(app, seller, { price, deliveryAvailable: delivery !== 'main_propre' });
     const body = delivery === 'main_propre' ? { listingId: listing.id } : { listingId: listing.id, deliveryMethod: delivery, shippingAddress: { name: 'Alex Acheteur', line1: '5 avenue des Ternes', postalCode: '75017', city: 'Paris' } };
     const created = await request(server).post('/transactions').set(buyer.auth).send(body).expect(201);
+    // Ancien modèle « destination charge » (AUDIT §39) : les ventes créées avant la bascule gardent cette logique
+    await txRepo.update(created.body.transaction.id, { escrowModel: 'destination', shipBy: null });
     return { seller, buyer, listing, tx: created.body.transaction as Transaction & { id: string } };
   };
 
@@ -69,9 +71,11 @@ describe('Phase 22 : échéances du séquestre (expiration de l\'autorisation ba
     const t0 = Date.now();
     await request(server).post(`/transactions/${tx.id}/ship`).set(seller.auth).send({ trackingNumber: '6A00000000001' }).expect(201);
     const shipped = (await txRepo.findOne({ where: { id: tx.id } }))!;
-    // Réception présumée = expédition + ESCROW_AUTO_CONFIRM_DAYS, avant la marge de sécurité de l'autorisation
+    // Réception présumée = expédition + ESCROW_AUTO_CONFIRM_DAYS, plafonnée par la marge de sécurité de l'autorisation (ancien modèle)
     const autoAt = new Date(shipped.autoConfirmAt!).getTime();
-    expect(Math.abs(autoAt - (new Date(shipped.shippedAt!).getTime() + ESCROW_AUTO_CONFIRM_DAYS * DAY))).toBeLessThan(5_000);
+    const wanted = new Date(shipped.shippedAt!).getTime() + ESCROW_AUTO_CONFIRM_DAYS * DAY;
+    const cap = new Date(shipped.captureBefore!).getTime() - ESCROW_SAFETY_HOURS * HOUR;
+    expect(Math.abs(autoAt - Math.min(wanted, cap))).toBeLessThan(5_000);
     expect(autoAt).toBeLessThan(new Date(shipped.captureBefore!).getTime() - ESCROW_SAFETY_HOURS * HOUR + 1000);
     const buyerNotifsBefore = (await titlesFor(buyer.id)).length;
 

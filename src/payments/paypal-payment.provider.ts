@@ -5,6 +5,7 @@ import {
   CreatePaymentIntentParams,
   IPaymentProvider,
   PaymentIntentResult,
+  TransferParams,
 } from './payment-provider.interface';
 
 /**
@@ -45,5 +46,15 @@ export class PaypalPaymentProvider implements IPaymentProvider {
   async refund(providerPaymentId: string) {
     this.logger.log(`Remboursement PayPal simulé : ${providerPaymentId}`);
     return { status: 'rembourse' as const };
+  }
+
+  async transfer(params: TransferParams) {
+    const transferId = `paypal_payout_${randomUUID()}`;
+    this.logger.log(`Versement PayPal simulé de ${params.amountEuros} € au vendeur ${params.sellerConnectedAccountId} réf ${transferId}`);
+    return { transferId };
+  }
+
+  async reverseTransfer(transferId: string) {
+    this.logger.log(`Annulation de versement PayPal simulée : ${transferId}`);
   }
 }

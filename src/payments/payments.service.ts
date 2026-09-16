@@ -10,7 +10,7 @@ import {
 import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomInt } from 'crypto';
-import { In, LessThan, MoreThan, Repository } from 'typeorm';
+import { In, IsNull, LessThan, MoreThan, Not, Repository } from 'typeorm';
 import { resolveSiteUrl } from '../config/env.validation';
 import { Listing } from '../listings/listing.entity';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -39,7 +39,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 /** Une page de paiement hébergée commencée depuis moins longtemps que cela bloque l'annonce (double vente). */
 const PENDING_TTL_MS = CHECKOUT_TTL_MINUTES * 60_000;
 
-// ----- Échéances du séquestre (AUDIT §37) -----
+// ----- Échéances du séquestre (AUDIT §37, §39) -----
 const DAY_MS = 86_400_000;
 const HOUR_MS = 3_600_000;
 const envNum = (name: string, fallback: number) => {
@@ -48,14 +48,23 @@ const envNum = (name: string, fallback: number) => {
 };
 /** Validité supposée d'une autorisation quand le fournisseur ne la donne pas (5 jours = fenêtre la plus courte, Visa initiée par le marchand). */
 export const ESCROW_DEFAULT_AUTH_DAYS = envNum('ESCROW_DEFAULT_AUTH_DAYS', 5);
-/** Marge avant la date limite de capture : l'action automatique a lieu ce nombre d'heures avant l'expiration. */
+/** Marge avant la date limite de capture : l'action automatique (ancien modèle) ou la capture de sécurité (modèle platform) a lieu ce nombre d'heures avant l'expiration. */
 export const ESCROW_SAFETY_HOURS = envNum('ESCROW_SAFETY_HOURS', 24);
-/** Réception présumée : jours après l'expédition sans confirmation ni litige (plafonné par la date limite de capture). */
-export const ESCROW_AUTO_CONFIRM_DAYS = envNum('ESCROW_AUTO_CONFIRM_DAYS', 4);
-/** Après une capture automatique, l'acheteur garde ce nombre de jours pour ouvrir un litige. */
+/** Réception présumée : jours après l'expédition sans confirmation ni litige (ancien modèle : plafonné par la date limite de capture ; modèle platform : sans plafond). */
+export const ESCROW_AUTO_CONFIRM_DAYS = envNum('ESCROW_AUTO_CONFIRM_DAYS', 7);
+/** Après une confirmation automatique (réception présumée, capture à l'échéance), l'acheteur garde ce nombre de jours pour ouvrir un litige. */
 export const ESCROW_DISPUTE_WINDOW_DAYS = envNum('ESCROW_DISPUTE_WINDOW_DAYS', 7);
-/** Seuil du filet de sécurité admin : transactions non résolues dont la date limite est à moins de N heures. */
+/** Seuil du filet de sécurité admin : transactions non résolues dont la prochaine échéance est à moins de N heures. */
 export const ESCROW_ADMIN_ALERT_HOURS = envNum('ESCROW_ADMIN_ALERT_HOURS', 48);
+/**
+ * Modèle platform (AUDIT §39) : les fonds sont encaissés sur le solde de Trocoin au plus tard ce nombre
+ * d'heures après l'autorisation (plus tôt dès que le vendeur expédie, se déclare prêt, ou qu'un litige
+ * s'ouvre). Pendant ce court délai, une annulation (acheteur qui se ravise, vendeur indisponible, alerte
+ * fraude) libère simplement l'autorisation : aucun débit, aucun remboursement, aucun frais Stripe perdu.
+ */
+export const ESCROW_CAPTURE_AFTER_HOURS = envNum('ESCROW_CAPTURE_AFTER_HOURS', 24);
+/** Modèle platform : jours accordés au vendeur pour expédier ou remettre (code saisi) ; passé ce délai, annulation et remboursement. */
+export const ESCROW_SHIP_DEADLINE_DAYS = envNum('ESCROW_SHIP_DEADLINE_DAYS', 7);
 
 const frDate = (d: Date) => new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' }).format(d);
 
@@ -150,7 +159,10 @@ export class PaymentsService {
     if (active > 0) throw new BadRequestException('Une transaction est déjà en cours sur cette annonce.');
 
     const q = computeQuote(listing.price!);
-    const sellerConnectedAccountId = await this.stripeConnect.getPayableAccountId(listing.userId);
+    // Modèle platform : la charge reste sur le solde de Trocoin, le compte du vendeur ne sert qu'au
+    // transfert à la confirmation. On vérifie dès l'achat qu'il est prêt (onboarding terminé) pour ne pas
+    // bloquer un versement plus tard ; un vendeur sans compte est payé dès qu'il en crée un.
+    await this.stripeConnect.getPayableAccountId(listing.userId);
     const applicationFeeEuros = round2(q.commission + q.buyerFee);
     const base = {
       listingId,
@@ -177,7 +189,7 @@ export class PaymentsService {
           transactionId: pending.id,
           amountEuros: q.buyerTotal,
           applicationFeeEuros,
-          sellerConnectedAccountId,
+          transferGroup: pending.id,
           title: listing.title,
           buyerEmail: buyer?.email || undefined,
           successUrl: `${site}/compte/transactions/${pending.id}?paiement=retour`,
@@ -194,7 +206,7 @@ export class PaymentsService {
       }
     }
 
-    const intent = await this.paymentProvider.createPaymentIntent({ amountEuros: q.buyerTotal, applicationFeeEuros, sellerConnectedAccountId, metadata });
+    const intent = await this.paymentProvider.createPaymentIntent({ amountEuros: q.buyerTotal, applicationFeeEuros, metadata });
     const fresh = this.transactionsRepo.create({ ...base, status: 'sequestre', providerPaymentId: intent.providerPaymentId });
     this.enterEscrow(fresh, intent.captureBefore);
     const transaction = await this.transactionsRepo.save(fresh);
@@ -211,18 +223,123 @@ export class PaymentsService {
     tx.paidAt = new Date();
     tx.captureBefore = captureBefore ?? new Date(tx.paidAt.getTime() + ESCROW_DEFAULT_AUTH_DAYS * DAY_MS);
     tx.escrowStage = 0;
+    if (this.isPlatform(tx)) tx.shipBy = new Date(tx.paidAt.getTime() + ESCROW_SHIP_DEADLINE_DAYS * DAY_MS);
   }
 
-  /** Dernier instant où une action automatique doit avoir eu lieu (marge avant l'expiration de l'autorisation). */
+  /** Modèle de séquestre de la vente (les ventes antérieures à la bascule restent en « destination »). */
+  private isPlatform(tx: Transaction): boolean {
+    return tx.escrowModel !== 'destination';
+  }
+
+  /** Montant net versé au vendeur (prix moins commission ; les frais acheteur restent à la plateforme). */
+  private sellerPayout(tx: Transaction): number {
+    return round2(tx.amount - tx.commission);
+  }
+
+  /**
+   * Dernier instant où une action automatique doit avoir eu lieu. Ancien modèle : marge avant l'expiration
+   * de l'autorisation. Modèle platform : délai accordé au vendeur pour expédier ou remettre (les fonds,
+   * encaissés sur le solde de Trocoin, n'expirent pas).
+   */
   private escrowDeadline(tx: Transaction): Date {
+    if (this.isPlatform(tx)) {
+      return tx.shipBy ? new Date(tx.shipBy) : new Date(new Date(tx.paidAt ?? tx.createdAt).getTime() + ESCROW_SHIP_DEADLINE_DAYS * DAY_MS);
+    }
     const before = tx.captureBefore ? new Date(tx.captureBefore) : new Date(new Date(tx.paidAt ?? tx.createdAt).getTime() + ESCROW_DEFAULT_AUTH_DAYS * DAY_MS);
     return new Date(before.getTime() - ESCROW_SAFETY_HOURS * HOUR_MS);
   }
 
-  /** Capture (versement au vendeur) après action automatique : statut confirmé, fenêtre de litige ouverte pour l'acheteur. */
-  private async captureAutomatically(tx: Transaction, reason: 'reception_presumee' | 'capture_echeance', note: string) {
+  /** Modèle platform : date à laquelle la capture de l'autorisation sur le solde de Trocoin doit avoir eu lieu au plus tard. */
+  private captureDueAt(tx: Transaction): Date {
+    const paid = new Date(tx.paidAt ?? tx.createdAt).getTime();
+    const wanted = paid + ESCROW_CAPTURE_AFTER_HOURS * HOUR_MS;
+    const guard = (tx.captureBefore ? new Date(tx.captureBefore).getTime() : paid + ESCROW_DEFAULT_AUTH_DAYS * DAY_MS) - ESCROW_SAFETY_HOURS * HOUR_MS;
+    return new Date(Math.min(wanted, guard));
+  }
+
+  /** Modèle platform : encaisse l'autorisation sur le solde de la plateforme (idempotent). */
+  private async ensureCaptured(tx: Transaction): Promise<boolean> {
+    if (!this.isPlatform(tx) || tx.capturedAt) return false;
     await this.paymentProvider.capture(tx.providerPaymentId!);
-    if (tx.status !== 'litige') tx.status = 'confirme';
+    tx.capturedAt = new Date();
+    await this.transactionsRepo.save(tx);
+    this.logger.log(`Transaction ${tx.id} : fonds encaissés sur le solde de la plateforme`);
+    return true;
+  }
+
+  /**
+   * Modèle platform : paie le vendeur depuis le solde de la plateforme (montant net). Sans compte de
+   * versement prêt, le virement reste en attente et la tâche périodique le retente ; la vente est
+   * confirmée dans tous les cas. Idempotent (transferId).
+   */
+  private async payoutSeller(tx: Transaction, title?: string): Promise<boolean> {
+    if (!this.isPlatform(tx) || tx.transferId) return false;
+    let accountId: string | undefined;
+    try {
+      accountId = await this.stripeConnect.getPayableAccountId(tx.sellerId);
+    } catch (e) {
+      this.logger.warn(`Transaction ${tx.id} : compte de versement du vendeur non prêt (${(e as Error).message})`);
+    }
+    if (!accountId) {
+      this.logger.warn(`Transaction ${tx.id} : vendeur ${tx.sellerId} sans compte de versement, virement de ${this.sellerPayout(tx)} € en attente`);
+      return false;
+    }
+    const { transferId } = await this.paymentProvider.transfer({
+      providerPaymentId: tx.providerPaymentId!,
+      sellerConnectedAccountId: accountId,
+      amountEuros: this.sellerPayout(tx),
+      transactionId: tx.id,
+      description: `Trocoin · vente ${title ?? tx.listingId}`,
+    });
+    tx.transferId = transferId;
+    tx.transferredAt = new Date();
+    await this.transactionsRepo.save(tx);
+    this.logger.log(`Transaction ${tx.id} : ${this.sellerPayout(tx)} € virés au vendeur (${transferId})`);
+    return true;
+  }
+
+  /**
+   * Confirmation de la vente : ancien modèle → capture (les fonds partent chez le vendeur) ; modèle
+   * platform → capture si elle n'a pas encore eu lieu, puis virement au vendeur.
+   */
+  private async settle(tx: Transaction, title?: string) {
+    if (this.isPlatform(tx)) {
+      await this.ensureCaptured(tx);
+      await this.payoutSeller(tx, title);
+    } else {
+      await this.paymentProvider.capture(tx.providerPaymentId!);
+    }
+  }
+
+  /**
+   * Remboursement intégral de l'acheteur. Ancien modèle : le fournisseur annule l'autorisation ou rembourse
+   * en annulant le transfert. Modèle platform : autorisation non capturée → libérée ; capturée → remboursée
+   * depuis le solde de Trocoin ; déjà virée au vendeur → le virement est d'abord annulé (le compte du
+   * vendeur est débité), puis l'acheteur remboursé — l'acheteur est remboursé même si l'annulation du
+   * virement échoue (elle est alors à reprendre à la main, journal d'erreur).
+   */
+  private async refundBuyer(tx: Transaction) {
+    if (this.isPlatform(tx) && tx.transferId) {
+      try {
+        await this.paymentProvider.reverseTransfer(tx.transferId);
+        tx.transferId = null;
+        tx.transferredAt = null;
+      } catch (e) {
+        this.logger.error(`Transaction ${tx.id} : annulation du virement ${tx.transferId} impossible (${(e as Error).message}) — remboursement de l'acheteur maintenu, virement à récupérer à la main`);
+      }
+    }
+    await this.paymentProvider.refund(tx.providerPaymentId!);
+  }
+
+  /** Confirmation automatique (réception présumée, capture à l'échéance) : statut confirmé, fenêtre de litige ouverte pour l'acheteur. */
+  private async settleAutomatically(tx: Transaction, reason: 'reception_presumee' | 'capture_echeance', note: string, title?: string) {
+    if (tx.status === 'litige') {
+      // Ancien modèle, litige à l'échéance : capture seule, les fonds restent bloqués jusqu'à la décision
+      await this.paymentProvider.capture(tx.providerPaymentId!);
+    } else {
+      await this.settle(tx, title);
+      tx.status = 'confirme';
+    }
     tx.confirmedAt = new Date();
     tx.autoResolution = reason;
     tx.resolutionNote = note;
@@ -232,14 +349,16 @@ export class PaymentsService {
   }
 
   /**
-   * Tâche périodique des échéances du séquestre (toutes les 15 minutes) : rappels, réception présumée,
-   * puis, avant l'expiration de l'autorisation, une action par défaut pour qu'aucune transaction ne reste
-   * bloquée : capture si l'article a été expédié (ou en litige, pour préserver les fonds jusqu'à la décision),
-   * annulation avec remboursement s'il n'a pas été expédié ou remis. Idempotente (escrowStage).
+   * Tâche périodique des échéances du séquestre (toutes les 15 minutes), idempotente (escrowStage).
+   * Modèle platform : capture sur le solde de Trocoin au plus tard ESCROW_CAPTURE_AFTER_HOURS après le
+   * paiement ; réception présumée après l'expédition (rappels 48 h et 24 h avant, puis virement au
+   * vendeur) ; annulation et remboursement si rien n'est expédié ni remis avant `shipBy` ; virements en
+   * attente retentés quand le vendeur a créé son compte. Ancien modèle : réception présumée puis, avant
+   * l'expiration de l'autorisation, capture si expédié ou en litige, annulation sinon.
    */
   @Cron('*/15 * * * *')
-  async runEscrowSchedule(now: Date = new Date()): Promise<{ reminders: number; notices: number; confirmed: number; captured: number; cancelled: number }> {
-    const result = { reminders: 0, notices: 0, confirmed: 0, captured: 0, cancelled: 0 };
+  async runEscrowSchedule(now: Date = new Date()): Promise<{ reminders: number; notices: number; confirmed: number; captured: number; cancelled: number; transferred: number }> {
+    const result = { reminders: 0, notices: 0, confirmed: 0, captured: 0, cancelled: 0, transferred: 0 };
     const open = await this.transactionsRepo.find({ where: { status: In(['sequestre', 'livree', 'litige']) }, take: 500 });
     for (const tx of open) {
       try {
@@ -254,11 +373,17 @@ export class PaymentsService {
         const title = listing?.title ?? 'votre transaction';
         const link = `/compte/transactions/${tx.id}`;
 
+        // 0. Modèle platform : capture sur le solde de la plateforme à l'échéance courte (ou de sécurité)
+        if (this.isPlatform(tx) && !tx.capturedAt && now >= this.captureDueAt(tx)) {
+          await this.ensureCaptured(tx);
+          result.captured += 1;
+        }
+
         // 1. Réception présumée (article expédié, aucun litige) : rappel 48 h avant, dernier avis 24 h avant, puis confirmation
         if (tx.status === 'livree' && tx.deliveryMethod !== 'main_propre') {
           const autoAt = tx.autoConfirmAt ? new Date(tx.autoConfirmAt) : deadline;
           if (now >= autoAt) {
-            await this.captureAutomatically(tx, 'reception_presumee', `Réception présumée le ${frDate(now)} : aucune confirmation ni litige depuis l'expédition`);
+            await this.settleAutomatically(tx, 'reception_presumee', `Réception présumée le ${frDate(now)} : aucune confirmation ni litige depuis l'expédition`, title);
             result.confirmed += 1;
             await this.notifications.notify(tx.buyerId, { type: 'transaction', title: 'Réception considérée acquise', body: `Sans nouvelle de votre part, la réception de « ${title} » est considérée acquise et le vendeur est payé. Un problème ? Vous pouvez encore ouvrir un litige jusqu'au ${frDate(tx.disputeAllowedUntil!)}.`, link });
             await this.notifications.notify(tx.sellerId, { type: 'transaction', title: 'Vente confirmée', body: `Réception présumée de « ${title} » : les fonds vous sont versés.`, link });
@@ -280,11 +405,16 @@ export class PaymentsService {
           continue;
         }
 
-        // 2. Échéance de l'autorisation : action par défaut, précédée de rappels 48 h et 24 h avant
+        // Modèle platform, litige ouvert : les fonds sont sur le solde de Trocoin, aucune échéance ne presse
+        if (this.isPlatform(tx) && tx.status === 'litige') continue;
+
+        // 2. Échéance : action par défaut, précédée de rappels 48 h et 24 h avant.
+        //    Ancien modèle : expiration de l'autorisation → capture si expédié ou en litige, annulation sinon.
+        //    Modèle platform : délai d'expédition / de remise dépassé sans code ni expédition → annulation.
         if (now >= deadline) {
-          if (tx.status === 'litige' || tx.status === 'livree') {
+          if (!this.isPlatform(tx) && (tx.status === 'litige' || tx.status === 'livree')) {
             // Fonds préservés : capturés avant expiration (en litige, la décision remboursera l'acheteur si besoin)
-            await this.captureAutomatically(tx, 'capture_echeance', `Fonds capturés le ${frDate(now)} avant l'expiration de l'autorisation bancaire`);
+            await this.settleAutomatically(tx, 'capture_echeance', `Fonds capturés le ${frDate(now)} avant l'expiration de l'autorisation bancaire`, title);
             result.captured += 1;
             const body = tx.status === 'litige'
               ? `Pour que l'argent ne soit pas perdu par l'expiration de l'autorisation bancaire, le paiement de « ${title} » a été encaissé par Trocoin. Il reste bloqué jusqu'à la décision du médiateur (remboursement ou versement au vendeur).`
@@ -292,7 +422,7 @@ export class PaymentsService {
             for (const uid of [tx.buyerId, tx.sellerId]) await this.notifications.notify(uid, { type: 'transaction', title: tx.status === 'litige' ? 'Fonds mis en sécurité' : 'Paiement encaissé', body, link });
           } else {
             // Ni expédié ni remis avant l'échéance : l'acheteur récupère son argent, l'annonce reste en ligne
-            await this.paymentProvider.refund(tx.providerPaymentId!);
+            await this.refundBuyer(tx);
             tx.status = 'annulee';
             tx.resolvedAt = now;
             tx.autoResolution = 'annulation_echeance';
@@ -323,7 +453,20 @@ export class PaymentsService {
         this.logger.error(`Échéance du séquestre ${tx.id} : ${(e as Error).message}`);
       }
     }
-    if (result.confirmed || result.captured || result.cancelled) this.logger.log(`Échéances du séquestre : ${JSON.stringify(result)}`);
+
+    // 3. Modèle platform : virements en attente (vendeur sans compte de versement au moment de la confirmation)
+    const pendingPayouts = await this.transactionsRepo.find({ where: { status: 'confirme', escrowModel: 'platform', transferId: IsNull(), capturedAt: Not(IsNull()) }, take: 100 });
+    for (const tx of pendingPayouts) {
+      try {
+        if (await this.payoutSeller(tx)) {
+          result.transferred += 1;
+          await this.notifications.notify(tx.sellerId, { type: 'transaction', title: 'Versement effectué', body: `Le montant de votre vente (${this.sellerPayout(tx)} €) vient d'être viré sur votre compte de paiement.`, link: `/compte/transactions/${tx.id}` });
+        }
+      } catch (e) {
+        this.logger.error(`Virement en attente ${tx.id} : ${(e as Error).message}`);
+      }
+    }
+    if (result.confirmed || result.captured || result.cancelled || result.transferred) this.logger.log(`Échéances du séquestre : ${JSON.stringify(result)}`);
     return result;
   }
 
@@ -332,11 +475,20 @@ export class PaymentsService {
     return this.shipments.findOne({ where: { transactionId } });
   }
 
-  /** Filet de sécurité admin : transactions non résolues dont la date limite de capture approche. */
+  /**
+   * Filet de sécurité admin : transactions non résolues dont la prochaine échéance approche — ancien modèle :
+   * date limite de capture ; modèle platform : délai d'expédition / de remise, ou réception présumée.
+   */
   async escrowDueSoon(now: Date = new Date()): Promise<Transaction[]> {
     const limit = new Date(now.getTime() + ESCROW_ADMIN_ALERT_HOURS * HOUR_MS);
-    const items = await this.transactionsRepo.find({ where: { status: In(['sequestre', 'livree', 'litige']), captureBefore: LessThan(limit) }, order: { captureBefore: 'ASC' }, take: 100 });
-    for (const tx of items) this.logger.warn(`Séquestre à échéance : transaction ${tx.id} (${tx.status}) capture avant ${tx.captureBefore?.toISOString()}`);
+    const items = await this.transactionsRepo
+      .createQueryBuilder('t')
+      .where('t.status IN (:...open)', { open: ['sequestre', 'livree', 'litige'] })
+      .andWhere(`((t.escrowModel = 'destination' AND t.captureBefore < :limit) OR (t.escrowModel = 'platform' AND t.status IN ('sequestre', 'livree') AND COALESCE(t.autoConfirmAt, t.shipBy) < :limit))`, { limit })
+      .orderBy('COALESCE(t.autoConfirmAt, t.shipBy, t.captureBefore)', 'ASC')
+      .take(100)
+      .getMany();
+    for (const tx of items) this.logger.warn(`Séquestre à échéance : transaction ${tx.id} (${tx.status}, ${tx.escrowModel}) échéance ${this.escrowDeadline(tx).toISOString()}`);
     return items;
   }
 
@@ -489,14 +641,16 @@ export class PaymentsService {
     if (tx.deliveryMethod !== 'main_propre' && !tracking) {
       throw new BadRequestException('Un numéro de suivi est requis pour un envoi.');
     }
+    // Modèle platform : le vendeur s'engage (expédition ou remise prête), les fonds sont encaissés maintenant
+    await this.ensureCaptured(tx);
     tx.status = 'livree';
     tx.deliveryTrackingNumber = tracking;
     await this.shipments.update({ transactionId: tx.id, status: 'etiquette_prete' }, { status: 'expediee' });
     tx.shippedAt = new Date();
     if (tx.deliveryMethod !== 'main_propre') {
-      // Réception présumée : N jours après l'expédition, jamais après la marge de sécurité de l'autorisation
+      // Réception présumée : N jours après l'expédition (ancien modèle : jamais après la marge de sécurité de l'autorisation)
       const wanted = tx.shippedAt.getTime() + ESCROW_AUTO_CONFIRM_DAYS * DAY_MS;
-      tx.autoConfirmAt = new Date(Math.min(wanted, this.escrowDeadline(tx).getTime()));
+      tx.autoConfirmAt = new Date(this.isPlatform(tx) ? wanted : Math.min(wanted, this.escrowDeadline(tx).getTime()));
       tx.escrowStage = 0; // les rappels repartent sur la nouvelle échéance (réception)
     }
     const saved = await this.transactionsRepo.save(tx);
@@ -518,7 +672,7 @@ export class PaymentsService {
     if (tx.status !== 'sequestre' && tx.status !== 'livree') {
       throw new BadRequestException(`Impossible de confirmer une transaction "${tx.status}".`);
     }
-    await this.paymentProvider.capture(tx.providerPaymentId!);
+    await this.settle(tx);
     tx.status = 'confirme';
     tx.confirmedAt = new Date();
     const saved = await this.transactionsRepo.save(tx);
@@ -526,7 +680,9 @@ export class PaymentsService {
     await this.notifications.notify(tx.sellerId, {
       type: 'transaction',
       title: 'Vente confirmée',
-      body: 'L\'acheteur a confirmé la réception : les fonds vous sont versés. Pensez à laisser un avis.',
+      body: this.isPlatform(saved) && !saved.transferId
+        ? 'L\'acheteur a confirmé la réception. Le versement attend votre compte de paiement : configurez-le dans Mes paiements pour recevoir les fonds.'
+        : 'L\'acheteur a confirmé la réception : les fonds vous sont versés. Pensez à laisser un avis.',
       link: `/compte/transactions/${tx.id}`,
     });
     return saved;
@@ -539,7 +695,7 @@ export class PaymentsService {
     if (tx.deliveryMethod !== 'main_propre') throw new BadRequestException('Cette transaction n\'est pas une remise en main propre.');
     if (!['sequestre', 'livree'].includes(tx.status)) throw new BadRequestException(`Impossible depuis le statut "${tx.status}".`);
     if (!tx.handoverCode || tx.handoverCode !== code) throw new BadRequestException('Code de remise incorrect.');
-    await this.paymentProvider.capture(tx.providerPaymentId!);
+    await this.settle(tx);
     tx.status = 'confirme';
     tx.confirmedAt = new Date();
     const saved = await this.transactionsRepo.save(tx);
@@ -557,7 +713,7 @@ export class PaymentsService {
   async cancel(transactionId: string, userId: string): Promise<Transaction> {
     const tx = await this.getOwned(transactionId, userId);
     if (tx.status !== 'sequestre') throw new BadRequestException('Annulation possible uniquement avant expédition / remise.');
-    await this.paymentProvider.refund(tx.providerPaymentId!);
+    await this.refundBuyer(tx);
     tx.status = 'annulee';
     tx.resolvedAt = new Date();
     tx.resolutionNote = userId === tx.sellerId ? 'Annulée par le vendeur' : 'Annulée par l\'acheteur';
@@ -579,6 +735,9 @@ export class PaymentsService {
     if (!['sequestre', 'livree'].includes(tx.status) && !postCaptureWindow) {
       throw new BadRequestException(`Impossible d'ouvrir un litige sur une transaction "${tx.status}".`);
     }
+    // Modèle platform : les fonds sont mis en sécurité sur le solde de Trocoin dès l'ouverture du litige
+    // (un litige peut durer plus longtemps qu'une autorisation bancaire)
+    await this.ensureCaptured(tx);
     tx.status = 'litige';
     tx.disputeReason = reason;
     tx.disputeOpenedBy = userId;
@@ -609,8 +768,8 @@ export class PaymentsService {
       throw new BadRequestException(`Aucune décision possible sur une transaction "${tx.status}".`);
     }
     if (decision === 'annuler') {
-      if (tx.confirmedAt) throw new BadRequestException('Fonds déjà capturés : utilisez « rembourser ».');
-      await this.paymentProvider.refund(tx.providerPaymentId!);
+      if (tx.confirmedAt) throw new BadRequestException('Vente déjà confirmée : utilisez « rembourser ».');
+      await this.refundBuyer(tx);
       tx.status = 'annulee';
       tx.resolutionNote = note;
       tx.resolvedAt = new Date();
@@ -621,12 +780,14 @@ export class PaymentsService {
       return cancelled;
     }
     if (decision === 'rembourser') {
-      // Autorisation encore ouverte : annulée ; fonds déjà capturés (échéance, réception présumée) : remboursés
-      await this.paymentProvider.refund(tx.providerPaymentId!);
+      // Autorisation encore ouverte : annulée ; fonds encaissés : remboursés (modèle platform : depuis le solde
+      // de Trocoin, après annulation du virement s'il a déjà eu lieu)
+      await this.refundBuyer(tx);
       tx.status = 'rembourse';
       if (tx.confirmedAt) await this.listingsRepo.update({ id: tx.listingId, status: 'vendue' }, { status: 'en_ligne' });
     } else {
-      if (!tx.confirmedAt) await this.paymentProvider.capture(tx.providerPaymentId!); // déjà capturé si l'échéance est passée
+      // Ancien modèle : déjà capturé si l'échéance est passée ; modèle platform : capture si besoin puis virement
+      if (this.isPlatform(tx) || !tx.confirmedAt) await this.settle(tx);
       tx.status = 'confirme';
       tx.confirmedAt = tx.confirmedAt ?? new Date();
       await this.listingsRepo.update({ id: tx.listingId, status: In(['en_ligne', 'expiree']) }, { status: 'vendue' });
@@ -654,9 +815,9 @@ export class PaymentsService {
     return tx;
   }
 
-  /** Le code de remise (et l'URL de paiement) ne sont visibles que par l'acheteur. */
+  /** Le code de remise (et l'URL de paiement) ne sont visibles que par l'acheteur ; les références du fournisseur restent internes. */
   private viewFor(tx: Transaction, viewerId: string, checkoutUrl?: string) {
-    const { handoverCode, providerPaymentId, ...rest } = tx;
+    const { handoverCode, providerPaymentId, transferId, ...rest } = tx;
     const isBuyer = viewerId === tx.buyerId;
     return { ...rest, handoverCode: isBuyer ? handoverCode : undefined, checkoutUrl: isBuyer && tx.status === 'en_attente' ? checkoutUrl : undefined };
   }

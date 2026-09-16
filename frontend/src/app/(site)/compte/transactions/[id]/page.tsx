@@ -115,10 +115,23 @@ export default function TransactionPage() {
             {tx.confirmedAt && <li>Réception confirmée : {formatDateTime(tx.confirmedAt)}</li>}
             {tx.disputeReason && <li>Litige : « {tx.disputeReason} »</li>}
             {tx.resolutionNote && <li>Décision : {tx.resolutionNote}</li>}
+            {tx.escrowModel !== "destination" && ["sequestre", "livree", "litige", "confirme"].includes(tx.status) && (
+              tx.capturedAt
+                ? <li data-testid="captured-at">Paiement encaissé par Trocoin le {formatDateTime(tx.capturedAt)}{tx.status !== "confirme" && " — conservé par Trocoin jusqu'à la confirmation de la réception, puis versé au vendeur"}</li>
+                : <li data-testid="capture-pending">Paiement autorisé : Trocoin l&apos;encaisse sous 24 h et le conserve jusqu&apos;à la confirmation de la réception</li>
+            )}
+            {tx.escrowModel !== "destination" && tx.shipBy && (tx.status === "sequestre" || (tx.status === "livree" && tx.deliveryMethod === "main_propre")) && (
+              <li data-testid="ship-by">{tx.deliveryMethod === "main_propre" ? "Remise à confirmer (code saisi par le vendeur)" : "Expédition à faire"} avant le {formatDateTime(tx.shipBy)} : passé cette date, la vente est annulée et l&apos;acheteur intégralement remboursé</li>
+            )}
+            {tx.status === "confirme" && tx.escrowModel !== "destination" && (
+              tx.transferredAt
+                ? <li data-testid="transferred-at">Fonds versés au vendeur le {formatDateTime(tx.transferredAt)}</li>
+                : <li data-testid="transfer-pending">{buyer ? "Fonds en cours de versement au vendeur" : "Versement en attente : configurez votre compte de paiement dans Mes paiements pour recevoir les fonds"}</li>
+            )}
             {tx.status === "livree" && tx.autoConfirmAt && tx.deliveryMethod !== "main_propre" && (
               <li data-testid="auto-confirm-at">Réception considérée acquise le {formatDateTime(tx.autoConfirmAt)} sans confirmation ni litige d&apos;ici là</li>
             )}
-            {["sequestre", "litige"].includes(tx.status) && tx.captureBefore && (
+            {tx.escrowModel === "destination" && ["sequestre", "litige"].includes(tx.status) && tx.captureBefore && (
               <li data-testid="capture-before">Échéance de l&apos;autorisation bancaire : {formatDateTime(tx.captureBefore)} — {tx.status === "litige" ? "les fonds seront encaissés avant cette date et bloqués jusqu'à la décision du médiateur" : tx.deliveryMethod === "main_propre" ? "sans remise confirmée la veille, la vente est annulée et l'acheteur remboursé" : "sans expédition la veille, la vente est annulée et l'acheteur remboursé"}</li>
             )}
           </ul>
@@ -133,7 +146,7 @@ export default function TransactionPage() {
         {tx.status === "en_attente" && (
           <div className="alert" data-testid="pending-payment" role="status">
             <strong>Paiement en attente.</strong>{" "}
-            {buyer ? "Terminez le paiement sur la page sécurisée Stripe : cette page se mettra à jour automatiquement, rien n'est débité tant que vous n'avez pas confirmé la réception." : "L'acheteur n'a pas encore finalisé son paiement."}
+            {buyer ? "Terminez le paiement sur la page sécurisée Stripe : cette page se mettra à jour automatiquement. Trocoin conserve le paiement et ne le verse au vendeur qu'une fois la réception confirmée." : "L'acheteur n'a pas encore finalisé son paiement."}
             {buyer && tx.checkoutUrl && (
               <div style={{ marginTop: 10 }}>
                 <a className="btn btn-primary" href={tx.checkoutUrl}>Reprendre le paiement</a>

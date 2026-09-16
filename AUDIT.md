@@ -2095,3 +2095,76 @@ pages légales) · Traçabilité (journal). URL et thème inchangés (`docs/desi
 4. Pré-modération : ajouter « urgent », « whatsapp » à la liste surveillée (tour dédié).
 
 Déploiement : CI verte (typecheck, tests API SQLite et PostgreSQL 16, image Docker, Playwright, Render), API en **1.18.0** (`/health` : postgres ok), `DELETE /admin/users/:id`, `DELETE /admin/listings/:id` et `GET /admin/transactions/:id` répondent 401 sans jeton, front Vercel à jour (menu regroupé `admin-nav-title` présent dans le bundle, `/admin/litiges/:id` servi). Aucun compte de test créé en production pour ce tour.
+
+## 39. Séquestre robuste : les fonds restent chez Trocoin jusqu'à la confirmation — 16 septembre 2026
+
+### Décision appliquée
+
+Passage du modèle Stripe « destination charge » (capture à la confirmation, fonds versés au vendeur
+à la capture) au modèle « **paiements et transferts distincts** » : la capture met l'argent sur le
+solde de Trocoin, qui n'expire pas ; le vendeur est payé par un **Transfer** séparé à la
+confirmation. Le risque d'expiration de l'autorisation (§37) disparaît, un litige peut durer sans
+limite, et un remboursement avant virement ne dépend plus du solde du vendeur.
+
+### Choix faits (et pourquoi)
+
+| Point | Choix | Raison |
+|---|---|---|
+| **Moment de la capture** | au plus tard **24 h** après l'autorisation (`ESCROW_CAPTURE_AFTER_HOURS`), **immédiatement** dès que le vendeur expédie ou se déclare prêt, ou qu'un litige s'ouvre ; garde-fou : jamais après la marge de sécurité de l'autorisation | pendant ces 24 h, une annulation (acheteur qui se ravise, vendeur indisponible, alerte fraude Radar) **libère l'autorisation** : aucun débit, aucun remboursement, et les frais Stripe de la charge ne sont pas perdus (Stripe ne les restitue pas sur un remboursement). Au-delà, l'argent est en sécurité chez Trocoin bien avant les 7 jours |
+| **Transfert au vendeur** | à la confirmation seulement : réception confirmée, code de remise, décision admin « libérer », réception présumée ; montant net = prix − commission 8 % (frais acheteur et commission restent chez Trocoin) ; `source_transaction` = charge de l'acheteur, `transfer_group` = identifiant de la vente | adossé à la charge, le virement ne dépend pas du solde disponible global de la plateforme (sinon refusé pendant ~7 jours de règlement) ; traçable côté Stripe |
+| **Vendeur sans compte de versement** | vente confirmée quand même, virement **en attente**, retenté toutes les 15 minutes dès que le compte existe, notification « Versement effectué » | avant : « la plateforme encaisse et reverse manuellement » ; maintenant automatique et journalisé |
+| **Remboursement avant virement** | `refund` depuis le solde de Trocoin (autorisation non capturée : simple libération) | plus simple et plus sûr qu'avant |
+| **Remboursement après virement** | annulation du virement (`transfers.createReversal`, compte du vendeur débité, solde négatif possible dont la plateforme répond) **puis** remboursement de l'acheteur ; si l'annulation échoue, l'acheteur est quand même remboursé et l'erreur journalisée pour récupération manuelle | l'acheteur d'abord ; c'est le même point faible qu'avant, mais limité à la fenêtre de 7 jours après une confirmation automatique |
+| **Réception présumée** | **7 jours** après l'expédition (`ESCROW_AUTO_CONFIRM_DAYS`, avant : 4 plafonnés par l'autorisation), rappels 48 h et 24 h avant, litige encore possible 7 jours après | plus de pression de capture ; 7 jours couvrent l'acheminement et le retrait en point relais ; sert seulement à décider quand payer le vendeur |
+| **Délai d'expédition / remise** | **7 jours** après le paiement (`ESCROW_SHIP_DEADLINE_DAYS`, avant : ~6 jours imposés par l'autorisation), rappels 48 h et 24 h avant, puis annulation et remboursement ; remise en main propre : le code saisi est la seule preuve, un vendeur « prêt » sans code est annulé à l'échéance | l'acheteur n'attend pas indéfiniment ; le vendeur n'est jamais payé sans preuve de remise |
+| **Litige** | capture immédiate à l'ouverture, aucune action automatique ensuite | les fonds n'expirent pas ; le médiateur décide sans contrainte de délai |
+| **Transition** | colonne `escrowModel` : `destination` pour toutes les ventes existantes à la migration, `platform` pour les nouvelles ; l'ancienne logique (§37) reste entière pour les premières (tests phase 22 conservés, modèle forcé) | aucune migration forcée d'une vente en cours ; les deux modèles cohabitent dans la tâche, l'admin voit le modèle sur la fiche |
+
+### Code
+
+- `src/payments/payment-provider.interface.ts` : `transfer(params)` et `reverseTransfer(id)` sur tous les
+  fournisseurs ; `transferGroup` à la création ; `sellerConnectedAccountId` ne sert plus qu'à l'ancien modèle.
+- `src/payments/stripe-payment.provider.ts` : charge plateforme (`transfer_group`), `transfers.create`
+  (`source_transaction`, `transfer_group`, métadonnées), `transfers.createReversal` ; `refund` inchangé
+  (libération ou remboursement ; `reverse_transfer` seulement pour une ancienne destination charge).
+- `src/payments/payments.service.ts` : `ensureCaptured`, `payoutSeller`, `settle`, `refundBuyer`,
+  `settleAutomatically` ; `runEscrowSchedule` par modèle (capture à 24 h, réception présumée, délai
+  d'expédition, virements en attente) ; `escrowDueSoon` et la liste admin `?due=1` sur les deux modèles.
+- `src/payments/transaction.entity.ts` + migration `SequestrePlateforme` : `escrowModel`, `capturedAt`,
+  `shipBy`, `transferId`, `transferredAt`.
+- Interface : chronologie de la transaction (« Paiement encaissé par Trocoin le … », « Expédition à faire
+  avant le … », « Fonds versés au vendeur le … », versement en attente pour un vendeur sans compte), fiche
+  admin (modèle, encaissement, virement, échéance), aide « Comment fonctionne le paiement sécurisé ».
+
+### Vérification
+
+| Contrôle | Résultat |
+|---|---|
+| `test/phase24.e2e-spec.ts` (8 tests, fournisseur simulé instrumenté, temps simulé) | création (modèle platform, `shipBy`, pas de capture avant 24 h, capture après, idempotente, annulation avant capture = simple libération) ; parcours nominal (capture à l'expédition, virement de 92 € sur 100 € à la confirmation, rien ensuite) ; vendeur sans compte (virement en attente puis effectué par la tâche, notification) ; remboursement avant virement (litige, `refund` seul) ; remboursement après virement (réception présumée au 12e jour, au-delà de l'ancienne autorisation, puis `reverse` + `refund`) ; non expédié (rappels puis annulation, `capture` puis `refund`) et remise sans code ; litige avant capture (capture à l'ouverture, aucune action à J+45, « libérer » → virement) ; filet admin `?due=1` sur les deux échéances, litige exclu |
+| `test/phase22.e2e-spec.ts` (ancien modèle forcé) | 7 tests inchangés : l'ancienne logique reste entière pour les ventes antérieures |
+| `npm test` | 156 réussis, 1 ignoré |
+| Playwright | scénarios achat, expédition et console admin rejoués sur la pile locale ; suite complète par la CI |
+| Migration `SequestrePlateforme` | jouée par le job CI Postgres 16 puis Render ; les lignes existantes passent en `destination` |
+
+### Plafond de 2 500 € et fenêtre de litige de 7 jours : recommandation
+
+**Les garder pour l'instant, sans les changer.** Le plafond protège désormais Trocoin lui-même : dans
+ce modèle la plateforme est le marchand de la charge, donc responsable des contestations bancaires
+(chargebacks) et des remboursements après virement. La fenêtre de 7 jours après une confirmation
+automatique borne le seul cas où un remboursement dépend encore du compte du vendeur. À reconsidérer
+avec des données réelles (taux de litiges, délais moyens), pas avant.
+
+### Points d'attention signalés (non résolus ici)
+
+1. **Fonds détenus pour compte de tiers** : le solde Stripe de Trocoin porte l'argent des acheteurs
+   entre la capture et le virement ; suivi comptable dédié et qualification juridique (exemption
+   d'agent commercial / statut PSP) à voir avec un conseil.
+2. **Calendrier des virements Stripe vers la banque de Trocoin** : un remboursement après que Stripe a
+   reversé le solde sur le compte bancaire tire le solde en négatif (prélèvement bancaire par Stripe) ;
+   régler un délai ou une réserve (`DEPLOIEMENT.md` §5c).
+3. **Pas de clé Stripe de test disponible localement** : les appels Transfer / reversal sont vérifiés
+   par la forme (documentation Stripe) et par le fournisseur simulé, pas contre l'API réelle. Un achat
+   de test en mode test Stripe (carte de test saisie par vous), puis confirmation, permettra de voir le
+   Transfer dans le Dashboard Stripe (Connect → Transfers) et sa réversion après un remboursement admin.
+4. Les notifications de l'ancien modèle (« encaissé avant l'expiration de l'autorisation ») ne
+   s'affichent plus que pour les ventes antérieures.
