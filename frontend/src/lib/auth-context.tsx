@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { api, ApiError, getToken, logoutSession, setSession } from "./api";
+import { api, ApiError, ensureFreshToken, getToken, logoutSession, setSession } from "./api";
 import type { Me } from "./types";
 
 interface AuthState {
@@ -33,13 +33,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
 
+  /**
+   * Charge le compte à partir de la session stockée. Le jeton d'accès (15 min) est renouvelé
+   * d'abord s'il a expiré pendant l'absence : c'est ce qui garde la connexion après la fermeture
+   * du navigateur (le refresh token, 30 jours glissants, n'est effacé que par « Se déconnecter »).
+   */
   const loadUser = useCallback(async (tok: string | null) => {
     if (!tok) {
       setUser(null);
       return;
     }
     try {
-      const me = await api<Me>("/users/me", { token: tok });
+      const fresh = await ensureFreshToken();
+      if (!fresh) {
+        // Refus définitif du serveur (session révoquée ou expirée depuis plus de 30 jours)
+        if (!getToken()) {
+          setTok(null);
+          setUser(null);
+        }
+        return;
+      }
+      setTok(fresh);
+      const me = await api<Me>("/users/me");
       setUser(me);
     } catch (err) {
       if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
@@ -51,12 +66,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const refreshCounters = useCallback(async () => {
-    const tok = getToken();
-    if (!tok) return;
+    if (!getToken()) return;
     try {
       const [m, n] = await Promise.all([
-        api<{ unread: number }>("/conversations/unread-count", { token: tok }),
-        api<{ unread: number }>("/notifications/unread-count", { token: tok }),
+        api<{ unread: number }>("/conversations/unread-count"),
+        api<{ unread: number }>("/notifications/unread-count"),
       ]);
       setUnreadMessages(m.unread);
       setUnreadNotifications(n.unread);
@@ -70,6 +84,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setTok(tok);
     loadUser(tok).finally(() => setLoading(false));
   }, [loadUser]);
+
+  // Autres onglets : une déconnexion (ou une connexion) ailleurs se répercute ici sans rechargement
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== "trocoin_token" && e.key !== null) return;
+      const tok = getToken();
+      if (!tok) {
+        setTok(null);
+        setUser(null);
+      } else if (!user) {
+        setTok(tok);
+        void loadUser(tok);
+      } else {
+        setTok(tok);
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [loadUser, user]);
 
   useEffect(() => {
     if (!user) return;

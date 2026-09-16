@@ -36,6 +36,8 @@ function generateTemporaryPassword(): string {
 
 export const ACCESS_TOKEN_TTL = process.env.JWT_EXPIRES_IN || '15m';
 export const REFRESH_TOKEN_TTL_DAYS = Number(process.env.REFRESH_TOKEN_TTL_DAYS || 30);
+/** Fenêtre pendant laquelle un jeton tout juste tourné peut être représenté (onglets concurrents) sans révoquer la session. */
+export const REFRESH_REUSE_GRACE_MS = Number(process.env.REFRESH_REUSE_GRACE_MS || 30_000);
 
 export interface SessionTokens {
   accessToken: string;
@@ -468,6 +470,13 @@ export class AuthService {
     const stored = await this.refreshRepo.findOne({ where: { tokenHash: hashToken(rawToken) } });
     if (!stored) throw new UnauthorizedException('Session expirée, reconnectez-vous.');
 
+    if (stored.replacedById && stored.revokedAt && Date.now() - new Date(stored.revokedAt).getTime() < REFRESH_REUSE_GRACE_MS) {
+      // Jeton tourné il y a quelques secondes : deux onglets (ou une requête rejouée après une coupure) ont
+      // présenté le même jeton. Ce n'est pas un vol : le second appel est refusé sans révoquer la session,
+      // le navigateur relit le jeton renouvelé par le premier appel dans son stockage. (Après une
+      // déconnexion, la famille est déjà révoquée : la réponse reste un refus.)
+      throw new UnauthorizedException('Jeton déjà renouvelé.');
+    }
     if (stored.revokedAt || stored.replacedById) {
       await this.refreshRepo.update({ familyId: stored.familyId }, { revokedAt: new Date() });
       this.logger.warn(`Réutilisation d'un refresh token (famille ${stored.familyId}) : session révoquée pour l'utilisateur ${stored.userId}`);

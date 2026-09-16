@@ -1,8 +1,9 @@
 /**
  * Client HTTP unique vers l'API NestJS.
- * - côté navigateur : ajoute l'access token (15 min) ; sur 401, tente UNE
- *   rotation du refresh token puis rejoue la requête ; si la rotation échoue,
- *   la session locale est effacée ;
+ * - côté navigateur : ajoute l'access token (15 min), renouvelé d'avance s'il expire dans la minute ;
+ *   sur 401, tente UNE rotation du refresh token (30 jours glissants) puis rejoue la requête ; la
+ *   session locale n'est effacée que sur un refus définitif du serveur (jeton révoqué ou expiré),
+ *   jamais sur une panne réseau ;
  * - côté serveur (rendu SSR des pages publiques) : appels anonymes.
  */
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
@@ -62,33 +63,83 @@ export function setToken(token: string | null) {
   setSession(token, token === null ? null : undefined);
 }
 
+/** Émission et expiration (ms) lues dans le JWT, sans vérifier la signature ; null si illisible. */
+export function tokenTimes(token: string | null): { iat: number | null; exp: number } | null {
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))) as { exp?: number; iat?: number };
+    return typeof payload.exp === "number" ? { exp: payload.exp * 1000, iat: typeof payload.iat === "number" ? payload.iat * 1000 : null } : null;
+  } catch {
+    return null;
+  }
+}
+/**
+ * Jeton d'accès absent, illisible, expiré ou sur le point de l'être : à renouveler avant de l'utiliser.
+ * Marge : une minute, plafonnée au quart de la durée de vie du jeton (un jeton de 15 min est renouvelé
+ * d'avance dans sa dernière minute ; un jeton très court, comme en test, n'est pas renouvelé sans arrêt).
+ */
+export function tokenExpiresSoon(token: string | null, marginMs?: number): boolean {
+  const t = tokenTimes(token);
+  if (!t) return true;
+  const lifetime = t.iat !== null ? t.exp - t.iat : 15 * 60_000;
+  const margin = marginMs ?? Math.min(60_000, Math.max(1_000, lifetime / 4));
+  return t.exp - Date.now() < margin;
+}
+
 let refreshing: Promise<string | null> | null = null;
-/** Rotation du refresh token (une seule à la fois, partagée entre requêtes concurrentes). */
+/**
+ * Rotation du refresh token, une seule à la fois : partagée entre les requêtes concurrentes de
+ * l'onglet, et sérialisée entre onglets par un verrou navigateur (Web Locks) quand il existe. Une
+ * fois le verrou pris, le stockage est relu : si un autre onglet vient de renouveler la session, on
+ * réutilise son jeton au lieu de représenter l'ancien.
+ */
 export async function refreshSession(): Promise<string | null> {
   if (refreshing) return refreshing;
   refreshing = (async () => {
-    const rt = getRefreshToken();
-    if (!rt) return null;
     try {
-      const res = await fetch(`${API_URL}/auth/refresh`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refreshToken: rt }),
-      });
-      if (!res.ok) {
-        setSession(null, null);
-        return null;
-      }
-      const data = (await res.json()) as { accessToken: string; refreshToken: string };
-      setSession(data.accessToken, data.refreshToken);
-      return data.accessToken;
+      const before = getRefreshToken();
+      if (!before) return null;
+      const run = async (): Promise<string | null> => {
+        const rt = getRefreshToken();
+        if (!rt) return null;
+        if (rt !== before && !tokenExpiresSoon(getToken())) return getToken(); // renouvelé par un autre onglet
+        const res = await fetch(`${API_URL}/auth/refresh`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refreshToken: rt }),
+        });
+        if (res.status === 401 || res.status === 403 || res.status === 400) {
+          // Refus définitif (session révoquée, expirée ou jeton inconnu) : la session locale est effacée.
+          // Sauf si un autre onglet vient de la renouveler entre-temps (jeton « déjà renouvelé »).
+          if (getRefreshToken() !== rt) return getToken();
+          setSession(null, null);
+          return null;
+        }
+        if (!res.ok) return null; // panne passagère du serveur : on garde la session, nouvel essai plus tard
+        const data = (await res.json()) as { accessToken: string; refreshToken: string };
+        setSession(data.accessToken, data.refreshToken);
+        return data.accessToken;
+      };
+      const locks = typeof navigator !== "undefined" ? (navigator as Navigator & { locks?: LockManager }).locks : undefined;
+      return locks ? await locks.request("trocoin-refresh", run) : await run();
     } catch {
-      return null;
+      return null; // hors ligne : la session locale est conservée
     } finally {
       refreshing = null;
     }
   })();
   return refreshing;
+}
+
+/**
+ * Jeton d'accès prêt à l'emploi : renouvelé d'abord s'il est expiré ou sur le point de l'être
+ * (retour sur le site après une longue absence, onglet resté ouvert). Null si aucune session.
+ */
+export async function ensureFreshToken(): Promise<string | null> {
+  const token = getToken();
+  if (!token) return null;
+  if (tokenExpiresSoon(token) && getRefreshToken()) return (await refreshSession()) ?? getToken();
+  return token;
 }
 
 /** Déconnexion : révocation serveur puis effacement local. */
@@ -126,7 +177,11 @@ interface RequestOptions {
 
 export async function api<T = unknown>(path: string, opts: RequestOptions = {}): Promise<T> {
   const explicitToken = opts.token !== undefined;
-  const token = explicitToken ? opts.token : getToken();
+  let token = explicitToken ? opts.token : getToken();
+  // Jeton de session expiré ou presque : renouvelé avant l'appel plutôt que d'attendre un 401
+  if (!explicitToken && typeof window !== "undefined" && token && !opts._retried && tokenExpiresSoon(token) && getRefreshToken()) {
+    token = (await refreshSession()) ?? getToken();
+  }
   const headers: Record<string, string> = {};
   if (opts.body !== undefined) headers["Content-Type"] = "application/json";
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -151,8 +206,9 @@ export async function api<T = unknown>(path: string, opts: RequestOptions = {}):
     throw new ApiError(0, "Impossible de joindre le serveur. Vérifiez votre connexion.");
   }
 
-  // Access token expiré : rotation puis rejeu (une seule fois, hors appels anonymes explicites)
-  if (res.status === 401 && !explicitToken && !opts._retried && typeof window !== "undefined" && getRefreshToken()) {
+  // Access token expiré : rotation puis rejeu (une seule fois). Un jeton passé explicitement n'est rejoué
+  // que s'il est celui de la session (les appels anonymes `token: null` restent anonymes).
+  if (res.status === 401 && (!explicitToken || (token && token === getToken())) && !opts._retried && typeof window !== "undefined" && getRefreshToken()) {
     const fresh = await refreshSession();
     if (fresh) return api<T>(path, { ...opts, _retried: true });
   }

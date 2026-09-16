@@ -42,7 +42,7 @@ export default defineConfig({
       // Joué EN PREMIER : la recherche s'appuie sur le seed intact (l'achat et l'admin du projet
       // desktop modifient des annonces). 375 px : la largeur qui a révélé les régressions du polish.
       use: { ...devices['Pixel 5'], viewport: { width: 375, height: 812 } },
-      testMatch: /(01-recherche|02-inscription|11-marges-mobile|14-filtres-decouverte|15-experience|16-profils)\.spec\.ts/,
+      testMatch: /(01-recherche|02-inscription|11-marges-mobile|14-filtres-decouverte|15-experience|16-profils|19-session)\.spec\.ts/,
     },
     {
       name: 'desktop',

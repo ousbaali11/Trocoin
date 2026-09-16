@@ -51,7 +51,8 @@ automatiquement) ou Fly.io. Les étapes ci-dessous restent les mêmes, seule l'i
    | `DB_POOL_MAX` | `5` |
    | `JWT_SECRET` | résultat de `node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"` — **généré pour la prod, différent du dev, jamais commité** |
    | `JWT_EXPIRES_IN` | `15m` |
-   | `REFRESH_TOKEN_TTL_DAYS` | `30` |
+   | `REFRESH_TOKEN_TTL_DAYS` | `30` (durée pendant laquelle un utilisateur reste connecté sans revenir ; chaque visite la prolonge) |
+   | `REFRESH_REUSE_GRACE_MS` | `30000` (facultatif : tolérance de réutilisation d'un jeton tout juste tourné, onglets concurrents) |
    | `CORS_ORIGINS` | `https://<votre-projet>.vercel.app` (puis vos vrais domaines, séparés par des virgules) |
    | `SMS_PROVIDER` | `vonage` ou `twilio` + les clés correspondantes (§5) |
    | `PAYMENT_PROVIDER` | `stripe` + `STRIPE_SECRET_KEY` (`sk_test_…` pour le mode test, `sk_live_…` ensuite) + `STRIPE_WEBHOOK_SECRET` (§5c) ; ou `disabled` (endpoints en 503) |

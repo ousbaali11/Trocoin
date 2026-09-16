@@ -40,7 +40,7 @@ cd frontend && npm install && cp .env.example .env.local && npm run dev -- -p 30
 ```bash
 npm test                 # 135 tests e2e (API, supertest)
 npm run e2e:build        # construit l'API (dist/) et le front (next build) pour les tests navigateur
-npm run e2e              # 102 scénarios Playwright dans Chromium (desktop 1280 px + mobile 375 px) : parcours, accessibilité (axe) site + back-office, clavier, SEO
+npm run e2e              # 108 scénarios Playwright dans Chromium (desktop 1280 px + mobile 375 px) : parcours, accessibilité (axe) site + back-office, clavier, SEO
 node scripts/charge.js --api https://api.trocoin.fr --front https://www.trocoin.fr --vus 10 --minutes 3   # test de charge léger (lectures publiques)
 SOURCE_DATABASE_URL=… TARGET_DATABASE_URL=… node scripts/migrer-base.js   # copie intégrale d'une base Postgres vers une autre, preuve par comptages + empreintes (DEPLOIEMENT.md §6b) (Jest + supertest, SQLite en mémoire)
 # Les mêmes tests sur PostgreSQL (schéma créé par les migrations) :
@@ -59,7 +59,7 @@ manuel : Playwright démarre et arrête les deux serveurs (`e2e/start-api.js`, `
 ```bash
 npx playwright install chromium   # une fois
 npm run e2e:build                 # API + front (≈ 2 min)
-npm run e2e                       # 102 scénarios (≈ 4 min 30)
+npm run e2e                       # 108 scénarios (≈ 4 min 30)
 npx playwright show-report        # rapport HTML, traces et captures des échecs
 npm run e2e:ui                    # mode interactif pas à pas
 ```
@@ -88,6 +88,7 @@ la construction ET l'exécution (l'URL de l'API est figée dans le build du fron
 | `e2e/16-profils.spec.ts` | profils vendeur et boutique en sections repliables : annonces ouvertes, avis et informations de la boutique repliés, clavier (Entrée / Espace, aria-expanded), état mémorisé après rechargement, axe sans violation, compte pro créé pour le scénario | desktop + mobile |
 | `e2e/17-expedition.spec.ts` | étiquette d'envoi : adresse de livraison exigée au paiement, panneau vendeur (colis prérempli, tarif, point relais, achat de l'étiquette, PDF téléchargé, numéro repris), confirmation d'expédition, suivi côté acheteur ; refus du transporteur affiché sans bloquer la vente, saisie manuelle | desktop |
 | `e2e/18-fiche.spec.ts` | fiche annonce complète (bureau) : fil d'Ariane à six niveaux (région, département, ville) et `BreadcrumbList`, galerie (favoris, partage, « Voir les photos » plein écran), repères de catégorie sous le titre, position du prix par rapport au marché, « Publiée aujourd'hui », « Les + de cette annonce », informations clés en grille dépliable, équipements, description « Voir plus », carte zoom 13 avec cercle visible, « Signaler l'annonce » en bas, carrousel « Ces annonces peuvent vous intéresser » ; badge « Déjà vu » (visiteur puis membre) ; « Suivre » le vendeur (alerte dans Mes recherches) |
+| `e2e/19-session.spec.ts` | rester connecté (bureau et mobile) : fermeture du navigateur puis retour avec un jeton d'accès expiré → toujours connecté, session renouvelée en silence, ancien jeton toléré 30 s sans casser la session ; « Se déconnecter » efface les deux jetons et le serveur refuse l'ancien ; double authentification demandée à la connexion par mot de passe seulement, pas au retour |
 
 Les pages d'inscription et de recherche vérifient en plus l'absence de défilement horizontal
 (`expectNoHorizontalOverflow`) : c'est la régression trouvée lors du tour de polish. Les données
@@ -189,8 +190,21 @@ et `NOTIFICATION_PROVIDER=none` (in-app uniquement).
 Jeton d'accès JWT court (`JWT_EXPIRES_IN`, 15 min) + **refresh token** opaque stocké haché
 en base (`refresh_tokens`), tourné à chaque `POST /auth/refresh`, révoqué à la déconnexion
 (`POST /auth/logout`), à la suspension par un admin et à la suppression du compte. La
-réutilisation d'un refresh token déjà consommé révoque toute la famille de sessions.
+réutilisation d'un refresh token déjà consommé révoque toute la famille de sessions, sauf dans
+les 30 s qui suivent sa rotation (`REFRESH_REUSE_GRACE_MS` : deux onglets ou une requête rejouée
+ne sont pas un vol ; le second appel est simplement refusé).
 `GET /auth/sessions` liste les sessions actives, `DELETE /auth/sessions` les ferme toutes.
+
+**Rester connecté** (depuis le 16 septembre 2026, AUDIT §34) : la session vit dans le stockage
+local du navigateur (`trocoin_token`, `trocoin_refresh`), donc elle survit à la fermeture du
+navigateur ou de l'application. Au retour, le front renouvelle d'abord le jeton d'accès s'il a
+expiré (`ensureFreshToken` dans `frontend/src/lib/api.ts`, appelé au chargement du compte et avant
+tout appel dont le jeton expire dans la minute), puis charge le compte ; la session locale n'est
+effacée que sur un refus définitif du serveur (jeton révoqué ou plus de `REFRESH_TOKEN_TTL_DAYS`
+jours sans visite), jamais sur une panne réseau. Les onglets se synchronisent (verrou Web Locks
+pour la rotation, évènement `storage` pour la déconnexion). Seul « Se déconnecter » efface les
+deux jetons et révoque la famille côté serveur. La double authentification n'est demandée qu'à la
+connexion par mot de passe.
 
 ### Production
 

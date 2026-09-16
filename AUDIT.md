@@ -1768,3 +1768,61 @@ fiche affiche le prix une seule fois, sous le titre (aucune incrustation ailleur
   d'Ariane et gardé dans l'adresse ; son libellé apparaît dans le sous-titre des résultats.
 
 Déploiement : CI verte sur les deux commits, API Render en **1.15.0** (`/health`), front Vercel servant les nouveaux styles (`card-carousel` dans la feuille de style de `/recherche`) et le libellé de région sur `/recherche?region=ile-de-france`, vérifiés le 16 septembre 2026.
+
+## 34. Rester connecté après la fermeture du navigateur — 16 septembre 2026
+
+### Cause constatée
+
+La session était bien en stockage local (jeton d'accès JWT de 15 min + jeton de renouvellement de
+30 jours, tourné à chaque usage), mais **le chargement du compte au retour ne renouvelait jamais le
+jeton d'accès** : `loadUser` (`frontend/src/lib/auth-context.tsx`) appelait `/users/me` en passant le
+jeton explicitement, et le client HTTP ne tentait la rotation que pour les appels *sans* jeton
+explicite. Résultat : après 15 minutes d'absence, `/users/me` répondait 401, le front effaçait la
+session et l'utilisateur se retrouvait déconnecté, sur mobile comme sur PC — alors que son jeton de
+renouvellement était encore valable 30 jours. Deux causes secondaires : une panne réseau pendant la
+rotation effaçait aussi la session ; et deux onglets renouvelant en même temps faisaient passer le
+second pour un vol de jeton (famille révoquée, déconnexion forcée).
+
+### Mécanisme retenu (architecture inchangée : localStorage, pas de cookie)
+
+- **Jeton d'accès court (15 min) + jeton de renouvellement long (30 jours glissants)**, comme avant,
+  mais réellement utilisés : `ensureFreshToken()` (`frontend/src/lib/api.ts`) renouvelle d'abord le jeton
+  d'accès s'il a expiré ou expire dans la minute (marge plafonnée au quart de sa durée de vie), au
+  chargement du compte et avant tout appel ; un 401 déclenche encore une rotation puis un rejeu.
+- **La session locale n'est effacée que sur un refus définitif du serveur** (401/403/400 : jeton
+  révoqué, inconnu ou plus de 30 jours sans visite) ; jamais sur une panne réseau ou une erreur 5xx.
+- **Onglets** : rotation sérialisée par un verrou navigateur (Web Locks) avec relecture du stockage
+  (si un autre onglet vient de renouveler, on réutilise son jeton) ; évènement `storage` pour
+  répercuter une déconnexion faite ailleurs. Côté API, un jeton tourné depuis moins de 30 s
+  (`REFRESH_REUSE_GRACE_MS`) qui est représenté est refusé **sans** révoquer la session ; au-delà,
+  la réutilisation reste traitée comme un vol (famille révoquée).
+- **« Se déconnecter »** efface les deux jetons localement et révoque la famille côté serveur
+  (`POST /auth/logout`) ; l'ancien jeton de renouvellement est ensuite refusé (401). Le jeton d'accès
+  déjà émis expire de lui-même sous 15 min (sans état côté serveur, comme avant).
+- **Double authentification** : demandée uniquement à la connexion par mot de passe (jeton
+  intermédiaire de 5 min) ; le renouvellement n'y touche pas.
+
+Cookie httpOnly : non retenu. Il serait un peu plus sûr contre un script injecté (XSS) et échapperait
+à la limite de 7 jours que Safari applique au stockage local des sites sans interaction, mais il
+impose CORS avec identifiants, une protection CSRF et une gestion de domaine entre `www.trocoin.fr`
+et `api.trocoin.fr`. À reconsidérer si Safari iOS pose problème en pratique (la limite ne joue que
+si l'utilisateur n'ouvre pas le site pendant 7 jours de navigation).
+
+### Vérification
+
+| Contrôle | Résultat |
+|---|---|
+| `npm test` (phase 3 étendue) | 135 réussis, 1 ignoré ; nouveau cas : réutilisation dans les 30 s → 401 « Jeton déjà renouvelé » sans révocation, réutilisation tardive → famille révoquée |
+| `npx playwright test` (bureau + mobile, pile locale reconstruite) | 108 scénarios : 97 réussis, 11 ignorés, 0 échec |
+| Nouveau `e2e/19-session.spec.ts` (bureau **et mobile**) | fermeture du navigateur puis retour avec un jeton d'accès expiré → toujours connecté, jeton tourné, ancien jeton toléré ; « Se déconnecter » → stockage vide, retour redemande la connexion, `/auth/refresh` avec l'ancien jeton → 401 ; 2FA : code à la connexion seulement |
+| Preuve avec **vrai délai** (`preuve-session-5s.log`) : API locale démarrée avec `JWT_EXPIRES_IN=5s`, bureau puis mobile (Pixel 5) | connexion par le formulaire, **navigateur fermé, attente 8 s**, jeton seul refusé par l'API (401), réouverture avec le seul stockage local → `/compte` chargé, jeton tourné ; second retour après 7 s → toujours connecté ; « Se déconnecter » → stockage vide ; réouverture avec les anciens jetons → `/connexion`, `/auth/refresh` → 401 |
+| Scénarios 19 et 03 rejoués contre cette API à jeton de 5 s | 8 réussis, 1 ignoré (aucune boucle de renouvellement) |
+| Captures | `bureau-1-retour-connecte.png`, `mobile-1-retour-connecte.png`, `*-2-deconnecte.png`, `*-3-connexion-redemandee.png` |
+
+### Limites connues
+
+- Après « Se déconnecter », un jeton d'accès copié ailleurs reste valable jusqu'à 15 min (JWT sans
+  état) ; le jeton de renouvellement, lui, est refusé immédiatement.
+- Un utilisateur qui ne revient pas pendant 30 jours doit se reconnecter (`REFRESH_TOKEN_TTL_DAYS`,
+  à augmenter dans Render si l'on veut plus long).
+- Safari : stockage local purgé après 7 jours de navigation sans visite du site (limite du navigateur).

@@ -1,5 +1,9 @@
 import { INestApplication } from '@nestjs/common';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { createHash } from 'crypto';
 import request from 'supertest';
+import { Repository } from 'typeorm';
+import { RefreshToken } from '../src/auth/refresh-token.entity';
 import { SmsService } from '../src/sms/sms.service';
 import { createApp, login, nextPhone } from './utils';
 
@@ -33,10 +37,19 @@ describe('Phase 3 : sessions (refresh tokens rotatifs, révocation), robustesse 
     expect(r1.body.refreshToken).not.toBe(login1.body.refreshToken);
     await request(server).get('/users/me').set('Authorization', `Bearer ${r1.body.accessToken}`).expect(200);
 
-    // Réutilisation de l'ancien jeton = vol présumé : refusé ET la famille entière est révoquée
-    const reuse = await request(server).post('/auth/refresh').send({ refreshToken: login1.body.refreshToken });
+    // Réutilisation dans les 30 s (deux onglets, requête rejouée) : refusée, mais la session n'est PAS révoquée
+    const reuseSoon = await request(server).post('/auth/refresh').send({ refreshToken: login1.body.refreshToken });
+    expect(reuseSoon.status).toBe(401);
+    expect(reuseSoon.body.message).toBe('Jeton déjà renouvelé.');
+    const r2 = await request(server).post('/auth/refresh').send({ refreshToken: r1.body.refreshToken }).expect(200);
+
+    // Réutilisation tardive de l'ancien jeton = vol présumé : refusée ET la famille entière est révoquée
+    const repo = app.get<Repository<RefreshToken>>(getRepositoryToken(RefreshToken));
+    await repo.update({ tokenHash: createHash('sha256').update(r1.body.refreshToken).digest('hex') }, { revokedAt: new Date(Date.now() - 2 * 60_000) });
+    const reuse = await request(server).post('/auth/refresh').send({ refreshToken: r1.body.refreshToken });
     expect(reuse.status).toBe(401);
-    const afterReuse = await request(server).post('/auth/refresh').send({ refreshToken: r1.body.refreshToken });
+    expect(reuse.body.message).toMatch(/mesure de sécurité/);
+    const afterReuse = await request(server).post('/auth/refresh').send({ refreshToken: r2.body.refreshToken });
     expect(afterReuse.status).toBe(401);
 
     await request(server).post('/auth/refresh').send({ refreshToken: 'x'.repeat(40) }).expect(401);
