@@ -2390,3 +2390,63 @@ Mesures sur la pile locale, carte d'annonce voisine contre carte d'invitation : 
 0 élément souligné au survol. Captures dans le dossier de preuves.
 
 Déploiement : CI verte, API en **1.23.2**, front Vercel à jour ; mesures sur www.trocoin.fr : bureau 151 × 277 px pour la carte d'annonce et pour la carte d'invitation, mobile 167 × 303 px pour les deux (captures).
+
+## 46. Annonces de démonstration réalistes (site qui semble actif au lancement) — 16 septembre 2026
+
+Demande : 8 à 12 comptes vendeurs réels (noms français, européens et d'origine arabe), 4 à 8 annonces par
+catégorie principale, 2 à 5 photos libres de droits par annonce, remise en main propre uniquement, numéro
+toujours masqué, messagerie normale, indicateur interne « compte de démonstration » visible seulement côté
+admin, identifiants transmis hors dépôt.
+
+### Livré côté code (1.24.0, tests 173)
+
+- `users.isDemoAccount` (migration `1789520000000-ComptesDemo`) : réglable uniquement par un admin
+  (`PATCH /admin/users/:id`, tracé `user.update` au journal), case « Compte de démonstration » et pastille
+  « Démo » sur la fiche et dans la liste admin ; jamais renvoyé par une route publique (annonce, profil).
+  Effets : `phoneAvailable: false` et `POST /listings/:id/phone` → 404 même si le membre affiche son
+  numéro ; devis `eligible: false` et `POST /transactions` → 400 ; messagerie inchangée.
+- `users.securePaymentDisabled` : préférence du vendeur (case « Proposer le paiement sécurisé sur mes
+  annonces » dans Paramètres, `PATCH /users/me`). Décochée : devis non éligible avec le motif « Ce vendeur
+  ne propose pas le paiement sécurisé : réglez en main propre, à la remise. », achat refusé (400), et la
+  fiche annonce affiche ce motif à la place du bouton d'achat. Cette préférence permet aux comptes de
+  démonstration de se protéger eux-mêmes dès l'ensemencement, sans identifiants admin.
+- `test/phase28.e2e-spec.ts` (2 tests) : les deux mécanismes, l'absence de fuite de l'indicateur, la
+  messagerie dans les deux sens et la trace au journal.
+
+### Ensemencement de la production
+
+- Outils hors dépôt (`private/`, ignoré par git) : `seed-demo.js` (inscription ou reconnexion des comptes,
+  `phonePublic: false` + `securePaymentDisabled: true`, création des annonces avec `deliveryAvailable: false`
+  et attributs validés contre le schéma de chaque sous-catégorie, envoi des photos, reprise sur `429` et
+  état dans `demo-state-*.json`), `collect-photos.js` (candidats Openverse CC0/domaine public et Wikimedia
+  Commons CC0 via données structurées P275 = Q6938433, planches-contact `demo-montage-*.jpg` revues une par
+  une, sélection manuelle `demo-selection.json`), `verify-prod.js` (contrôle après coup).
+- Photos : 152, toutes CC0 ou domaine public (Wikimedia Commons 110, Flickr via Openverse 28, autres
+  Openverse 14), source, auteur, licence et page d'origine consignés dans
+  `private/demo-photos-https___api_trocoin_fr.json`. Aucune image copiée d'un site de petites annonces. Deux
+  annonces prévues (poussette, siège auto) n'avaient aucune photo libre convenable : la première est retirée,
+  la seconde remplacée par un lot de peluches ; la bétonnière est devenue un compresseur pour la même raison.
+- Numéros : plage ARCEP réservée à la fiction 06 39 98 00 01 → 06 39 98 00 10 (jamais attribuée) ; ils sont
+  de toute façon masqués. E-mails `ousbaali11+demo-<prénom>@gmail.com` (comptes non confirmés : usage
+  normal, simple rappel dans l'espace compte). Mots de passe aléatoires, dans
+  `private/demo-accounts-https___api_trocoin_fr.md` transmis au propriétaire, jamais commité.
+- Résultat (`verify-prod.js`, `private/demo-verification-*.json`) : 10 comptes, **59 annonces en ligne**
+  (immobilier 5, véhicules 5, matériel pro 5, emploi 5, mode 5, maison-jardin 5, famille 4, multimédia 5,
+  loisirs 5, vacances 5, services 5, animaux 5), 59/59 avec au moins 2 photos (2 ou 3 chacune),
+  `phoneAvailable: false` sur 59/59, aucune occurrence de `isDemoAccount`, `securePaymentDisabled` ni d'un
+  numéro dans les JSON publics (annonces et profils). Sonde avec un compte connecté sur l'annonce
+  « Appartement T3 … Lyon 3e » : devis `eligible: false` avec le motif, `POST /listings/:id/phone` → 404,
+  `POST /transactions` → 400, conversation créée (201) et réponse du vendeur de démonstration (201).
+- Fiche annonce en production (captures bureau et mobile, 4 annonces) : aucun bouton « Voir le numéro »,
+  encart « Ce vendeur ne propose pas le paiement sécurisé : réglez en main propre, à la remise » à la place
+  de l'achat ; la seule mention restante du paiement sécurisé est le conseil générique de la boîte
+  « Conseils de sécurité » et du pied de page. Accueil : « 60 annonces en ligne ».
+
+### Reste à faire par le propriétaire
+
+- Cocher « Compte de démonstration » sur les 10 fiches admin (liens dans le fichier d'identifiants) : les
+  annonces sont déjà protégées par la préférence vendeur, l'indicateur sert surtout à les retrouver et à les
+  supprimer plus tard.
+- Confirmer (ou non) les 10 adresses e-mail depuis les liens reçus sur la boîte Gmail.
+
+Déploiement : CI verte, API en **1.24.0**, front Vercel à jour (case dans Paramètres et fiche admin livrées).
