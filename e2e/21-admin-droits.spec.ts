@@ -10,6 +10,29 @@ const seed = readSeed();
 type Login = { accessToken: string; user: { id: string } };
 const PASSWORD = 'MotDePasse!E2E-42';
 
+test('colonne de navigation : le bas (Retour au site, compte, Se déconnecter) reste atteignable en la faisant défiler, fenêtre de 900, 700 et 600 px de haut, page courte et page longue (AUDIT §50)', async ({ page, isMobile }) => {
+  test.skip(!!isMobile, 'bureau : sur mobile la colonne devient un bandeau horizontal');
+  await loginAs(page, seed.admin, '/admin');
+  for (const path of ['/admin', '/admin/journal']) {
+    for (const height of [900, 700, 600]) {
+      await page.setViewportSize({ width: 1280, height });
+      await page.goto(path);
+      const aside = page.getByRole('complementary', { name: 'Navigation de la console' });
+      await expect(aside).toBeVisible();
+      const logoutBtn = aside.getByRole('button', { name: 'Se déconnecter' });
+      // La colonne défile elle-même : molette dessus, puis le bouton est entièrement dans la fenêtre
+      await aside.hover({ position: { x: 100, y: 100 } });
+      await page.mouse.wheel(0, 4000);
+      await logoutBtn.scrollIntoViewIfNeeded();
+      const box = (await logoutBtn.boundingBox())!;
+      expect(box.y, `haut du bouton à ${height}px sur ${path}`).toBeGreaterThanOrEqual(0);
+      expect(box.y + box.height, `bas du bouton à ${height}px sur ${path}`).toBeLessThanOrEqual(height);
+      await expect(aside.getByRole('link', { name: '← Retour au site public' })).toBeInViewport();
+      expect(await aside.evaluate((el) => getComputedStyle(el).overflowY)).toBe('auto');
+    }
+  }
+});
+
 test('navigation regroupée par domaine, compteurs et retour au site', async ({ page }) => {
   await loginAs(page, seed.admin, '/admin');
   const nav = page.getByRole('complementary', { name: 'Navigation de la console' });

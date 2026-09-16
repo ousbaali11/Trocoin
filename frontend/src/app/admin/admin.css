@@ -40,6 +40,10 @@
 .admin > .admin-body {
   min-width: 0;
 }
+/* Colonne collante de la hauteur de la fenêtre. Elle défile elle-même (AUDIT §50) : sans `overflow-y: auto`,
+   un menu plus haut que la fenêtre débordait sous la boîte de 100vh et, la colonne restant collée, le bas
+   (Retour au site, compte, Se déconnecter) n'était atteignable que si la page elle-même était assez longue
+   pour être défilée jusqu'au bout — d'où un blocage selon la hauteur de fenêtre, le zoom et la page. */
 .admin-side {
   background: var(--a-bg);
   color: #cbd5e1;
@@ -47,9 +51,17 @@
   position: sticky;
   top: 0;
   height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #475569 transparent;
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+.admin-side > * {
+  flex-shrink: 0;
 }
 .admin-brand {
   color: #fff;
