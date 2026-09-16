@@ -1680,3 +1680,16 @@ seul bord gauche (16 px) pour tous les liens. Captures avant / après bureau (de
   marche à suivre : `docs/etiquettes-transporteur.md` §8.
 - Captures (pile locale, fournisseur simulé) : adresse au paiement, panneau vendeur avec tarif et
   point relais, étiquette prête avec PDF, suivi côté acheteur.
+
+## 32. Recherche Google sur le nom « Trocoin » — 16 septembre 2026
+
+Ce qui n'est pas activable par le code, consigné dans `docs/seo-checklist.md` pour ne pas être
+redemandé : les liens de site (générés par Google selon la popularité et la structure) et l'encadré
+de connaissance (graphe de connaissances alimenté par des sources externes).
+
+Fait : `SearchAction` du `WebSite` déjà en place (cible `/recherche?q={search_term_string}`) ;
+`Organization` avec logo **PNG 512 × 512** (`/logo.png`, généré à partir de l'icône ; le `.ico` ne
+convenait pas), description, et **sans `sameAs`** (aucun profil public sur un réseau social n'existe,
+rien d'inventé) ; titre de l'accueil « Trocoin — Les petites annonces entre voisins, en France »
+(55 caractères) et description de 149 caractères fidèle au site. CI run 35040280613 verte ;
+production : titre, description, Open Graph, JSON-LD et `/logo.png` (200, image/png) vérifiés.
