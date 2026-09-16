@@ -486,24 +486,77 @@ export class BoxtalShippingProvider implements IShippingProvider {
         };
       });
     }
+    // Codes d'offre v3 : la commande exige un code de contrat activé sur l'application (portail développeur),
+    // sans point d'entrée de recherche. Sonde en lecture seule : `parcel-point-by-shipping-offer` (v3.2) refuse
+    // un code inconnu (ValidationException.ValidShippingOfferCode) et répond 200 pour un code utilisable.
+    const probed: Array<{ code: string; carrier: ShippingCarrier | null; mode: ShippingMode; ok: boolean; statut: string }> = [];
+    if ((out.jeton_v3 as { ok: boolean }).ok) {
+      await step('codes_offre_v3', async () => {
+        const configured = Object.entries(this.offerCodes).filter(([, v]) => v).map(([k, v]) => ({ code: v as string, carrier: k.split(':')[0] as ShippingCarrier, mode: k.split(':')[1] as ShippingMode }));
+        const fromQuote = offers.filter((o) => o.carrier).map((o) => ({ code: o.offerCode, carrier: o.carrier, mode: o.mode }));
+        const seen = new Set<string>();
+        for (const c of [...configured, ...fromQuote]) {
+          for (const code of [c.code, c.code.replace('_', '-')]) {
+            if (seen.has(code)) continue;
+            seen.add(code);
+            const qs = new URLSearchParams({ countryIsoCode: 'FR', operationType: c.mode === 'point_relais' ? 'DELIVERY' : 'DROP_OFF', shippingOfferCode: code, postalCode: '75017', city: 'Paris' });
+            const r = await this.v3<{ errors?: Array<{ code?: string }>; content?: unknown[] }>('GET', `/shipping/v3.2/parcel-point-by-shipping-offer?${qs}`).catch((e) => ({ status: 0, data: undefined, text: String((e as Error).message) }));
+            const errCode = r.data?.errors?.[0]?.code;
+            const ok = r.status >= 200 && r.status < 300;
+            probed.push({ code, carrier: c.carrier, mode: c.mode, ok, statut: ok ? `200 (${Array.isArray(r.data?.content) ? r.data!.content!.length : '?'} point(s))` : `${r.status} ${errCode || r.text.slice(0, 120)}` });
+          }
+        }
+        return probed.map((p) => `${p.code} [${p.mode}] → ${p.statut}`);
+      });
+    }
     if (withLabel) {
-      const candidate = offers.find((o) => o.carrier && o.mode === 'domicile' && o.priceCents) || offers.find((o) => o.carrier && o.priceCents);
       await step('etiquette_v3', async () => {
-        if (!candidate) throw new ShippingProviderError('boxtal', 'etiquette_impossible', 'aucune offre exploitable dans la cotation');
-        const label = await this.createLabel({
-          carrier: candidate.carrier,
-          mode: candidate.mode,
-          offerCode: candidate.offerCode,
-          parcel,
-          sender: { name: 'Camille Vendeur', line1: '12 rue de la République', postalCode: '69003', city: 'Lyon', country: 'FR', phone: '+33612345678', email: 'sandbox-expediteur@trocoin.fr' },
-          recipient: { name: 'Alex Acheteur', line1: '5 avenue des Ternes', postalCode: '75017', city: 'Paris', country: 'FR', phone: '+33687654321', email: 'sandbox-destinataire@trocoin.fr' },
-          reference: `diag-${Date.now()}`,
-          contentDescription: 'Enceinte Bluetooth (test sandbox)',
-          declaredValueCents: 12000,
-        });
-        const suivi = await this.track(candidate.carrier, label.trackingNumber, label.providerRef).catch((e) => ({ erreur: String((e as Error).message) }));
-        const annulation = await this.cancel(label.providerRef).catch(() => false);
-        return { offre: candidate.offerCode, commande: label.providerRef, numeroSuivi: label.trackingNumber, urlSuivi: label.trackingUrl, pdfOctets: label.labelPdf.length, pdfEntete: label.labelPdf.subarray(0, 5).toString(), prixCents: label.priceCents, suivi, annulee: annulation };
+        // Candidats : codes acceptés par la sonde d'abord (domicile avant relais), puis la cotation telle quelle
+        const ranked = [
+          ...probed.filter((p) => p.ok && p.mode === 'domicile'),
+          ...probed.filter((p) => p.ok && p.mode === 'point_relais'),
+          ...offers.filter((o) => o.carrier && o.priceCents && o.mode === 'domicile').map((o) => ({ code: o.offerCode, carrier: o.carrier, mode: o.mode, ok: false, statut: 'non sondé' })),
+        ].filter((c, i, arr) => c.carrier && arr.findIndex((x) => x.code === c.code) === i).slice(0, 4);
+        if (ranked.length === 0) throw new ShippingProviderError('boxtal', 'etiquette_impossible', "aucun code d'offre utilisable (activez des contrats sur l'application sandbox et renseignez BOXTAL_OFFER_*)");
+        const relay = ranked.some((c) => c.mode === 'point_relais') ? await this.searchRelayPoints('mondial_relay', '75017', 'Paris').catch(() => []) : [];
+        const essais: Array<{ offre: string; erreur: string }> = [];
+        for (const candidate of ranked) {
+          try {
+            const label = await this.createLabel({
+              carrier: candidate.carrier!,
+              mode: candidate.mode,
+              offerCode: candidate.code,
+              relayPointId: candidate.mode === 'point_relais' ? relay[0]?.id : undefined,
+              parcel,
+              sender: { name: 'Camille Vendeur', line1: '12 rue de la République', postalCode: '69003', city: 'Lyon', country: 'FR', phone: '+33612345678', email: 'sandbox-expediteur@trocoin.fr' },
+              recipient: { name: 'Alex Acheteur', line1: '5 avenue des Ternes', postalCode: '75017', city: 'Paris', country: 'FR', phone: '+33687654321', email: 'sandbox-destinataire@trocoin.fr' },
+              reference: `diag-${Date.now()}`,
+              contentDescription: 'Enceinte Bluetooth (test sandbox)',
+              declaredValueCents: 12000,
+            });
+            const suivi = await this.track(candidate.carrier!, label.trackingNumber, label.providerRef).catch((e) => ({ erreur: String((e as Error).message) }));
+            const annulation = await this.cancel(label.providerRef).catch(() => false);
+            return {
+              offre: candidate.code,
+              mode: candidate.mode,
+              pointRelais: candidate.mode === 'point_relais' ? relay[0] : undefined,
+              essaisPrecedents: essais,
+              commande: label.providerRef,
+              numeroSuivi: label.trackingNumber,
+              urlSuivi: label.trackingUrl,
+              prixCents: label.priceCents,
+              pdfOctets: label.labelPdf.length,
+              pdfEntete: label.labelPdf.subarray(0, 5).toString(),
+              // Étiquette de test (adresses fictives, sandbox) : preuve téléchargeable
+              pdfBase64: label.labelPdf.toString('base64'),
+              suivi,
+              annulee: annulation,
+            };
+          } catch (err) {
+            essais.push({ offre: candidate.code, erreur: err instanceof ShippingProviderError ? `${err.code} : ${err.reason}` : String((err as Error).message) });
+          }
+        }
+        throw new ShippingProviderError('boxtal', 'etiquette_impossible', essais.map((e) => `${e.offre} → ${e.erreur}`).join(' | '));
       });
     }
     return out;
