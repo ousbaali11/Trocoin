@@ -2271,3 +2271,5 @@ deletedTransactions }`.
 | Playwright (console admin, achat) | rejoués sur la pile locale ; suite complète par la CI |
 | Captures | listes Annonces / Comptes avant et après suppression (aucune ligne fantôme), page Traçabilité fonctionnelle avec les entrées de suppression et l'entrée CLI, fiche admin et page vendeur d'une vente payée dont l'acheteur est supprimé (trace comptable anonymisée) |
 | Migration `Retention` | jouée par le job CI Postgres 16 puis Render |
+
+Déploiement : CI verte (le test `phase26` avec l'entrée `cli` passe sur Postgres 16, migration `Retention` jouée puis Render), API en **1.21.0** (`/health` : postgres ok), front Vercel à jour. La page Traçabilité en production se vérifie avec votre compte admin (aucun accès admin depuis cette machine) : la cause est corrigée et reproduite par le test Postgres de la CI. L'annonce orpheline du premier essai PayPal (§40) répond désormais 404 : nettoyage constaté.
