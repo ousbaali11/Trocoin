@@ -2222,3 +2222,7 @@ de la fiche utilisateur et du dialogue mis à jour.
 | `npm test` | 161 réussis, 1 ignoré |
 | Playwright (achat, console admin, accessibilité admin) | rejoués sur la pile locale ; suite complète par la CI |
 | Migration `MoyenDePaiement` | jouée par le job CI Postgres 16 puis Render |
+
+**Test en production (mode test Stripe, 16 septembre 2026, ~15 h 25)** : après le déploiement 1.20.0, la création de la page Checkout fonctionne de nouveau (avant : 503 sur le paramètre d'autorisation prolongée). Page ouverte sans rien payer : moyens proposés **Carte, Klarna, Satispay** — **PayPal absent** : l'activation « place de marché » côté Dashboard Stripe n'est pas encore approuvée. Aucun déploiement ne sera nécessaire quand elle le sera : le bouton apparaîtra de lui-même (aucune restriction dans la session). Comptes et annonce de ce test supprimés (auto-suppression RGPD, 204). **Reste à nettoyer par vous** (console admin) : le premier essai, tombé sur le 503 avant que le script n'ait sauvegardé ses identifiants, a laissé un compte vendeur `7f7b0b44-8bce-4adc-8140-6747a440242a` (« Test V. », e-mail `ousbaali11+trocoin-paypal-vendeur-<6 chiffres>@gmail.com`, le numéro est dans votre boîte Gmail) avec l'annonce `6385ab24-70ca-43e9-a3b4-ebb42b69e910` « Enceinte de test PayPal (ne pas acheter) », et un compte acheteur `…+trocoin-paypal-acheteur-<mêmes chiffres>@gmail.com` sans transaction.
+
+Déploiement : CI verte (migration `MoyenDePaiement` sur Postgres 16 puis Render), API en **1.20.0** (`/health` : postgres ok), front Vercel à jour.
