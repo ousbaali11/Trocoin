@@ -1826,3 +1826,5 @@ si l'utilisateur n'ouvre pas le site pendant 7 jours de navigation).
 - Un utilisateur qui ne revient pas pendant 30 jours doit se reconnecter (`REFRESH_TOKEN_TTL_DAYS`,
   à augmenter dans Render si l'on veut plus long).
 - Safari : stockage local purgé après 7 jours de navigation sans visite du site (limite du navigateur).
+
+Déploiement : CI verte, API Render en **1.15.1** (`/health`), front Vercel servant le nouveau client de session (verrou `trocoin-refresh` présent dans le bundle), vérifiés le 16 septembre 2026.
