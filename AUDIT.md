@@ -2388,3 +2388,5 @@ en ligne en deux minutes. » (12 px), bouton « Déposer » compact. Lien entier
 Mesures sur la pile locale, carte d'annonce voisine contre carte d'invitation : bureau 1280 px —
 151 × 277 px pour les deux ; mobile 375 px — 167 × 303 px pour les deux ; aucun débordement du bouton,
 0 élément souligné au survol. Captures dans le dossier de preuves.
+
+Déploiement : CI verte, API en **1.23.2**, front Vercel à jour ; mesures sur www.trocoin.fr : bureau 151 × 277 px pour la carte d'annonce et pour la carte d'invitation, mobile 167 × 303 px pour les deux (captures).
