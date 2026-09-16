@@ -67,9 +67,10 @@ test('particulier : inscription complète puis doublon d\'e-mail et de télépho
   await expect(page.getByTestId('email-status')).toHaveText('Adresse confirmée');
   await expect(page.getByRole('button', { name: "Renvoyer l'e-mail de confirmation" })).toHaveCount(0);
 
-  // Le lien ne sert qu'une fois
+  // Le lien ne sert qu'une fois : message clair, et comme l'adresse est déjà confirmée, rien à refaire (AUDIT §43)
   await page.goto(linkUrl.pathname + linkUrl.search);
-  await expect(errorAlert(page)).toContainText('invalide ou expiré');
+  await expect(errorAlert(page)).toContainText("Ce lien n'est plus valable");
+  await expect(page.getByTestId('confirm-email-renew')).toContainText('déjà confirmée');
   await logout(page);
 
   // Doublon : même e-mail

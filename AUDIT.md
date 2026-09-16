@@ -2338,3 +2338,23 @@ d'activation** côté Dashboard Stripe (constaté §40, inchangé).
 | Typecheck API et front, lint des pages modifiées | sans erreur |
 
 Déploiement : CI verte (suite Playwright complète, tests API SQLite et Postgres 16, image Docker, Render), API en **1.22.0** (`/health` : postgres ok), front Vercel à jour (accueil : « 1 annonce en ligne » au singulier, bandeau de réassurance et carte « Vendez le vôtre » présents). Aucun compte de test créé en production pour ce tour.
+
+## 43. Lien de confirmation d'e-mail invalide : message clair et renvoi depuis la page — 16 septembre 2026
+
+Constat (§42) : `/confirmer-email` avec un jeton invalide ou expiré affichait le message brut de validation
+(« La valeur de le champ token n'est pas valide ») et renvoyait vers les paramètres.
+
+Livré (`frontend/src/components/auth/ConfirmEmailPanel.tsx`) :
+- message : « **Ce lien n'est plus valable.** Il a expiré (les liens durent 24 heures) ou a déjà été utilisé.
+  Rien n'est perdu : demandez un nouveau lien ci-dessous » ;
+- membre connecté : bouton « Renvoyer l'e-mail de confirmation » **sur la page** (même composant que le
+  bandeau et les paramètres : cooldown de 60 s, 3 envois par heure), avec l'adresse de destination ;
+  adresse déjà confirmée → message de succès et lien vers le compte ;
+- anonyme : bouton « Se connecter pour recevoir un nouveau lien », qui ramène sur `/confirmer-email` où
+  le bouton de renvoi apparaît (titre « Recevoir un nouveau lien ») ;
+- lien incomplet (sans jeton) : même bloc de renvoi.
+
+Vérification : `e2e/22-confirmer-email.spec.ts` (2 scénarios : connecté → message + renvoi confirmé ou
+refus temporaire d'une minute après l'e-mail d'inscription, bouton en attente ; anonyme → message + connexion
+puis retour sur la page avec le bouton) ; captures : anonyme (message + bouton de connexion), connecté
+(message + bouton de renvoi), après renvoi (« E-mail envoyé à … à 17:11 »), lien incomplet après connexion.
