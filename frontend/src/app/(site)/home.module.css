@@ -154,34 +154,9 @@
   align-items: center;
   gap: 6px;
 }
-/* Carte d'invitation dans la grille des dernières annonces quand le site compte peu d'annonces */
-.inviteCard {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 8px;
-  padding: 18px;
-  border: 1px dashed var(--accent);
-  border-radius: var(--radius-lg);
-  background: var(--accent-tint);
-  color: var(--ink);
-  text-decoration: none;
-  min-height: 220px;
-}
-.inviteCard:hover {
-  box-shadow: var(--shadow);
-}
-.inviteCard strong {
-  font-family: var(--font-display);
-  font-size: 1.05rem;
-  line-height: 1.25;
-}
-.inviteCard .btn {
-  align-self: flex-start;
-  margin-top: 4px;
-}
-
-/* Carte d'invitation : c'est un lien entier — jamais de soulignement au survol, bouton qui reste dans la carte */
+/* Carte d'invitation dans la grille des dernières annonces (site jeune, moins de 4 annonces) :
+   mêmes dimensions qu'une carte d'annonce — même colonne, même structure (visuel carré + corps) et
+   hauteur égale à la rangée (étirement de la grille). Lien entier : jamais de soulignement. */
 .inviteCard,
 .inviteCard:hover,
 .inviteCard:focus-visible {
@@ -190,26 +165,72 @@
 .inviteCard * {
   text-decoration: none;
 }
-.inviteCard .eyebrow {
-  margin-bottom: 0;
+.inviteCard {
+  display: flex;
+  flex-direction: column;
+  padding: 5px 5px 0;
+  border: 1px dashed var(--accent);
+  border-radius: var(--radius-lg);
+  background: var(--white);
+  color: var(--ink);
+  height: 100%;
+  box-sizing: border-box;
 }
-.inviteCard .eyebrow::after,
-.inviteCard .eyebrow::before {
-  content: none;
+.inviteCard:hover {
+  box-shadow: var(--shadow);
 }
-.inviteCard .btn {
-  white-space: normal;
+.inviteVisual {
+  aspect-ratio: 1 / 1;
+  border-radius: 12px;
+  background: var(--accent-tint);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   text-align: center;
-  line-height: 1.25;
-  max-width: 100%;
-  align-self: stretch;
+  padding: 10px;
 }
-/* Sur bureau la carte prend deux colonnes de la grille : le bouton et le texte respirent */
-@media (min-width: 641px) {
-  .inviteCard {
-    grid-column: span 2;
-  }
+.invitePlus {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--white);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.inviteVisual .eyebrow {
+  margin: 0;
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+}
+.inviteBody {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 6px 10px;
+  flex: 1;
+}
+.inviteTitle {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--ink);
+}
+.inviteText {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ink-muted);
 }
 .inviteCard .btn {
-  white-space: normal !important;
+  margin-top: auto;
+  align-self: flex-start;
+  white-space: nowrap;
+  padding: 6px 12px;
+  font-size: 0.82rem;
 }

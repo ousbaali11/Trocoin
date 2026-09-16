@@ -2375,3 +2375,16 @@ bureau — carte 316 px, bouton 278 px, aucun débordement, 0 élément soulign�
 bouton 166 px, aucun débordement, 0 élément souligné. Captures avant / après dans le dossier de preuves.
 
 Déploiement : CI verte, API en **1.23.1**, front Vercel à jour ; mesure sur www.trocoin.fr au survol de la carte : largeur 316 px, aucun débordement du bouton, 0 élément souligné (capture).
+
+## 45. Accueil : carte « Vendez le vôtre » aux dimensions exactes d'une carte d'annonce — 16 septembre 2026
+
+Demande : la carte d'invitation doit avoir exactement les dimensions d'une carte d'annonce, sur bureau et
+sur mobile. Livré : même colonne de grille (plus d'étalement sur deux colonnes), même structure qu'une
+carte d'annonce (même cadre 5 px, visuel carré arrondi à la place de la photo, corps de 10 px), hauteur
+égale à la rangée par étirement de la grille ; contenu raccourci pour tenir dans 150 px : visuel « + »
+et « Vendez le vôtre », titre « Déposez une annonce » (15 px, comme un titre de carte), ligne « Gratuit,
+en ligne en deux minutes. » (12 px), bouton « Déposer » compact. Lien entier sans soulignement.
+
+Mesures sur la pile locale, carte d'annonce voisine contre carte d'invitation : bureau 1280 px —
+151 × 277 px pour les deux ; mobile 375 px — 167 × 303 px pour les deux ; aucun débordement du bouton,
+0 élément souligné au survol. Captures dans le dossier de preuves.

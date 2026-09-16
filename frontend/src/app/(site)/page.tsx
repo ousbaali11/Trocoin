@@ -90,11 +90,16 @@ export default async function HomePage() {
           {recent.map((l) => <ListingCard key={l.id} listing={l} />)}
           {ok && recent.length > 0 && recent.length < 4 && (
             // Site jeune : une grille presque vide fait mauvaise impression, l'invitation remplit la rangée (audit §42)
-            <Link href="/deposer" className={styles.inviteCard} data-testid="invite-card">
-              <span className="eyebrow">Vendez le vôtre</span>
-              <strong>Déposez une annonce en deux minutes</strong>
-              <span className="small">Photos, prix, localisation approximative : gratuit, en ligne aussitôt.</span>
-              <span className="btn btn-primary btn-sm">Déposer une annonce</span>
+            <Link href="/deposer" className={styles.inviteCard} data-testid="invite-card" aria-label="Vendez le vôtre : déposer une annonce">
+              <span className={styles.inviteVisual} aria-hidden="true">
+                <span className={styles.invitePlus}>+</span>
+                <span className="eyebrow">Vendez le vôtre</span>
+              </span>
+              <span className={styles.inviteBody}>
+                <span className={styles.inviteTitle}>Déposez une annonce</span>
+                <span className={styles.inviteText}>Gratuit, en ligne en deux minutes.</span>
+                <span className="btn btn-primary btn-sm">Déposer</span>
+              </span>
             </Link>
           )}
         </div>
