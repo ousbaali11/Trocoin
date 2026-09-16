@@ -14,7 +14,7 @@
   max-height: calc(100vh - var(--header-h) - 32px);
   overflow: auto;
 }
-.filters .field {
+.filters :global(.field) {
   margin-bottom: 14px;
 }
 .results {
@@ -86,12 +86,16 @@
   background: var(--white);
   border-top: 1px solid var(--line-soft);
 }
-.panelFooter .btn {
-  /* Deux boutons qui se partagent la colonne : ils rétrécissent (marges internes réduites) plutôt que de déborder */
+/* Deux boutons qui se partagent la colonne de 240 px : `.btn` est une classe globale, d'où :global() —
+   sans lui le module hachait le nom et la règle ne s'appliquait jamais (AUDIT §49 : boutons qui débordaient) */
+.panelFooter :global(.btn) {
   flex: 1 1 0;
   min-width: 0;
-  padding-inline: 12px;
+  padding-inline: 8px;
+  font-size: 0.86rem;
   justify-content: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Bandeau livraison : texte, puce retirable et périmètre (autour de la commune / France) */
@@ -156,7 +160,7 @@
   overflow: auto;
   padding: 14px var(--page-padding-x, 16px) 8px;
 }
-.drawerBody .field {
+.drawerBody :global(.field) {
   margin-bottom: 14px;
 }
 .drawer .panelFooter {

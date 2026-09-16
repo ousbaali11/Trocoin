@@ -39,9 +39,10 @@
   min-width: 240px;
   max-width: calc(100% - 32px);
   width: max-content;
-  background: var(--white);
+  /* Coins arrondis et fond vert clair de la palette (--accent-tint) qui s'estompe vers le blanc en bas (AUDIT §49) */
+  background: linear-gradient(180deg, var(--accent-tint) 0%, var(--white) 100%);
   border: 1px solid var(--line);
-  border-radius: 0 0 var(--radius) var(--radius);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   z-index: 45;
 }
@@ -241,7 +242,7 @@
   font-weight: 700;
   line-height: 1;
 }
-.inviteVisual .eyebrow {
+.inviteVisual :global(.eyebrow) {
   margin: 0;
   font-size: 0.7rem;
   letter-spacing: 0.1em;
@@ -264,7 +265,7 @@
   line-height: 16px;
   color: var(--ink-muted);
 }
-.inviteCard .btn {
+.inviteCard :global(.btn) {
   margin-top: auto;
   align-self: flex-start;
   white-space: nowrap;

@@ -167,6 +167,33 @@ test("accueil : grille d'icônes des catégories directement sous l'en-tête, pl
   await expect(page).toHaveURL(/category=vehicules/);
 });
 
+test('panneau « Tous les filtres » : « Tout effacer » et « Rechercher » et tous les champs tiennent dans le cadre, sans défilement horizontal (bureau et volet mobile) (AUDIT §49)', async ({ page, isMobile }) => {
+  await page.goto('/recherche?category=vehicules');
+  if (isMobile) await page.getByRole('button', { name: /^Filtres/ }).click();
+  const panel = isMobile ? page.getByRole('dialog', { name: 'Tous les filtres' }) : page.locator('aside[aria-label="Tous les filtres"]');
+  await expect(panel).toBeVisible();
+  const scroller = isMobile ? panel.locator('[class*="drawerBody"]') : panel;
+  await scroller.evaluate((el) => el.scrollTo(0, el.scrollHeight));
+  const metrics = await panel.evaluate((el) => {
+    const box = el.getBoundingClientRect();
+    const scrollers = [el, ...el.querySelectorAll<HTMLElement>('*')].filter((n) => n.scrollWidth > n.clientWidth + 1 && ['auto', 'scroll'].includes(getComputedStyle(n).overflowX));
+    const outside = [...el.querySelectorAll<HTMLElement>('.btn, .input, .select, input, button')].filter((n) => n.getBoundingClientRect().width > 0 && (n.getBoundingClientRect().right > box.right + 1 || n.getBoundingClientRect().left < box.left - 1)).map((n) => (n.textContent || n.getAttribute('aria-label') || n.tagName).trim().slice(0, 30));
+    return { scrollers: scrollers.length, outside };
+  });
+  expect(metrics.scrollers, 'aucune barre de défilement horizontale').toBe(0);
+  expect(metrics.outside, 'aucun champ ni bouton hors du cadre').toEqual([]);
+  const clear = panel.getByRole('button', { name: 'Tout effacer' });
+  const search = panel.getByRole('button', { name: /^Rechercher/ });
+  const pb = (await panel.boundingBox())!;
+  for (const b of [clear, search]) {
+    const bb = (await b.boundingBox())!;
+    expect(bb.x).toBeGreaterThanOrEqual(pb.x);
+    expect(bb.x + bb.width).toBeLessThanOrEqual(pb.x + pb.width + 0.5);
+    // Texte entier visible (pas tronqué)
+    expect(await b.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+  }
+});
+
 test('grille d\'icônes (bureau) : au survol d\'une tuile, panneau de sous-catégories en colonnes posé sous la tuile, fermé par Échap ; les tuiles restent identiques (AUDIT §48)', async ({ page, isMobile }) => {
   test.skip(isMobile, 'Sur mobile, les catégories sont dans le menu principal (accordéon).');
   await page.goto('/');
@@ -190,6 +217,10 @@ test('grille d\'icônes (bureau) : au survol d\'une tuile, panneau de sous-caté
   expect(panelBox.width).toBeLessThan(500);
   await expect(panel.locator('ul')).toHaveCount(1);
   await expect(panel.getByRole('link', { name: 'Tout Véhicules' })).toHaveAttribute('href', '/recherche?category=vehicules');
+  // Coins arrondis et fond vert clair de la palette (--accent-tint) qui s'estompe vers le blanc en bas (AUDIT §49)
+  const look = await panel.evaluate((el) => { const s = getComputedStyle(el); return { radius: s.borderTopLeftRadius, image: s.backgroundImage }; });
+  expect(look.radius).toBe('16px');
+  expect(look.image).toMatch(/linear-gradient\(.*rgb\(228, 243, 238\).*rgb\(255, 255, 255\)/);
   // La tuile n'a pas bougé ni changé de taille
   const after = (await vehicules.boundingBox())!;
   expect(after).toEqual(before);
