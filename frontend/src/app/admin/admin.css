@@ -348,9 +348,21 @@
   }
   .admin-main {
     padding: 20px 16px 40px;
+    /* Élément de grille : sans min-width 0, un tableau large élargit toute la page (audit §42) */
+    min-width: 0;
   }
   .admin-topbar {
     padding: 6px 16px;
+  }
+  /* Tableaux : défilement horizontal interne sur petit écran, jamais de défilement de la page.
+     position: relative — les libellés .sr-only (position: absolute) des boutons de cellule restent contenus
+     dans le tableau ; sinon, posés à leur position statique (x ≈ 900 px), ils élargissaient toute la page. */
+  .a-table {
+    display: block;
+    position: relative;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
   }
   .a-two {
     grid-template-columns: 1fr;

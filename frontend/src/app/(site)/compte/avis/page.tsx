@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import { formatDate } from "@/lib/format";
 import type { Review } from "@/lib/types";
 import { Rating } from "@/components/ui/Rating";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 export default function AvisPage() {
   const { user } = useAuth();
@@ -32,7 +33,7 @@ export default function AvisPage() {
         </div>
       </div>
       {list.length === 0 ? (
-        <div className="panel"><p className="muted" style={{ margin: 0 }}>Aucun avis pour le moment. Les avis se laissent après une transaction sécurisée terminée, depuis <Link href="/compte/transactions">Achats et ventes</Link>.</p></div>
+        <EmptyState title={tab === "received" ? "Aucun avis reçu" : "Aucun avis donné"} text="Les avis se laissent après une transaction sécurisée terminée, depuis Achats et ventes." action={{ href: "/compte/transactions", label: "Voir mes achats et ventes" }} />
       ) : (
         <div className="stack">
           {list.map((r) => {

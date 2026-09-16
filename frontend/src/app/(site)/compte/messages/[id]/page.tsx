@@ -318,15 +318,15 @@ export default function ConversationPage() {
                 <button key={q} type="button" className="pill" style={{ cursor: "pointer", border: 0, whiteSpace: "normal", textAlign: "left" }} onClick={() => send(q)}>{q}</button>
               ))}
             </div>
-            <form onSubmit={(e) => { e.preventDefault(); send(); }} className="row" style={{ flexWrap: "nowrap" }}>
+            <form onSubmit={(e) => { e.preventDefault(); send(); }} className="row conv-composer" style={{ flexWrap: "nowrap" }}>
               <label className="btn btn-outline btn-sm" title="Envoyer une photo" style={{ flexShrink: 0 }}>
                 <span aria-hidden="true">📷</span><span className="sr-only">Envoyer une photo</span>
                 <input type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(e) => { if (e.target.files?.[0]) sendImage(e.target.files[0]); e.target.value = ""; }} />
               </label>
               {isBuyer && conv.listing?.status === "en_ligne" && (
-                <button type="button" className="btn btn-outline btn-sm" style={{ flexShrink: 0 }} onClick={() => setOfferOpen(true)} title="Proposer un prix">💶 Proposer un prix</button>
+                <button type="button" className="btn btn-outline btn-sm" style={{ flexShrink: 0 }} onClick={() => setOfferOpen(true)} title="Proposer un prix" aria-label="Proposer un prix"><span aria-hidden="true">💶</span><span className="conv-offer-label"> Proposer un prix</span></button>
               )}
-              <input className="input" value={text} onChange={(e) => { setText(e.target.value); signalTyping(e.target.value.length > 0); }} placeholder="Votre message…" maxLength={2000} aria-label="Message" />
+              <input className="input" style={{ flex: 1, minWidth: 0 }} value={text} onChange={(e) => { setText(e.target.value); signalTyping(e.target.value.length > 0); }} placeholder="Votre message…" maxLength={2000} aria-label="Message" />
               <button className="btn btn-primary" type="submit" disabled={!text.trim()}>Envoyer</button>
             </form>
           </>

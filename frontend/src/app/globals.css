@@ -912,3 +912,59 @@ h2 {
 .card-carousel-arrow:hover {
   background: var(--accent-tint);
 }
+
+/* Notifications (audit §42) : étiquette, contenu, date ; sur mobile la date passe sous le contenu
+   au lieu de pousser le texte hors de l'écran */
+.notif-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px 14px;
+  align-items: start;
+}
+@media (max-width: 640px) {
+  .notif-card { grid-template-columns: auto minmax(0, 1fr); }
+  .notif-card time { grid-column: 1 / -1; }
+}
+
+/* Rappel e-mail non confirmée : compact sur mobile (audit §42), le détail reste sur bureau */
+@media (max-width: 640px) {
+  .email-banner {
+    padding: 10px 12px;
+    font-size: 0.9rem;
+    margin-bottom: 12px !important;
+  }
+  .email-banner .email-banner-detail {
+    display: none;
+  }
+}
+
+/* Messagerie : le champ de saisie cède la place, jamais le bouton Envoyer (audit §42) */
+.conv-composer .input {
+  flex: 1 1 0;
+  min-width: 0;
+  width: auto;
+}
+@media (max-width: 480px) {
+  .conv-composer .conv-offer-label {
+    display: none;
+  }
+}
+/* Recherche mobile : filtres rapides sur une ligne défilante plutôt qu'empilés */
+@media (max-width: 640px) {
+  .quick-filters {
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+  .quick-filters::-webkit-scrollbar { display: none; }
+  .quick-filters > * { flex: 0 0 auto; }
+}
+
+/* La ligne défilante des filtres rapides ne doit pas élargir son bloc parent (titre, compteur) */
+:has(> .quick-filters) { min-width: 0; max-width: 100%; }
+.quick-filters { max-width: 100%; }
+@media (max-width: 640px) {
+  .quick-filters::after { content: ""; flex: 0 0 8px; }
+}

@@ -222,7 +222,15 @@ export default function TransactionPage() {
           </div>
         )}
         {tx.status === "litige" && <p className="muted" style={{ margin: 0 }}>Un médiateur Trocoin examine le dossier. Vous serez notifié de la décision. Continuez à échanger avec l&apos;autre partie par messagerie pour trouver un accord.</p>}
-        {["rembourse", "annulee"].includes(tx.status) && <p className="muted" style={{ margin: 0 }}>{buyer ? "Vous avez été remboursé intégralement." : "L'acheteur a été remboursé."}</p>}
+        {["rembourse", "annulee"].includes(tx.status) && (
+          <p className="muted" style={{ margin: 0 }} data-testid="closed-help">
+            {!tx.paidAt
+              ? (buyer ? "Paiement non finalisé : rien n'a été débité. L'annonce reste disponible si vous souhaitez racheter." : "Le paiement n'a pas été finalisé par l'acheteur : rien n'a été encaissé, votre annonce reste en ligne.")
+              : tx.capturedAt || tx.confirmedAt
+                ? (buyer ? "Vous avez été remboursé intégralement (délai bancaire de quelques jours)." : "L'acheteur a été remboursé.")
+                : (buyer ? "L'autorisation bancaire a été libérée : rien n'a été débité." : "L'autorisation de paiement de l'acheteur a été libérée : rien n'a été débité.")}
+          </p>
+        )}
       </section>
 
       <Modal open={disputeOpen} onClose={() => setDisputeOpen(false)} title="Ouvrir un litige">

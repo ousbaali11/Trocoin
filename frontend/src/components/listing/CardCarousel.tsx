@@ -30,7 +30,7 @@ export function CardCarousel({ children, label }: { children: React.ReactNode; l
 
   return (
     <div style={{ position: "relative" }} data-testid="card-carousel">
-      <div ref={ref} className="card-carousel" role="region" aria-label={label}>
+      <div ref={ref} className="card-carousel" role="region" aria-label={label} data-scroll-x>
         {children}
       </div>
       {state.canPrev && <button type="button" className="card-carousel-arrow" style={{ left: -6 }} onClick={() => go(-1)} aria-label="Annonces précédentes">‹</button>}

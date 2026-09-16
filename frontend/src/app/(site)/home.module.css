@@ -137,3 +137,46 @@
   gap: 24px;
   flex-wrap: wrap;
 }
+
+/* Bandeau de réassurance sous la recherche (audit §42 : première impression) */
+.trust {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 24px;
+  font-size: 0.86rem;
+  color: var(--ink-soft);
+}
+.trust li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+/* Carte d'invitation dans la grille des dernières annonces quand le site compte peu d'annonces */
+.inviteCard {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  padding: 18px;
+  border: 1px dashed var(--accent);
+  border-radius: var(--radius-lg);
+  background: var(--accent-tint);
+  color: var(--ink);
+  text-decoration: none;
+  min-height: 220px;
+}
+.inviteCard:hover {
+  box-shadow: var(--shadow);
+}
+.inviteCard strong {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  line-height: 1.25;
+}
+.inviteCard .btn {
+  align-self: flex-start;
+  margin-top: 4px;
+}

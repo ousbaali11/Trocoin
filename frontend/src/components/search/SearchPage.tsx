@@ -440,7 +440,7 @@ export function SearchPage() {
             {!get("city_label") && !get("city") && !get("postal_code") && !get("region") && " · Toute la France"}
             {get("delivery_anywhere") === "true" && hasPlace && " + livraison partout en France"}
           </p>
-          <div className="row" style={{ marginTop: 8, gap: 6, flexWrap: "wrap" }} aria-label="Filtres rapides">
+          <div className="row quick-filters" style={{ marginTop: 8, gap: 6, flexWrap: "wrap" }} aria-label="Filtres rapides" data-full-bleed>
             <button type="button" className={`btn btn-sm ${get("price_type") === "gratuit" ? "btn-primary" : "btn-outline"}`} aria-pressed={get("price_type") === "gratuit"} onClick={() => setParams({ price_type: get("price_type") === "gratuit" ? undefined : "gratuit" })}>🎁 Dons uniquement</button>
             <button type="button" className={`btn btn-sm ${get("price_type") === "echange" ? "btn-primary" : "btn-outline"}`} aria-pressed={get("price_type") === "echange"} onClick={() => setParams({ price_type: get("price_type") === "echange" ? undefined : "echange" })}>🔁 Échanges uniquement</button>
           </div>

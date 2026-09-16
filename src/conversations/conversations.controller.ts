@@ -77,7 +77,10 @@ export class ConversationsController {
   @Delete(':id')
   @HttpCode(200)
   async remove(@Req() req: any, @Param('id', ParseUUIDPipe) id: string) {
-    return { deleted: await this.conversationsService.hideForUser(req.user.userId, [id]) };
+    // Un tiers obtient un refus explicite (audit §42) plutôt qu'un 200 sans effet ; un membre qui l'a déjà masquée obtient 0
+    const deleted = await this.conversationsService.hideForUser(req.user.userId, [id]);
+    if (deleted === 0) await this.conversationsService.assertParticipant(id, req.user.userId);
+    return { deleted };
   }
 
   @Get(':id/messages')

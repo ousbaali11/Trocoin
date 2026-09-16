@@ -42,7 +42,7 @@ export function QuickPreview({ listingId, onClose }: { listingId: string; onClos
       {detail && (
         <div data-testid="quick-preview">
           <div style={{ display: "grid", gridTemplateColumns: "minmax(140px, 200px) 1fr", gap: 16, alignItems: "start" }}>
-            <div style={{ aspectRatio: "1", borderRadius: 12, overflow: "hidden", background: "var(--ivory-warm)" }}>
+            <div style={{ aspectRatio: "1", borderRadius: "var(--radius)", overflow: "hidden", background: "var(--ivory-warm)" }}>
               {cover && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={mediaUrl(cover)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />

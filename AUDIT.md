@@ -2273,3 +2273,66 @@ deletedTransactions }`.
 | Migration `Retention` | jouée par le job CI Postgres 16 puis Render |
 
 Déploiement : CI verte (le test `phase26` avec l'entrée `cli` passe sur Postgres 16, migration `Retention` jouée puis Render), API en **1.21.0** (`/health` : postgres ok), front Vercel à jour. La page Traçabilité en production se vérifie avec votre compte admin (aucun accès admin depuis cette machine) : la cause est corrigée et reproduite par le test Postgres de la CI. L'annonce orpheline du premier essai PayPal (§40) répond désormais 404 : nettoyage constaté.
+
+## 42. Audit complet et exhaustif de tout Trocoin — 16 septembre 2026
+
+Rapport page par page : `docs/audit-final.md` (inventaire des routes depuis le code, statut de chaque page,
+sécurité, design, organisation, attractivité, paiement). Ce paragraphe résume la méthode, les corrections et
+les preuves.
+
+### Méthode
+
+- **Inventaire réel** : 47 routes front (`frontend/src/app/**/page.tsx`) et 142 routes API (décorateurs des
+  contrôleurs, gardes, throttling, DTO — table générée par script).
+- **Crawl automatisé** sur la pile locale (`scratchpad/crawl-site.js`) : chaque page en bureau 1280 px et
+  mobile 375 px, en anonyme, acheteur, vendeur, professionnel et administrateur (données créées par l'API :
+  annonces, conversation, transaction expédiée, signalement, favori). Par chargement : erreurs console et
+  exceptions JS, réponses réseau ≥ 400, défilement horizontal, marges mobiles (≥ 12 px), liens internes morts,
+  unicité du h1, capture d'écran. Trois passages : 134 chargements avant correction (18 constats), puis après
+  chaque série de corrections jusqu'à **zéro constat réel** (seuls restent les 404 / 400 attendus des pages
+  « annonce inconnue », « page inexistante » et « jeton e-mail invalide », qui sont le comportement voulu).
+- **Revue manuelle** des 101 captures sur planches contact (design, organisation), relecture du code
+  (frais, catégories, états des listes, textes), balayage des autorisations par test automatisé.
+
+### Corrections livrées
+
+| Domaine | Constat | Correction |
+|---|---|---|
+| Sécurité | `DELETE /conversations/:id` et `POST /notifications/:id/read` répondaient 200 (sans effet) à un tiers | 404 / 403 explicites ; balayage IDOR `test/phase27.e2e-spec.ts` (transactions, expédition, annonces, messagerie, recherches sauvegardées, notifications, 19 routes admin × membre / anonyme) |
+| Sécurité | « Voir le numéro » sans limite dédiée (collecte de numéros possible à 100 / min) | 30 appels / heure / IP |
+| Bruit d'erreur | `GET /transactions/:id/shipment` en 404 sur toute vente sans étiquette (erreur console sur la page transaction, acheteur et vendeur) | 200 vide ; test phase 18 adapté |
+| Mobile | notifications : la date poussait le texte hors écran ; messagerie : bouton « Envoyer » hors écran ; boutique : champ fichier natif débordant ; tableaux admin (annonces, utilisateurs, journal, réglages, fiche utilisateur) élargissant toute la page | grille étiquette / contenu / date ; champ réductible et libellé d'offre masqué sous 480 px ; bouton « Choisir un fichier » ; tableaux en défilement interne — cause réelle trouvée par mesure : les libellés `.sr-only` (position absolue) des boutons de cellules, posés à leur position statique, élargissaient le document → `position: relative` sur le tableau |
+| Mobile | bandeau « confirmez votre e-mail » répété et encombrant sur chaque page du compte ; filtres rapides de la recherche empilés sur trois lignes | bandeau compact (détail masqué, bouton conservé) ; ligne défilante |
+| Textes | « 1 annonces en ligne » ; « acheteur remboursé » sur un paiement jamais finalisé ou une autorisation simplement libérée | pluriel ; texte de clôture selon le cas réel (non finalisé / autorisation libérée / remboursé) |
+| Accueil | grille « dernières annonces » presque vide sur un site jeune (1 annonce en production) | carte d'invitation « Vendez le vôtre » quand moins de 4 annonces ; bandeau de réassurance sous la recherche |
+| Cohérence | état vide des avis différent des autres listes ; couleur codée en dur (paramètres) ; rayons hors grille (aperçu rapide, carte) ; lieu tronqué à rien à côté de « Livraison » sur les cartes | `EmptyState` commun ; jetons ; largeur minimale du lieu |
+| Admin | filtre « supprimés » sans objet depuis la suppression réelle (§41) | retiré |
+
+### Ce qui a été vérifié sans correction nécessaire
+
+Frais (calcul unique côté API, affichage cohérent partout), catégories (une seule source `GET
+/categories/tree`), listes (squelette + `EmptyState` + tri commun), actions principales / secondaires (un
+seul bouton plein par écran), validation serveur (`ValidationPipe` global + DTO partout), secrets (aucun
+côté client), séquestre plateforme (affiché acheteur / vendeur / admin, §39), erreurs de paiement (Checkout
+Stripe, retour annulé, session expirée, 503 avec code fournisseur), PayPal toujours **en attente
+d'activation** côté Dashboard Stripe (constaté §40, inchangé).
+
+### Reporté (à traiter dans un tour dédié)
+
+1. Accroche de marque au-dessus de la recherche (illustration ou photo, promesse en une phrase) et rangée
+   « annonces près de chez vous » géolocalisée sur l'accueil (attractivité, points 5 du rapport).
+2. Message dédié sur `/confirmer-email` avec un jeton invalide (aujourd'hui message brut de validation).
+3. Mentions légales encore en gabarit ([Raison sociale]…) : à compléter par l'éditeur via le CMS admin.
+4. Inscription professionnelle avec SIRET dans le crawl : refusée une fois sur deux (SIRET déjà utilisé par
+   un compte précédent du crawl) — pas un défaut du site, mais l'espace pro n'a été crawlé qu'au premier
+   passage.
+
+### Vérification
+
+| Contrôle | Résultat |
+|---|---|
+| Crawl final | 122 chargements (sans le rôle pro, voir ci-dessus), 0 constat réel — un faux positif du contrôle automatique sur la fiche annonce (carrousel « annonces similaires », bande défilante sans défilement de page) ; captures dans le dossier de preuves |
+| `test/phase27.e2e-spec.ts` (balayage des autorisations) | 5 tests réussis |
+| `npm test` | 171 réussis, 1 ignoré |
+| Playwright (achat, messagerie, marges mobiles, console admin, accessibilité admin) | rejoués sur la pile locale ; suite complète par la CI |
+| Typecheck API et front, lint des pages modifiées | sans erreur |

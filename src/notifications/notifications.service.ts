@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
@@ -103,7 +103,10 @@ export class NotificationsService {
   }
 
   async markRead(userId: string, id: string) {
-    await this.notificationsRepo.update({ id, userId }, { readAt: new Date() });
+    // Réservée au destinataire : une notification d'un autre membre est « introuvable » (audit §42), pas un succès sans effet
+    const own = await this.notificationsRepo.findOne({ where: { id, userId } });
+    if (!own) throw new NotFoundException('Notification introuvable.');
+    if (!own.readAt) await this.notificationsRepo.update({ id, userId }, { readAt: new Date() });
     return { ok: true };
   }
 }

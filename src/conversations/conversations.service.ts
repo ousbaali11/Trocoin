@@ -131,6 +131,16 @@ export class ConversationsService {
     return this.messagesRepo.count({ where: { conversationId: In(mine.map((c) => c.id)), senderId: Not(userId), readAt: IsNull() } });
   }
 
+  /** Appartenance seule (sans la règle « masquée = inexistante ») : 404 si inconnue, 403 si un tiers. */
+  async assertParticipant(conversationId: string, userId: string): Promise<Conversation> {
+    const conversation = await this.conversationsRepo.findOne({ where: { id: conversationId } });
+    if (!conversation) throw new NotFoundException('Conversation introuvable.');
+    if (conversation.buyerId !== userId && conversation.sellerId !== userId) {
+      throw new ForbiddenException("Vous n'avez pas accès à cette conversation.");
+    }
+    return conversation;
+  }
+
   async assertMember(conversationId: string, userId: string): Promise<Conversation> {
     const conversation = await this.conversationsRepo.findOne({ where: { id: conversationId } });
     if (!conversation) throw new NotFoundException('Conversation introuvable.');

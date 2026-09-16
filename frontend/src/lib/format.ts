@@ -121,7 +121,7 @@ export const TX_STATUS_LABELS: Record<TransactionStatus, { label: string; pill: 
   confirme: { label: "Terminée", pill: "pill pill-green", help: "Réception confirmée, fonds versés au vendeur." },
   litige: { label: "Litige", pill: "pill pill-brick", help: "Un médiateur Trocoin examine le dossier." },
   rembourse: { label: "Remboursée", pill: "pill", help: "L'acheteur a été remboursé." },
-  annulee: { label: "Annulée", pill: "pill", help: "Annulée avant expédition, acheteur remboursé." },
+  annulee: { label: "Annulée", pill: "pill", help: "Annulée avant expédition : aucun montant n'est conservé." },
 };
 
 export const DELIVERY_LABELS = {

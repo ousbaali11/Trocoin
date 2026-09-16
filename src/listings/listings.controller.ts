@@ -159,8 +159,9 @@ export class ListingsController {
     return this.listingsService.recordView(id, req.user?.userId);
   }
 
-  /** « Voir le numéro » : membre connecté seulement ; compte le clic pour le vendeur. */
+  /** « Voir le numéro » : membre connecté seulement ; compte le clic pour le vendeur. Limité (anti-collecte de numéros, audit §42). */
   @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { limit: 30, ttl: 3_600_000 } })
   @Post(':id/phone')
   @HttpCode(200)
   revealPhone(@Req() req: any, @Param('id', ParseUUIDPipe) id: string) {

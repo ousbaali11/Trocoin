@@ -53,6 +53,11 @@ export default async function HomePage() {
             </p>
           </div>
           <HomeSearch total={total} />
+          <ul className={styles.trust} aria-label="Ce que Trocoin garantit">
+            <li><span aria-hidden="true">🔒</span> Paiement sécurisé, fonds conservés jusqu&apos;à la réception</li>
+            <li><span aria-hidden="true">💬</span> Messagerie intégrée, numéro jamais affiché sans votre accord</li>
+            <li><span aria-hidden="true">🛡️</span> Annonces vérifiées, modération humaine</li>
+          </ul>
           <nav className={styles.categories} aria-label="Catégories">
             {tree.map((c) => (
               <Link key={c.slug} href={`/recherche?category=${c.slug}`} className={styles.category}>
@@ -83,6 +88,15 @@ export default async function HomePage() {
         )}
         <div className="grid-cards">
           {recent.map((l) => <ListingCard key={l.id} listing={l} />)}
+          {ok && recent.length > 0 && recent.length < 4 && (
+            // Site jeune : une grille presque vide fait mauvaise impression, l'invitation remplit la rangée (audit §42)
+            <Link href="/deposer" className={styles.inviteCard} data-testid="invite-card">
+              <span className="eyebrow">Vendez le vôtre</span>
+              <strong>Déposez une annonce en deux minutes</strong>
+              <span className="small">Photos, prix, localisation approximative : gratuit, en ligne aussitôt.</span>
+              <span className="btn btn-primary btn-sm">Déposer une annonce</span>
+            </Link>
+          )}
         </div>
       </section>
 

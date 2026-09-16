@@ -37,13 +37,13 @@ export default function NotificationsPage() {
       ) : (
         <div className="stack">
           {items.map((n) => (
-            <Link key={n.id} href={n.link || "#"} className="card" style={{ display: "flex", gap: 14, alignItems: "flex-start", background: n.readAt ? undefined : "var(--ochre-tint)" }}>
-              <span className="pill" style={{ flexShrink: 0 }}>{TYPE_LABEL[n.type]}</span>
-              <span style={{ flex: 1 }}>
+            <Link key={n.id} href={n.link || "#"} className="card notif-card" style={{ background: n.readAt ? undefined : "var(--ochre-tint)" }}>
+              <span className="pill">{TYPE_LABEL[n.type]}</span>
+              <span style={{ minWidth: 0 }}>
                 <strong style={{ display: "block" }}>{n.title}</strong>
-                <span className="small">{n.body}</span>
+                <span className="small" style={{ overflowWrap: "anywhere" }}>{n.body}</span>
               </span>
-              <span className="small muted" style={{ flexShrink: 0 }}>{formatDateTime(n.createdAt)}</span>
+              <time className="small muted" dateTime={n.createdAt}>{formatDateTime(n.createdAt)}</time>
             </Link>
           ))}
         </div>

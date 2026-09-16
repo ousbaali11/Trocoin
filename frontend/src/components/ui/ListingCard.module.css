@@ -213,6 +213,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Le lieu ne se réduit jamais à rien à côté de l'étiquette « Livraison » : l'étiquette passe à la ligne (audit §42) */
+.place {
+  min-width: 5ch;
+}
 /* La date reste entière : c'est le lieu qui se tronque si la carte est étroite */
 .date {
   flex-shrink: 0;

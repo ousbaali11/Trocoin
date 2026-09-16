@@ -96,7 +96,7 @@ export async function expectNoHorizontalOverflow(page: Page) {
     document.querySelectorAll('body *').forEach((el) => {
       const rect = el.getBoundingClientRect();
       const st = getComputedStyle(el);
-      if (rect.width > 0 && rect.right > w + 1 && st.position !== 'fixed' && !el.closest('[style*="overflow-x: auto"], .table-wrap, .leaflet-container, nav[aria-label="Mon compte"], .admin-side, [role="menu"]')) {
+      if (rect.width > 0 && rect.right > w + 1 && st.position !== 'fixed' && !el.closest('[style*="overflow-x: auto"], .table-wrap, .leaflet-container, nav[aria-label="Mon compte"], .admin-side, [data-scroll-x], [data-full-bleed], [role="menu"]')) {
         bad.push(`${el.tagName.toLowerCase()}${el.className && typeof el.className === 'string' ? '.' + el.className.split(' ')[0] : ''} right=${Math.round(rect.right)}`);
       }
     });

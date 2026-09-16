@@ -33,7 +33,7 @@ export function ApproxMapDynamic({ latitude, longitude, height = 320 }: { latitu
     return () => io.disconnect();
   }, []);
   return (
-    <div ref={ref} style={{ minHeight: height, borderRadius: 12, overflow: "hidden" }} data-testid="approx-map">
+    <div ref={ref} style={{ minHeight: height, borderRadius: "var(--radius)", overflow: "hidden" }} data-testid="approx-map">
       {near ? <ApproxMapInner latitude={latitude} longitude={longitude} height={height} /> : <div className="skeleton" style={{ height }} aria-hidden="true" />}
     </div>
   );

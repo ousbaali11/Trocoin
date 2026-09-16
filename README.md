@@ -38,7 +38,7 @@ cd frontend && npm install && cp .env.example .env.local && npm run dev -- -p 30
 ## Tests
 
 ```bash
-npm test                 # 166 tests e2e (API, supertest)
+npm test                 # 171 tests e2e (API, supertest)
 npm run e2e:build        # construit l'API (dist/) et le front (next build) pour les tests navigateur
 npm run e2e              # 113 scénarios Playwright dans Chromium (desktop 1280 px + mobile 375 px) : parcours, accessibilité (axe) site + back-office, clavier, SEO
 node scripts/charge.js --api https://api.trocoin.fr --front https://www.trocoin.fr --vus 10 --minutes 3   # test de charge léger (lectures publiques)
@@ -128,8 +128,8 @@ Suppression **réelle** (AUDIT §41, `src/retention/retention.service.ts`) : une
 gardent une trace comptable (montant, dates, références, titre de l'annonce) sans données personnelles,
 affichée « Compte supprimé » / « Annonce supprimée » ; journal d'audit, signalements, conversations et
 avis rédigés sont conservés.
-Audit page par page : `docs/audit-admin.md` ; intégration PayPal (options, recommandation) :
-`docs/paypal-integration.md`.
+Audit page par page de la console : `docs/audit-admin.md` ; audit final de tout le site (routes, sécurité,
+design, organisation, paiement) : `docs/audit-final.md` ; intégration PayPal : `docs/paypal-integration.md`.
 
 ## Phase 2 (gratuit par défaut)
 

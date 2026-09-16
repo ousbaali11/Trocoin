@@ -107,7 +107,10 @@ export default function BoutiquePage() {
               Colonnes reconnues : <code>reference</code>, <code>titre</code>, <code>description</code>, <code>categorie</code> (slug, ex. <code>voitures</code>), <code>prix</code>, <code>type_prix</code>, <code>etat</code>, <code>ville</code>, <code>code_postal</code>, <code>livraison</code> (oui/non), <code>latitude</code>, <code>longitude</code>, et <code>attr_…</code> pour les critères (ex. <code>attr_marque</code>). Une ligne avec une référence déjà importée met l&apos;annonce à jour. 500 lignes maximum ; les photos s&apos;ajoutent ensuite depuis Mes annonces.
             </p>
             <div className="row">
-              <input type="file" accept=".csv,.xml,.txt,text/csv,text/xml,application/xml" onChange={(e) => setFile(e.target.files?.[0] ?? null)} aria-label="Fichier de catalogue" />
+              <label className="btn btn-outline" style={{ maxWidth: "100%", minWidth: 0 }}>
+                {file ? <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 220, display: "inline-block", verticalAlign: "bottom" }}>{file.name}</span> : "Choisir un fichier"}
+                <input type="file" accept=".csv,.xml,.txt,text/csv,text/xml,application/xml" hidden onChange={(e) => setFile(e.target.files?.[0] ?? null)} aria-label="Fichier de catalogue" />
+              </label>
               {managed.length > 0 && (
                 <select className="select" style={{ maxWidth: 260 }} value={onBehalfOf} onChange={(e) => setOnBehalfOf(e.target.value)} aria-label="Boutique cible">
                   <option value="">Ma boutique</option>

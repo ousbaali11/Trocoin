@@ -347,7 +347,7 @@ export default function ParametresPage() {
         )}
       </section>
 
-      <section className="panel" id="donnees" style={{ borderColor: "#ecc7bb" }}>
+      <section className="panel" id="donnees" style={{ borderColor: "var(--brick-tint)" }}>
         <h2 className="h3">Mes données (RGPD)</h2>
         <p className="small muted">Téléchargez une copie de vos données (profil, annonces, messages, avis, transactions, favoris, préférences) ou supprimez définitivement votre compte. La suppression retire vos annonces, anonymise votre profil et libère votre numéro, votre e-mail et votre nom d&apos;utilisateur. <Link href="/aide/mes-donnees-rgpd">Détails</Link>.</p>
         <div className="row">

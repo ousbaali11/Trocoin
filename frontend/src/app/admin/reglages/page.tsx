@@ -88,7 +88,7 @@ export default function AdminSettingsPage() {
       </div>
 
       <h2 className="h3" style={{ margin: "20px 0 10px" }}>Formules</h2>
-      <div className="a-panel" style={{ padding: 0, overflowX: "auto" }}>
+      <div className="a-panel" style={{ padding: 0, overflowX: "auto" }} data-full-bleed>
         <table className="a-table">
           <thead><tr><th>Nom</th><th>Prix / mois</th><th>Annonces (vide = illimité)</th><th>Mises en avant / mois</th><th>Stats</th><th>Badge</th><th>Vitrine</th><th>Active</th><th>Ordre</th><th><span className="sr-only">Enregistrer</span></th></tr></thead>
           <tbody>

@@ -143,7 +143,8 @@ describe('Étiquettes transporteur (simulation)', () => {
   it('remise en main propre : pas d\'étiquette ; saisie manuelle d\'un numéro : suivi minimal pour l\'acheteur', async () => {
     const hand = await paidSale('main_propre');
     await request(server).post(`/transactions/${hand.txId}/shipment/quote`).set(hand.seller.auth).send({ parcel: { weightGrams: 500 } }).expect(400);
-    await request(server).get(`/transactions/${hand.txId}/shipment`).set(hand.buyer.auth).expect(404);
+    const none = await request(server).get(`/transactions/${hand.txId}/shipment`).set(hand.buyer.auth).expect(200); // pas d'étiquette : réponse vide, pas une erreur (audit §42)
+    expect(none.body).toEqual({});
 
     const manual = await paidSale('colissimo');
     await request(server).post(`/transactions/${manual.txId}/ship`).set(manual.seller.auth).send({ trackingNumber: '6A12345678901' }).expect(201);

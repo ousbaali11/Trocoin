@@ -116,10 +116,11 @@ export class ShippingService {
     }
   }
 
-  async getForViewer(transactionId: string, userId: string): Promise<ShipmentView> {
+  /** Étiquette de la vente pour l'une des parties ; `null` (200) quand il n'y en a pas : une vente sans étiquette n'est pas une erreur (audit §42). */
+  async getForViewer(transactionId: string, userId: string): Promise<ShipmentView | null> {
     const tx = await this.ownedTransaction(transactionId, userId);
     const shipment = await this.shipments.findOne({ where: { transactionId: tx.id } });
-    if (!shipment) throw new NotFoundException('Aucune expédition pour cette vente.');
+    if (!shipment) return null;
     return this.view(shipment);
   }
 

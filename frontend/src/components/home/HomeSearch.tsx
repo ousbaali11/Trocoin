@@ -66,7 +66,7 @@ export function HomeSearch({ total }: { total: number }) {
         </button>
       </form>
       <div className={styles.quick} aria-label="Raccourcis">
-        <span className={styles.quickLabel}>{total > 0 ? `${total.toLocaleString("fr-FR")} annonces en ligne` : "Raccourcis"}</span>
+        <span className={styles.quickLabel}>{total > 0 ? `${total.toLocaleString("fr-FR")} annonce${total > 1 ? "s" : ""} en ligne` : "Raccourcis"}</span>
         <Link href={quick({ price_type: "gratuit" })} className={`${styles.chip} ${styles.chipGift}`}>🎁 Dons uniquement</Link>
         <Link href={quick({ price_type: "echange" })} className={styles.chip}>🔁 Échanges</Link>
         <Link href={quick({ since_days: "1" })} className={styles.chip}>Publiées aujourd&apos;hui</Link>
