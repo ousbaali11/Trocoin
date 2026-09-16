@@ -147,6 +147,14 @@ export class User {
   @Column({ default: false })
   identityVerified: boolean;
 
+  /** Compte de démonstration (contenu de lancement, AUDIT §46) : indicateur interne, visible et modifiable par l'admin seulement. */
+  @Column({ default: false })
+  isDemoAccount: boolean;
+
+  /** Le vendeur ne propose pas le paiement sécurisé sur ses annonces (remise en main propre uniquement) ; réglable par lui-même. */
+  @Column({ default: false })
+  securePaymentDisabled: boolean;
+
   // ----- Préférences de notification (alertes de recherche, messages) -----
   @Column({ default: true })
   notifyPush: boolean;

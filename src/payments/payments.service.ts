@@ -109,6 +109,9 @@ export class PaymentsService {
 
   private async checkEligibility(listing: Listing): Promise<{ ok: boolean; reason?: string }> {
     if (!listing.price || listing.price <= 0) return { ok: false, reason: 'Cette annonce n\'a pas de prix fixe.' };
+    // Préférence du vendeur (remise en main propre seulement) ou compte de démonstration (AUDIT §46) : jamais de paiement en ligne
+    const seller = await this.usersService.findById(listing.userId);
+    if (!seller || seller.securePaymentDisabled || seller.isDemoAccount) return { ok: false, reason: 'Ce vendeur ne propose pas le paiement sécurisé : réglez en main propre, à la remise.' };
     if (listing.price > MAX_SECURE_AMOUNT) return { ok: false, reason: `Le paiement sécurisé est limité à ${MAX_SECURE_AMOUNT} €.` };
     if (listing.rootCategoryId) {
       const rootSlug = await this.rootSlug(listing.rootCategoryId);

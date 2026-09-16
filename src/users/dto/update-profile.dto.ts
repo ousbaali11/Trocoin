@@ -24,6 +24,10 @@ export class UpdateProfileDto {
   @IsOptional() @IsBoolean()
   phonePublic?: boolean;
 
+  /** Ne pas proposer le paiement sécurisé sur mes annonces (remise en main propre seulement). */
+  @IsOptional() @IsBoolean()
+  securePaymentDisabled?: boolean;
+
   @IsOptional() @IsString() @MinLength(2) @MaxLength(50)
   @Matches(/^[^<>{}\[\]\\\/]+$/, { message: 'Le pseudo contient des caractères interdits.' })
   displayName?: string;

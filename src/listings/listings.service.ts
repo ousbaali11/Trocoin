@@ -276,7 +276,8 @@ export class ListingsService {
     const listing = await this.listingsRepo.findOne({ where: { id: listingId } });
     if (!listing || listing.status !== 'en_ligne') throw new NotFoundException('Annonce introuvable.');
     const seller = await this.usersRepo.findOne({ where: { id: listing.userId } });
-    if (!seller || seller.deletedAt || !seller.phonePublic || !isFrenchMobileNumber(seller.phoneNumber)) {
+    // Compte de démonstration (AUDIT §46) : le numéro n'est jamais révélé, quelle que soit la préférence d'affichage
+    if (!seller || seller.deletedAt || seller.isDemoAccount || !seller.phonePublic || !isFrenchMobileNumber(seller.phoneNumber)) {
       throw new NotFoundException('Le vendeur ne communique pas son numéro : utilisez la messagerie.');
     }
     if (viewerId !== listing.userId) await this.listingsRepo.increment({ id: listingId }, 'phoneClicksCount', 1);
@@ -579,7 +580,7 @@ export class ListingsService {
       // Fil d'Ariane « Région › Département › Ville » (dérivé du code postal, jamais de l'adresse exacte)
       location: adminLocationFromPostalCode(listing.postalCode),
       // « Voir le numéro » proposé (le numéro lui-même n'est délivré que par POST /listings/:id/phone, connecté)
-      phoneAvailable: listing.status === 'en_ligne' && !!sellerUser && !sellerUser.deletedAt && sellerUser.phonePublic && isFrenchMobileNumber(sellerUser.phoneNumber),
+      phoneAvailable: listing.status === 'en_ligne' && !!sellerUser && !sellerUser.deletedAt && !sellerUser.isDemoAccount && sellerUser.phonePublic && isFrenchMobileNumber(sellerUser.phoneNumber),
     };
   }
 

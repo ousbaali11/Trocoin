@@ -33,6 +33,7 @@ export default function ParametresPage() {
   const [globals, setGlobals] = useState({ notifyPush: true, notifySms: false });
   // Case « Afficher mon numéro » : état local immédiat, enregistré aussitôt (rétabli si l'API refuse)
   const [phonePublic, setPhonePublic] = useState(true);
+  const [noSecurePay, setNoSecurePay] = useState(false);
   const [blocks, setBlocks] = useState<SellerSummary[]>([]);
   const [busy, setBusy] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -46,6 +47,7 @@ export default function ParametresPage() {
     setShop({ shopName: user.shopName ?? "", shopDescription: user.shopDescription ?? "", shopAddress: user.shopAddress ?? "", shopHours: user.shopHours ?? "", shopWebsite: user.shopWebsite ?? "" });
     setGlobals({ notifyPush: user.notifyPush, notifySms: user.notifySms });
     setPhonePublic(user.phonePublic !== false);
+    setNoSecurePay(!!user.securePaymentDisabled);
     if (user.notificationPrefs) setPrefs(user.notificationPrefs);
     api<SellerSummary[]>("/users/me/blocks").then(setBlocks).catch(() => null);
   }, [user]);
@@ -258,6 +260,32 @@ export default function ParametresPage() {
             }}
           />
           Afficher mon numéro sur mes annonces
+        </label>
+      </section>
+
+      <section className="panel" id="paiement-securise">
+        <h2 className="h3">Paiement sécurisé sur mes annonces</h2>
+        <p className="small muted">Par défaut, les acheteurs peuvent payer vos annonces en ligne (fonds conservés par Trocoin jusqu&apos;à la remise ou la réception). Décochez pour ne proposer que la remise en main propre, réglée directement entre vous : le bouton « Acheter » disparaît de vos annonces.</p>
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={!noSecurePay}
+            disabled={busy}
+            data-testid="secure-payment-enabled"
+            onChange={async (e) => {
+              const disabled = !e.target.checked;
+              setNoSecurePay(disabled);
+              try {
+                await api("/users/me", { method: "PATCH", body: { securePaymentDisabled: disabled } });
+                await refresh();
+                toast(disabled ? "Paiement sécurisé retiré de vos annonces : remise en main propre uniquement." : "Paiement sécurisé proposé sur vos annonces.", "success");
+              } catch (err) {
+                setNoSecurePay(!disabled);
+                toast((err as Error).message, "error");
+              }
+            }}
+          />
+          Proposer le paiement sécurisé sur mes annonces
         </label>
       </section>
 

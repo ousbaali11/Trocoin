@@ -26,6 +26,7 @@ interface AdminUserDetail {
   ratingAvg: number;
   ratingCount: number;
   identityVerified: boolean;
+  isDemoAccount?: boolean;
   stripeConnected: boolean;
   stripeOnboardingComplete: boolean;
   suspended: boolean;
@@ -88,7 +89,7 @@ export default function AdminUserPage() {
       <Link href="/admin/utilisateurs" className="mono">← Utilisateurs</Link>
       <div className="a-head" style={{ marginTop: 8 }}>
         <div>
-          <h1>{u.displayName} <span className={`a-pill ${t.cls}`}>{t.label}</span> {u.deleted && <span className="a-pill">Supprimé</span>} {u.suspended && <span className="a-pill danger">Suspendu</span>}</h1>
+          <h1>{u.displayName} <span className={`a-pill ${t.cls}`}>{t.label}</span> {u.deleted && <span className="a-pill">Supprimé</span>} {u.suspended && <span className="a-pill danger">Suspendu</span>} {u.isDemoAccount && <span className="a-pill accent" title="Compte de démonstration (contenu de lancement)">Démo</span>}</h1>
           <p className="mono">{u.id} · {u.phoneNumber} · inscrit le {formatDate(u.createdAt)}</p>
           {u.siret && <p className="small">SIRET {u.siret} · {u.siretVerified ? <span className="a-pill ok">vérifié au registre des entreprises{u.siretVerifiedAt ? ` le ${formatDate(u.siretVerifiedAt)}` : ""}</span> : <span className="a-pill danger">non vérifié au registre (registre indisponible à l'inscription ou compte antérieur)</span>}</p>}
         </div>
@@ -131,6 +132,9 @@ export default function AdminUserPage() {
           <h2 className="h3">Vérifications</h2>
           <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: ".88rem" }}>
             <input type="checkbox" checked={form.identityVerified} disabled={busy || u.deleted} onChange={(e) => patch({ identityVerified: e.target.checked }, "Badge identité mis à jour.")} /> Identité vérifiée (badge public)
+          </label>
+          <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: ".88rem", marginTop: 6 }}>
+            <input type="checkbox" checked={!!u.isDemoAccount} disabled={busy || u.deleted} data-testid="demo-account" onChange={(e) => patch({ isDemoAccount: e.target.checked }, e.target.checked ? "Compte marqué comme démonstration : numéro jamais révélé, paiement sécurisé retiré de ses annonces." : "Indicateur de démonstration retiré.")} /> Compte de démonstration (indicateur interne : numéro jamais révélé, aucun paiement en ligne sur ses annonces)
           </label>
           <dl className="a-kv" style={{ marginTop: 12 }}>
             <dt>Compte de versement</dt><dd>{u.stripeOnboardingComplete ? "Actif" : u.stripeConnected ? "Commencé" : "Non configuré"}</dd>

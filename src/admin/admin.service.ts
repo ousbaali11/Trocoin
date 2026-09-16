@@ -237,7 +237,7 @@ export class AdminService {
 
     const patch: Partial<User> = {};
     const changed: Record<string, unknown> = {};
-    for (const key of ['displayName', 'city', 'postalCode', 'accountType', 'identityVerified', 'shopName', 'shopDescription', 'siret'] as const) {
+    for (const key of ['displayName', 'city', 'postalCode', 'accountType', 'identityVerified', 'isDemoAccount', 'shopName', 'shopDescription', 'siret'] as const) {
       if (dto[key] !== undefined && dto[key] !== (user as any)[key]) {
         (patch as any)[key] = dto[key];
         changed[key] = { from: (user as any)[key], to: dto[key] };

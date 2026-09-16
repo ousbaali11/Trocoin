@@ -18,6 +18,7 @@ interface AdminUser {
   ratingAvg: number;
   ratingCount: number;
   identityVerified: boolean;
+  isDemoAccount?: boolean;
   suspended: boolean;
   deleted: boolean;
   createdAt: string;
@@ -65,7 +66,7 @@ export default function AdminUsersPage() {
                 <tr key={u.id}>
                   <td><strong>{u.displayName}</strong>{u.shopName && <><br /><span className="mono">{u.shopName}</span></>}<br /><span className="mono">{u.id}</span></td>
                   <td className="mono">{u.phoneNumber}</td>
-                  <td><span className={`a-pill ${t.cls}`}>{t.label}</span>{u.identityVerified && <> <span className="a-pill ok">ID</span></>}</td>
+                  <td><span className={`a-pill ${t.cls}`}>{t.label}</span>{u.identityVerified && <> <span className="a-pill ok">ID</span></>}{u.isDemoAccount && <> <span className="a-pill accent" title="Compte de démonstration">Démo</span></>}</td>
                   <td>{u.city || "—"}</td>
                   <td>{u.ratingCount > 0 ? `${u.ratingAvg}/5 (${u.ratingCount})` : "—"}</td>
                   <td>{u.deleted ? <span className="a-pill">Supprimé</span> : u.suspended ? <span className="a-pill danger">Suspendu</span> : <span className="a-pill ok">Actif</span>}</td>

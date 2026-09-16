@@ -38,7 +38,7 @@ cd frontend && npm install && cp .env.example .env.local && npm run dev -- -p 30
 ## Tests
 
 ```bash
-npm test                 # 171 tests e2e (API, supertest)
+npm test                 # 173 tests e2e (API, supertest)
 npm run e2e:build        # construit l'API (dist/) et le front (next build) pour les tests navigateur
 npm run e2e              # 115 scénarios Playwright dans Chromium (desktop 1280 px + mobile 375 px) : parcours, accessibilité (axe) site + back-office, clavier, SEO
 node scripts/charge.js --api https://api.trocoin.fr --front https://www.trocoin.fr --vus 10 --minutes 3   # test de charge léger (lectures publiques)
@@ -165,6 +165,8 @@ design, organisation, paiement) : `docs/audit-final.md` ; intégration PayPal : 
 - **Bandeau** : la recherche domine (une ligne ≥ 1100 px avec libellés de navigation masqués sous 1400 px ; deuxième ligne pleine largeur en dessous), placeholder court « Rechercher sur Trocoin ».
 - **Dépôt** : exemple de titre par catégorie (`title-examples.ts`), description auto-extensible (`AutoTextarea`), champs ajoutés d'après les annonces leboncoin (sellerie, salles d'eau, couleur puériculture).
 - **Images** : toute photo/avatar/logo est ré-encodée par `sharp` (orientation appliquée, EXIF/GPS/ICC supprimés, ≤ 1600 px, format d'origine) ; un fichier corrompu est rejeté. L'image envoyée n'est jamais servie telle quelle.
+- **Paiement sécurisé retirable par le vendeur** (AUDIT.md §46) : case « Proposer le paiement sécurisé sur mes annonces » dans Paramètres (`securePaymentDisabled` sur `PATCH /users/me`) ; décoché, le devis répond `eligible: false` avec le motif « ce vendeur ne propose pas le paiement sécurisé : réglez en main propre » et `POST /transactions` refuse (400) ; le numéro suit sa propre préférence.
+- **Comptes de démonstration** (AUDIT.md §46, admin seulement) : indicateur interne `isDemoAccount` réglé depuis la fiche admin d'un membre (case « Compte de démonstration », pastille « Démo » dans la liste et la fiche, action tracée au journal) ; jamais renvoyé par les routes publiques ; sur ses annonces le numéro n'est jamais révélé (`phoneAvailable: false`, `POST /listings/:id/phone` → 404) et aucun paiement en ligne n'est possible, la messagerie reste normale. Contenu de lancement en production : 10 comptes vendeurs, 60 annonces (5 par famille), photos CC0 / domaine public (Openverse, Wikimedia Commons) avec source et licence consignées hors dépôt (`private/`, ignoré par git).
 - **Mot de passe** : `POST /auth/password/change` (ancien mot de passe requis, autres sessions révoquées), section « Mot de passe » dans Paramètres.
 - **Changement d'adresse e-mail** (AUDIT.md §19) : `POST /auth/email/change` (mot de passe exigé) → lien 24 h envoyé à la nouvelle adresse, avertissement à l'ancienne ; effectif au clic (`POST /auth/email/verify` renvoie `changed: true`).
 - **Double authentification** (AUDIT.md §19, facultative) : TOTP RFC 6238 sans dépendance (`src/auth/totp.ts`), QR code (`qrcode`). `POST /auth/2fa/setup` → secret + QR, `POST /auth/2fa/enable { code }` → 8 codes de récupération (affichés une fois, hash en base), `POST /auth/2fa/disable { password, code }`. Connexion : `POST /auth/login` renvoie `{ twoFactorRequired, challengeToken }` (JWT 5 min, refusé comme session), puis `POST /auth/login/2fa { challengeToken, code }` ; un code TOTP ne sert qu'une fois (`totpLastStep`), un code de récupération non plus.

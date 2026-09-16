@@ -20,3 +20,6 @@ e2e/.tmp/
 playwright-report/
 test-results/
 data/pglite-*/
+
+# Identifiants et état des comptes de démonstration (jamais commités)
+private/

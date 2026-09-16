@@ -53,6 +53,10 @@ export class AdminUpdateUserDto {
   @IsOptional() @IsBoolean()
   identityVerified?: boolean;
 
+  /** Compte de démonstration (indicateur interne, AUDIT §46). */
+  @IsOptional() @IsBoolean()
+  isDemoAccount?: boolean;
+
   @IsOptional() @IsBoolean()
   suspended?: boolean;
 

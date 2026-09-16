@@ -156,6 +156,10 @@ export interface Me {
   phoneVerified: boolean;
   /** Numéro proposé sur les annonces (« Voir le numéro ») ; réglable au dépôt et dans les paramètres */
   phonePublic?: boolean;
+  /** Le vendeur ne propose pas le paiement sécurisé (remise en main propre uniquement). */
+  securePaymentDisabled?: boolean;
+  /** Compte de démonstration (indicateur interne, visible côté admin). */
+  isDemoAccount?: boolean;
   email?: string | null;
   /** Adresse confirmée via le lien reçu par e-mail. */
   emailVerified?: boolean;
