@@ -58,7 +58,7 @@ describe('Phase 25 : suppression bloquée, réactivation, pré-modération, PayP
     // L'acheteur confirme la réception : la vente est résolue, la suppression devient possible
     await request(server).post(`/transactions/${tx.id}/confirm-delivery`).set(buyer.auth).expect(201);
     const ok = await del(seller.id).expect(200);
-    expect(ok.body).toEqual({ deleted: true, refundedTransactions: [] });
+    expect(ok.body).toMatchObject({ deleted: true, refundedTransactions: [] });
     await request(server).get(`/users/${seller.id}/profile`).expect(404);
   });
 

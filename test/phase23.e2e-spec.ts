@@ -38,7 +38,7 @@ describe('Phase 23 : droits admin — suppressions définitives, transactions, j
     await request(server).delete(`/admin/users/${seller.id}`).set(buyer.auth).send({ reason: 'Fraude avérée', confirm: 'SUPPRIMER' }).expect(403);
 
     const res = await request(server).delete(`/admin/users/${seller.id}`).set(admin.auth).send({ reason: 'Fraude avérée sur plusieurs ventes', confirm: 'SUPPRIMER' }).expect(200);
-    expect(res.body).toEqual({ deleted: true, refundedTransactions: [tx.id] });
+    expect(res.body).toMatchObject({ deleted: true, refundedTransactions: [tx.id] });
     // Effets : connexion impossible, profil public « Compte supprimé », annonce retirée, acheteur remboursé
     await request(server).get('/users/me').set(seller.auth).expect(401);
     expect((await request(server).get(`/users/${seller.id}/profile`)).status).toBe(404);
@@ -53,8 +53,8 @@ describe('Phase 23 : droits admin — suppressions définitives, transactions, j
     expect(entry!.details).toMatchObject({ reason: 'Fraude avérée sur plusieurs ventes', refundedTransactions: [tx.id] });
     const remboursement = await audit.findOne({ where: { action: 'transaction.force_refund', targetId: tx.id } });
     expect(remboursement).toBeTruthy();
-    // Déjà supprimé : refusé ; visible dans le journal via l'API
-    await request(server).delete(`/admin/users/${seller.id}`).set(admin.auth).send({ reason: 'Nouvelle tentative', confirm: 'SUPPRIMER' }).expect(400);
+    // Déjà supprimé (effacé de la base, AUDIT §41) : introuvable ; visible dans le journal via l'API
+    await request(server).delete(`/admin/users/${seller.id}`).set(admin.auth).send({ reason: 'Nouvelle tentative', confirm: 'SUPPRIMER' }).expect(404);
     const log = await request(server).get(`/admin/audit-log?action=user.delete&target_id=${seller.id}`).set(admin.auth).expect(200);
     expect(log.body.items).toHaveLength(1);
     expect(log.body.items[0].adminName).toBeTruthy();

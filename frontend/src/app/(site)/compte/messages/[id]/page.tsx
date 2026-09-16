@@ -238,10 +238,12 @@ export default function ConversationPage() {
             {conv.other && !conv.other.deleted && <Link href={`/vendeurs/${conv.other.id}`} className="small">Profil</Link>}
             <span className="small muted" title={live ? "Connexion temps réel active" : "Mode différé"}><span aria-hidden="true">{live ? "● " : "○ "}</span>{live ? "en direct" : "différé"}</span>
           </div>
-          {conv.listing && (
+          {conv.listing ? (
             <Link href={`/annonces/${conv.listing.id}`} className="small muted" style={{ display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               {conv.listing.title} · {formatPrice(conv.listing.price, conv.listing.priceType)}
             </Link>
+          ) : (
+            <span className="small muted" style={{ display: "block" }} data-testid="listing-gone">Cette annonce n&apos;existe plus</span>
           )}
         </div>
         <div className="row conv-actions" style={{ gap: 4, marginLeft: "auto" }}>

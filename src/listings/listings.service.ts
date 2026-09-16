@@ -32,6 +32,7 @@ import { ListingPhoto } from './listing-photo.entity';
 import { ListingView } from './listing-view.entity';
 import { Listing, LISTING_LIFETIME_DAYS, ListingStatus } from './listing.entity';
 import { moderateText } from './moderation';
+import { RetentionService } from '../retention/retention.service';
 
 export const MAX_PHOTOS_PER_LISTING = 10;
 export const BOOST_DAYS = 7;
@@ -97,6 +98,7 @@ export class ListingsService {
     private usersService: UsersService,
     private settings: SettingsService,
     private shops: ShopsService,
+    private retention: RetentionService,
   ) {}
 
   // ---------------------------------------------------------------- helpers
@@ -417,19 +419,13 @@ export class ListingsService {
     await this.deleteListing(listing);
   }
 
-  async deleteListing(listing: Listing): Promise<{ deleted: boolean }> {
-    const txCount = await this.transactionsRepo.count({ where: { listingId: listing.id } });
-    if (txCount > 0) {
-      await this.listingsRepo.update(listing.id, { status: 'desactivee' });
-      return { deleted: false };
-    }
-    const photos = await this.photosRepo.find({ where: { listingId: listing.id } });
-    await Promise.all(photos.flatMap((p) => [deleteUploadedFile(p.url), deleteUploadedFile(p.thumbUrl)]));
-    await this.photosRepo.delete({ listingId: listing.id });
-    await this.favoritesRepo.delete({ listingId: listing.id });
-    await this.viewsRepo.delete({ listingId: listing.id });
-    await this.listingsRepo.delete(listing.id);
-    return { deleted: true };
+  /**
+   * Suppression réelle (AUDIT §41, RetentionService) : l'annonce est effacée de la base ; les ventes payées
+   * la concernant gardent leur trace comptable (titre conservé, l'annonce s'affiche « supprimée »).
+   */
+  async deleteListing(listing: Listing): Promise<{ deleted: true; keptTransactions: number }> {
+    const { keptTransactions } = await this.retention.purgeListing(listing);
+    return { deleted: true, keptTransactions };
   }
 
   async duplicateOwn(listingId: string, userId: string): Promise<Listing> {

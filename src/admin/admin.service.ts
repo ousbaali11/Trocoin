@@ -119,10 +119,15 @@ export class AdminService {
     if (query.action) qb.andWhere('a.action LIKE :action', { action: `${query.action}%` });
     qb.skip((page - 1) * pageSize).take(pageSize);
     const [items, total] = await qb.getManyAndCount();
-    const adminIds = [...new Set(items.map((i) => i.adminId))];
+    // Certaines entrées ne viennent pas d'un compte : le script `create-admin` écrit adminId = 'cli'. Sur Postgres,
+    // comparer 'cli' à la colonne uuid des utilisateurs échouait (« invalid input syntax for type uuid ») et la
+    // page Traçabilité répondait 500 (AUDIT §41) : seuls les identifiants de forme uuid sont recherchés.
+    const isUuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+    const adminIds = [...new Set(items.map((i) => i.adminId).filter(isUuid))];
     const admins = adminIds.length ? await this.usersRepo.find({ where: { id: In(adminIds) } }) : [];
     const byId = new Map(admins.map((a) => [a.id, a.displayName]));
-    return { items: items.map((i) => ({ ...i, adminName: byId.get(i.adminId) })), total, page, pageSize };
+    const label = (adminId: string) => byId.get(adminId) ?? (adminId === 'cli' ? "Script d'administration (CLI)" : isUuid(adminId) ? 'Compte administrateur supprimé' : adminId);
+    return { items: items.map((i) => ({ ...i, adminName: label(i.adminId) })), total, page, pageSize };
   }
 
   // ------------------------------------------------------------------ stats
@@ -351,7 +356,8 @@ export class AdminService {
     const listing = await this.listingsRepo.findOne({ where: { id } });
     if (!listing) throw new NotFoundException('Annonce introuvable.');
     const result = await this.listingsService.deleteListing(listing);
-    await this.audit(ctx, 'listing.delete', 'listing', id, { title: listing.title, ownerId: listing.userId, reason, hardDeleted: result.deleted, keptForTransactions: !result.deleted });
+    // hardDeleted : l'annonce n'existe plus en base ; keptTransactions : ventes payées conservées (trace comptable anonymisée)
+    await this.audit(ctx, 'listing.delete', 'listing', id, { title: listing.title, ownerId: listing.userId, reason, hardDeleted: result.deleted, keptTransactions: result.keptTransactions });
     await this.notifications.notify(listing.userId, {
       type: 'moderation',
       title: 'Votre annonce a été retirée',
@@ -565,8 +571,9 @@ export class AdminService {
       cancelled.push(tx.id);
     }
     await this.auth.revokeAllSessions(id);
-    await this.usersService.deleteAccount(id, { force: true });
-    await this.audit(ctx, 'user.delete', 'user', id, { reason, displayName: user.displayName, accountType: user.accountType, refundedTransactions: cancelled, listingsHidden: true });
-    return { deleted: true, refundedTransactions: cancelled };
+    const purge = await this.usersService.deleteAccount(id, { force: true });
+    // Journal conservé après l'effacement réel : entrée séparée (qui, quoi, quand, pourquoi), pas une copie du contenu
+    await this.audit(ctx, 'user.delete', 'user', id, { reason, displayName: user.displayName, accountType: user.accountType, refundedTransactions: cancelled, listingsDeleted: purge.listings, keptTransactions: purge.keptTransactions, deletedTransactions: purge.deletedTransactions });
+    return { deleted: true, refundedTransactions: cancelled, ...purge };
   }
 }

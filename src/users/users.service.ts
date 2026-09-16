@@ -11,6 +11,7 @@ import { deleteUploadedFile } from '../common/upload/image-upload';
 import { isFrenchMobileNumber, normalizeFrenchMobile } from '../common/validators/french-phone';
 import { UserBlock } from './user-block.entity';
 import { SiretVerificationService } from './siret-verification.service';
+import { DELETED_ACCOUNT_LABEL, RetentionService } from '../retention/retention.service';
 import { effectivePrefs, sanitizePrefs, type NotificationPrefs } from '../notifications/notification-prefs';
 import { User } from './user.entity';
 
@@ -62,6 +63,7 @@ export class UsersService {
     @InjectRepository(Transaction) private transactionsRepo: Repository<Transaction>,
     @InjectRepository(Favorite) private favoritesRepo: Repository<Favorite>,
     private sirene: SiretVerificationService,
+    private retention: RetentionService,
   ) {}
 
   /**
@@ -332,7 +334,11 @@ export class UsersService {
   /** Version allégée pour embarquer dans une annonce / une conversation. */
   async findPublicSummary(id: string) {
     const user = await this.findById(id);
-    if (!user) return null;
+    // Compte effacé de la base (AUDIT §41) : tout ce qui le référence encore (conversation, vente, avis,
+    // signalement) s'affiche « Compte supprimé » sans erreur.
+    if (!user) {
+      return { id, displayName: DELETED_ACCOUNT_LABEL, avatarUrl: undefined, accountType: 'particulier', city: null, shopName: null, ratingAvg: 0, ratingCount: 0, identityVerified: false, createdAt: null, deleted: true };
+    }
     return {
       id: user.id,
       displayName: user.deletedAt ? 'Compte supprimé' : user.displayName,
@@ -437,7 +443,7 @@ export class UsersService {
    * Suppression définitive (anonymisation) : par le membre lui-même (RGPD) ou par un administrateur
    * (`force` : les transactions en cours ont déjà été traitées par l'admin avant l'appel).
    */
-  async deleteAccount(userId: string, opts: { force?: boolean } = {}): Promise<void> {
+  async deleteAccount(userId: string, opts: { force?: boolean } = {}): Promise<{ listings: number; keptTransactions: number; deletedTransactions: number }> {
     const user = await this.findById(userId);
     if (!user) throw new NotFoundException('Utilisateur introuvable.');
     if (user.accountType === 'admin') {
@@ -454,41 +460,9 @@ export class UsersService {
       );
     }
 
-    await deleteUploadedFile(user.avatarUrl);
-    await deleteUploadedFile(user.shopLogoUrl);
-    await this.listingsRepo.update({ userId }, { status: 'desactivee' });
-    await this.favoritesRepo.delete({ userId });
-    await this.blocksRepo.delete({ blockerId: userId });
-    await this.blocksRepo.delete({ blockedId: userId });
-    await this.usersRepo.update(userId, {
-      // Le numéro est remplacé par un marqueur unique : il redevient
-      // utilisable pour une nouvelle inscription.
-      phoneNumber: `deleted:${userId}`,
-      email: null as any,
-      displayName: 'Compte supprimé',
-      avatarUrl: null as any,
-      city: null as any,
-      postalCode: null as any,
-      latitude: null as any,
-      longitude: null as any,
-      shopName: null as any,
-      shopDescription: null as any,
-      shopLogoUrl: null as any,
-      shopAddress: null as any,
-      shopHours: null as any,
-      shopWebsite: null as any,
-      siret: null as any,
-      siretVerified: false,
-      siretVerifiedAt: null as any,
-      // Comptes à mot de passe (phase 5) : identifiants libérés et hash effacé
-      username: null as any,
-      firstName: null as any,
-      lastName: null as any,
-      companyName: null as any,
-      passwordHash: null as any,
-      stripeAccountId: null as any,
-      deletedAt: new Date(),
-    });
+    // Suppression réelle (AUDIT §41) : la ligne et toutes les données personnelles disparaissent de la base ;
+    // seules les ventes payées gardent une trace comptable anonymisée (RetentionService).
+    return this.retention.purgeUser(user);
   }
 
   // ----- Stripe Connect -----

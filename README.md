@@ -38,7 +38,7 @@ cd frontend && npm install && cp .env.example .env.local && npm run dev -- -p 30
 ## Tests
 
 ```bash
-npm test                 # 161 tests e2e (API, supertest)
+npm test                 # 166 tests e2e (API, supertest)
 npm run e2e:build        # construit l'API (dist/) et le front (next build) pour les tests navigateur
 npm run e2e              # 113 scénarios Playwright dans Chromium (desktop 1280 px + mobile 375 px) : parcours, accessibilité (axe) site + back-office, clavier, SEO
 node scripts/charge.js --api https://api.trocoin.fr --front https://www.trocoin.fr --vus 10 --minutes 3   # test de charge léger (lectures publiques)
@@ -123,6 +123,11 @@ et décision forcée sur toute vente ouverte : rembourser, libérer, annuler), c
 réversible, annonces remises en ligne à la réactivation ; suppression définitive avec motif + SUPPRIMER,
 ventes non expédiées remboursées, refusée tant qu'une vente expédiée ou un litige est en cours, données
 personnelles effacées), journal d'audit consultable (filtre par cible). Menu regroupé par domaine.
+Suppression **réelle** (AUDIT §41, `src/retention/retention.service.ts`) : une annonce ou un compte supprimé
+(par le membre ou par l'admin) disparaît de la base et de toutes les listes ; seules les **ventes payées**
+gardent une trace comptable (montant, dates, références, titre de l'annonce) sans données personnelles,
+affichée « Compte supprimé » / « Annonce supprimée » ; journal d'audit, signalements, conversations et
+avis rédigés sont conservés.
 Audit page par page : `docs/audit-admin.md` ; intégration PayPal (options, recommandation) :
 `docs/paypal-integration.md`.
 

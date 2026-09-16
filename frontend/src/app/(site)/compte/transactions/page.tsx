@@ -61,7 +61,7 @@ export default function TransactionsPage() {
                   const st = TX_STATUS_LABELS[t.status];
                   return (
                     <tr key={t.id}>
-                      <td><Link href={`/compte/transactions/${t.id}`}><strong>{t.listing?.title ?? "Annonce supprimée"}</strong></Link><br /><span className="small muted">avec {t.other?.displayName}</span></td>
+                      <td><Link href={`/compte/transactions/${t.id}`}><strong>{t.listing?.title ?? (t.listingTitle ? `${t.listingTitle} (annonce supprimée)` : "Annonce supprimée")}</strong></Link><br /><span className="small muted">avec {t.other?.displayName}</span></td>
                       <td>{t.role === "acheteur" ? "Achat" : "Vente"}</td>
                       <td>{formatEuros(t.role === "acheteur" ? t.amount + t.buyerFee : t.amount - t.commission)}</td>
                       <td className="small">{DELIVERY_LABELS[t.deliveryMethod]}</td>
@@ -84,7 +84,7 @@ export default function TransactionsPage() {
                     <span className={st.pill}>{st.label}</span>
                     <span className="small muted">{formatDate(t.createdAt)}</span>
                   </div>
-                  <strong style={{ display: "block", margin: "8px 0 2px" }}>{t.listing?.title ?? "Annonce supprimée"}</strong>
+                  <strong style={{ display: "block", margin: "8px 0 2px" }}>{t.listing?.title ?? (t.listingTitle ? `${t.listingTitle} (annonce supprimée)` : "Annonce supprimée")}</strong>
                   <span className="small muted">{t.role === "acheteur" ? "Achat" : "Vente"} · avec {t.other?.displayName} · {DELIVERY_LABELS[t.deliveryMethod]}</span>
                   <div style={{ fontFamily: "var(--font-display)", fontSize: "1.15rem", fontWeight: 700, color: "var(--accent)", marginTop: 6 }}>{formatEuros(t.role === "acheteur" ? t.amount + t.buyerFee : t.amount - t.commission)}</div>
                 </Link>

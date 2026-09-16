@@ -148,7 +148,7 @@ export default function AdminUserPage() {
             open={deleteOpen}
             onClose={() => setDeleteOpen(false)}
             title="Supprimer définitivement ce compte ?"
-            text={`${u.displayName} (${u.phoneNumber}) : ses ventes non expédiées seront annulées et remboursées, ses annonces retirées et ses données personnelles effacées. Une vente déjà expédiée (ou remise en attente de confirmation) ou un litige en cours bloque la suppression jusqu'à sa résolution. Cette action ne peut pas être annulée.`}
+            text={`${u.displayName} (${u.phoneNumber}) : ses ventes non expédiées seront annulées et remboursées, ses annonces et ses données personnelles effacées de la base (seules ses ventes payées gardent une trace comptable anonymisée). Une vente déjà expédiée (ou remise en attente de confirmation) ou un litige en cours bloque la suppression jusqu'à sa résolution. Cette action ne peut pas être annulée.`}
             confirmLabel="Supprimer le compte"
             onConfirm={async (reason) => {
               try {

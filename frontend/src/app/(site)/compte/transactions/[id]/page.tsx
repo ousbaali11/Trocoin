@@ -76,7 +76,7 @@ export default function TransactionPage() {
       <div className="page-head" style={{ marginBottom: 0 }}>
         <div>
           <p className="eyebrow">{buyer ? "Achat" : "Vente"} · {DELIVERY_LABELS[tx.deliveryMethod]}</p>
-          <h1 style={{ fontSize: "1.6rem" }}>{tx.listing?.title ?? "Annonce supprimée"}</h1>
+          <h1 style={{ fontSize: "1.6rem" }}>{tx.listing?.title ?? (tx.listingTitle ? `${tx.listingTitle} (annonce supprimée)` : "Annonce supprimée")}</h1>
           <span className={st.pill}>{st.label}</span> <span className="small muted">{st.help}</span>
         </div>
         {tx.listing && <Link href={`/annonces/${tx.listing.id}`} className="btn btn-outline btn-sm">Voir l&apos;annonce</Link>}

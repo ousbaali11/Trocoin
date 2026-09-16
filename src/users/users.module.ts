@@ -5,6 +5,7 @@ import { Message } from '../conversations/message.entity';
 import { Favorite } from '../favorites/favorite.entity';
 import { Listing } from '../listings/listing.entity';
 import { Transaction } from '../payments/transaction.entity';
+import { RetentionModule } from '../retention/retention.module';
 import { Review } from '../reviews/review.entity';
 import { StripeConnectService } from './stripe-connect.service';
 import { UserBlock } from './user-block.entity';
@@ -15,6 +16,7 @@ import { UsersService } from './users.service';
 
 @Module({
   imports: [
+    RetentionModule,
     TypeOrmModule.forFeature([User, UserBlock, Listing, Conversation, Message, Review, Transaction, Favorite]),
   ],
   controllers: [UsersController],

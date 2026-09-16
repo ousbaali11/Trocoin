@@ -274,6 +274,8 @@ export interface Quote {
 export interface Transaction {
   id: string;
   listingId: string;
+  /** Titre de l'annonce au moment de la vente, conservé si l'annonce a été supprimée (trace comptable, AUDIT §41). */
+  listingTitle?: string | null;
   buyerId: string;
   sellerId: string;
   amount: number;

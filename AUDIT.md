@@ -2226,3 +2226,48 @@ de la fiche utilisateur et du dialogue mis à jour.
 **Test en production (mode test Stripe, 16 septembre 2026, ~15 h 25)** : après le déploiement 1.20.0, la création de la page Checkout fonctionne de nouveau (avant : 503 sur le paramètre d'autorisation prolongée). Page ouverte sans rien payer : moyens proposés **Carte, Klarna, Satispay** — **PayPal absent** : l'activation « place de marché » côté Dashboard Stripe n'est pas encore approuvée. Aucun déploiement ne sera nécessaire quand elle le sera : le bouton apparaîtra de lui-même (aucune restriction dans la session). Comptes et annonce de ce test supprimés (auto-suppression RGPD, 204). **Reste à nettoyer par vous** (console admin) : le premier essai, tombé sur le 503 avant que le script n'ait sauvegardé ses identifiants, a laissé un compte vendeur `7f7b0b44-8bce-4adc-8140-6747a440242a` (« Test V. », e-mail `ousbaali11+trocoin-paypal-vendeur-<6 chiffres>@gmail.com`, le numéro est dans votre boîte Gmail) avec l'annonce `6385ab24-70ca-43e9-a3b4-ebb42b69e910` « Enceinte de test PayPal (ne pas acheter) », et un compte acheteur `…+trocoin-paypal-acheteur-<mêmes chiffres>@gmail.com` sans transaction.
 
 Déploiement : CI verte (migration `MoyenDePaiement` sur Postgres 16 puis Render), API en **1.20.0** (`/health` : postgres ok), front Vercel à jour.
+
+## 41. Suppression réellement définitive (trace comptable conservée) et bug de la page Traçabilité — 16 septembre 2026
+
+### 1. Bug Traçabilité : cause exacte
+
+Pas d'accès aux logs Render depuis cette machine (aucune clé ni CLI) ; la cause a été établie par lecture
+du code puis **reproduite par un test** que la CI joue sur Postgres 16. La page appelle
+`GET /admin/audit-log` ; le service cherche ensuite les noms des administrateurs avec
+`users.id IN (…adminId…)`. Or le script `create-admin` (celui qui a promu votre compte le 15 septembre,
+contre la base Frankfurt) écrit une entrée avec **`adminId = 'cli'`**. Sur SQLite (tests locaux) la
+comparaison passe ; sur Postgres, `users.id` est de type `uuid` et `'cli'` déclenche « invalid input
+syntax for type uuid » → 500 → « Erreur interne. Réessayez plus tard. ». Correction : seuls les
+identifiants de forme uuid sont recherchés ; l'entrée CLI s'affiche « Script d'administration (CLI) »,
+un admin effacé « Compte administrateur supprimé ». Test `phase26` : une entrée `cli` insérée puis le
+journal lu (200) — le job CI Postgres l'exécute.
+
+### 2. Suppression réelle, règle de conservation (`src/retention/retention.service.ts`)
+
+| Objet supprimé | Ce qui est effacé de la base | Ce qui est conservé |
+|---|---|---|
+| **Annonce** (par le membre ou l'admin) | la ligne, ses photos (fichiers compris), favoris, historique de consultation, transactions **jamais payées** (page de paiement abandonnée) | **ventes payées** (`paidAt` renseigné, quel que soit leur sort ensuite) : montant, dates, références de paiement et de virement, **titre de l'annonce** (`transactions.listingTitle`, rétro-rempli par la migration) — affichées « *titre* (annonce supprimée) » ; conversations et messages (l'autre partie voit « Cette annonce n'existe plus ») ; signalements ; journal d'audit |
+| **Compte** (auto-suppression RGPD ou admin) | la ligne utilisateur (identifiants libérés : numéro, e-mail, pseudo), ses annonces (règle ci-dessus), transactions jamais payées, avis reçus, favoris, historique, blocages, recherches sauvegardées, notifications, abonnements, jetons de session et de vérification, avatar et logo | **ventes payées** où il est partie : conservées sans données personnelles (adresse de livraison de l'acheteur, code de remise et adresses des étiquettes effacés), partie affichée « Compte supprimé » (membre, admin) ; avis rédigés (la note des autres ne change pas, auteur « Compte supprimé ») ; conversations et messages de l'autre partie ; signalements ; journal d'audit |
+
+Fondement de l'exception : obligation de conserver les pièces comptables des ventes (code de commerce,
+art. L123-22, 10 ans). Le journal d'audit conserve « qui a supprimé quoi, quand, pourquoi » : entrée
+séparée (identifiants, motif, pseudo au moment de la suppression, décomptes), pas une copie du contenu.
+Plus aucune ligne « Supprimé » dans les listes Annonces et Comptes (filtre « supprimés » retiré) ; une
+fiche d'un objet effacé répond 404.
+
+Comportements dérivés vérifiés : `findPublicSummary` renvoie un libellé « Compte supprimé » pour tout
+identifiant absent (ventes, conversations, avis, signalements ne cassent pas) ; suppression admin d'un
+compte : toujours refusée si une vente expédiée ou un litige est en cours (§40), vente non expédiée
+remboursée avant l'effacement ; réponse `{ deleted, refundedTransactions, listings, keptTransactions,
+deletedTransactions }`.
+
+### Vérification
+
+| Contrôle | Résultat |
+|---|---|
+| `test/phase26.e2e-spec.ts` (5 tests) | journal avec entrée `cli` (200, libellé) ; annonce supprimée : base, fiche et liste admin, public, photos, favoris, historique, transaction non payée effacés, conversation de l'autre membre lisible avec annonce absente, journal conservé ; annonce liée à une vente payée : annonce effacée, vente conservée (montant, dates, références, titre) et affichée « (annonce supprimée) » au membre et à l'admin ; compte supprimé : ligne, fiche, liste, profil, annonces, favoris, notifications, avis reçus effacés, vente payée conservée sans adresse ni code, « Compte supprimé » côté vendeur et admin, avis rédigé conservé, conversation lisible, journal, numéro réutilisable ; auto-suppression RGPD : même effacement |
+| Suites adaptées | `phase10`, `phase23`, `phase25`, `transactions` (plus de ligne anonymisée : 404, réinscription avec le même numéro) |
+| `npm test` | 166 réussis, 1 ignoré |
+| Playwright (console admin, achat) | rejoués sur la pile locale ; suite complète par la CI |
+| Captures | listes Annonces / Comptes avant et après suppression (aucune ligne fantôme), page Traçabilité fonctionnelle avec les entrées de suppression et l'entrée CLI, fiche admin et page vendeur d'une vente payée dont l'acheteur est supprimé (trace comptable anonymisée) |
+| Migration `Retention` | jouée par le job CI Postgres 16 puis Render |

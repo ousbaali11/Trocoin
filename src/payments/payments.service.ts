@@ -166,6 +166,7 @@ export class PaymentsService {
     const applicationFeeEuros = round2(q.commission + q.buyerFee);
     const base = {
       listingId,
+      listingTitle: listing.title,
       buyerId,
       sellerId: listing.userId,
       amount: listing.price!,

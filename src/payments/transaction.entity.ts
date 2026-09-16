@@ -51,6 +51,10 @@ export class Transaction {
   @Column()
   listingId: string;
 
+  /** Titre de l'annonce au moment de la vente : conservé avec la trace comptable si l'annonce est effacée (AUDIT §41). */
+  @Column({ type: 'varchar', nullable: true })
+  listingTitle?: string | null;
+
   @Index()
   @Column()
   buyerId: string;

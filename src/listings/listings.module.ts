@@ -4,6 +4,7 @@ import { CategoriesModule } from '../categories/categories.module';
 import { Conversation } from '../conversations/conversation.entity';
 import { Favorite } from '../favorites/favorite.entity';
 import { Transaction } from '../payments/transaction.entity';
+import { RetentionModule } from '../retention/retention.module';
 import { ShopsModule } from '../shops/shops.module';
 import { User } from '../users/user.entity';
 import { UsersModule } from '../users/users.module';
@@ -16,6 +17,7 @@ import { ListingsService } from './listings.service';
 
 @Module({
   imports: [
+    RetentionModule,
     TypeOrmModule.forFeature([Listing, ListingPhoto, ListingView, Favorite, Transaction, User, Conversation]),
     CategoriesModule,
     UsersModule,

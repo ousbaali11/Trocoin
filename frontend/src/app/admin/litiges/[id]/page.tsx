@@ -41,6 +41,7 @@ interface AdminTxDetail {
   buyer: Party | null;
   seller: Party | null;
   listing: { id: string; title: string; price?: number | null; status: string } | null;
+  listingTitle?: string | null;
   shipment: { status: string; carrier: string; mode: string; trackingNumber?: string | null; trackingUrl?: string | null; priceCents?: number | null; createdAt: string } | null;
   audit: Array<{ id: string; action: string; adminId: string; details?: Record<string, unknown>; createdAt: string }>;
   /** Décisions possibles maintenant, calculées par l'API (mêmes règles que le service de paiement) */
@@ -100,7 +101,7 @@ export default function AdminTransactionPage() {
             <br /><span className="mono">{p.phoneNumber}{p.email ? ` · ${p.email}` : ""}</span>
             <br /><span className="small">{p.accountType} · {p.ratingCount > 0 ? `${p.ratingAvg}/5 (${p.ratingCount} avis)` : "aucun avis"}</span>
           </>
-        ) : "—"}
+        ) : <span className="a-pill">Compte supprimé</span>}
       </dd>
     </dl>
   );
@@ -123,7 +124,7 @@ export default function AdminTransactionPage() {
           {party(tx.buyer, "Acheteur")}
           {party(tx.seller, "Vendeur")}
           <dl className="a-kv">
-            <dt>Annonce</dt><dd>{tx.listing ? <><Link href={`/admin/annonces/${tx.listing.id}`} style={{ textDecoration: "underline" }}>{tx.listing.title}</Link> <span className="mono">({tx.listing.status})</span></> : "Annonce supprimée"}</dd>
+            <dt>Annonce</dt><dd>{tx.listing ? <><Link href={`/admin/annonces/${tx.listing.id}`} style={{ textDecoration: "underline" }}>{tx.listing.title}</Link> <span className="mono">({tx.listing.status})</span></> : `${tx.listingTitle ?? "Annonce"} (supprimée, trace comptable conservée)`}</dd>
             <dt>Remise</dt><dd>{DELIVERY_LABELS[tx.deliveryMethod]}{tx.deliveryMethod === "main_propre" && (tx.hasHandoverCode ? " · code de remise détenu par l'acheteur (jamais affiché ici)" : "")}{tx.deliveryTrackingNumber && ` · suivi ${tx.deliveryTrackingNumber}`}</dd>
             {tx.shippingAddress && <><dt>Adresse de livraison</dt><dd>{tx.shippingAddress.name}, {tx.shippingAddress.line1}{tx.shippingAddress.line2 ? `, ${tx.shippingAddress.line2}` : ""}, {tx.shippingAddress.postalCode} {tx.shippingAddress.city}{tx.shippingAddress.phone ? ` · ${tx.shippingAddress.phone}` : ""}</dd></>}
             {tx.shipment && <><dt>Étiquette</dt><dd>{tx.shipment.carrier} · {tx.shipment.mode} · {tx.shipment.status}{tx.shipment.trackingNumber && ` · ${tx.shipment.trackingNumber}`}{tx.shipment.priceCents != null && ` · ${formatEuros(tx.shipment.priceCents / 100)}`}{tx.shipment.trackingUrl && <> · <a href={tx.shipment.trackingUrl} target="_blank" rel="noreferrer">suivi ↗</a></>}</dd></>}

@@ -293,13 +293,13 @@ describe('Messagerie, paiement séquestre, avis, signalements, alertes, admin', 
     await request(server).delete('/users/me').set(user.auth).expect(204);
     await request(server).get('/users/me').set(user.auth).expect(401);
     await request(server).get(`/users/${user.id}/profile`).expect(404);
-    // Le numéro peut ré-ouvrir un compte (cooldown OTP : on attend la fenêtre en changeant de numéro dans les tests réels ;
-    // ici on vérifie seulement que l'ancien compte est anonymisé)
+    // Suppression réelle (AUDIT §41) : plus aucune ligne, même pour l'admin ; le numéro peut ré-ouvrir un compte
     const admin = await login(app);
     await makeAdmin(app, admin);
-    const view = await request(server).get(`/admin/users/${user.id}`).set(admin.auth).expect(200);
-    expect(view.body.deleted).toBe(true);
-    expect(view.body.phoneNumber).toBe(`deleted:${user.id}`);
+    await request(server).get(`/admin/users/${user.id}`).set(admin.auth).expect(404);
+    const tag = String(Date.now()).slice(-6);
+    const again = await request(server).post('/auth/register').send({ accountType: 'particulier', firstName: 'Nora', lastName: 'Bex', username: `rgpd_${tag}`, email: `rgpd.${tag}@example.org`, phoneNumber: user.phone, password: 'MotDePasse!2026', passwordConfirmation: 'MotDePasse!2026' }).expect(201);
+    expect(again.body.user.id).not.toBe(user.id);
   });
 
   it('onboarding Stripe (mode mock) : lien, statut, compte connecté transmis au paiement', async () => {

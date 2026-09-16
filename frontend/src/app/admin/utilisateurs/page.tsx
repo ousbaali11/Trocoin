@@ -51,7 +51,7 @@ export default function AdminUsersPage() {
           <option value="">Tous types</option><option value="particulier">Particuliers</option><option value="professionnel">Professionnels</option><option value="admin">Administrateurs</option>
         </select>
         <select className="a-select" aria-label="État du compte" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
-          <option value="">Tous statuts</option><option value="actif">Actifs</option><option value="suspendu">Suspendus</option><option value="supprime">Supprimés</option>
+          <option value="">Tous statuts</option><option value="actif">Actifs</option><option value="suspendu">Suspendus</option>
         </select>
       </div>
       {error && <div className="a-alert danger">{error}</div>}
