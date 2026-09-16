@@ -128,7 +128,7 @@ export class BoxtalShippingProvider implements IShippingProvider {
     const body = (await res.json().catch(() => ({}))) as { accessToken?: string; expiresIn?: number; message?: string };
     if (!res.ok || !body.accessToken) {
       const code = res.status === 401 || res.status === 403 ? 'non_configure' : 'transporteur_indisponible';
-      throw new ShippingProviderError('boxtal', code, `jeton v3 refusé (HTTP ${res.status}${body.message ? ' ' + body.message : ''})`);
+      throw new ShippingProviderError('boxtal', code, `jeton v3 refusé (HTTP ${res.status}${body.message ? ' ' + body.message : ''}) — vérifier BOXTAL_V3_ACCESS_KEY / BOXTAL_V3_SECRET_KEY et BOXTAL_ENV`);
     }
     this.token = { value: body.accessToken, expiresAt: Date.now() + (body.expiresIn ?? 300) * 1000 };
     return body.accessToken;
@@ -174,13 +174,13 @@ export class BoxtalShippingProvider implements IShippingProvider {
   // ------------------------------------------------------------------ v1 : cotation
 
   private async v1Cotation(params: Record<string, string>): Promise<string> {
-    const form = new URLSearchParams({ ...params, platform: 'trocoin', platform_version: '1', module_version: '1' });
+    // La cotation se lit en GET (la bibliothèque officielle construit server + action + '?' + query ; POST répond 405)
+    const query = new URLSearchParams({ ...params, platform: 'trocoin', platform_version: '1', module_version: '1' });
     const attempt = async (authHeader: string) => {
       try {
-        return await fetch(`${this.v1Base}/api/v1/cotation`, {
-          method: 'POST',
-          headers: { Authorization: authHeader, 'Api-Version': '1.3.7', 'Accept-Language': 'fr-FR', 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/xml' },
-          body: form.toString(),
+        return await fetch(`${this.v1Base}/api/v1/cotation?${query.toString()}`, {
+          method: 'GET',
+          headers: { Authorization: authHeader, 'Api-Version': '1.3.7', 'Accept-Language': 'fr-FR', Accept: 'application/xml' },
         });
       } catch (err) {
         throw new ShippingProviderError('boxtal', 'reseau', `cotation v1 : ${(err as Error).message}`);
@@ -433,6 +433,25 @@ export class BoxtalShippingProvider implements IShippingProvider {
       await this.bearer();
       return 'jeton obtenu';
     });
+    if (!(out.jeton_v3 as { ok: boolean }).ok) {
+      // Aide au diagnostic : quel hôte et quel ordre de clés accepte les identifiants (statuts HTTP seulement)
+      await step('jeton_v3_essais', async () => {
+        const tries: Record<string, number | string> = {};
+        for (const [host, base] of Object.entries(V3)) {
+          for (const [label, pair] of [['acces:secret', `${this.accessKey}:${this.secretKey}`], ['secret:acces', `${this.secretKey}:${this.accessKey}`]] as const) {
+            try {
+              const r = await fetch(`${base}/iam/account-app/token`, { method: 'POST', headers: { Authorization: `Basic ${Buffer.from(pair).toString('base64')}`, Accept: 'application/json' } });
+              tries[`${host} ${label}`] = r.status;
+            } catch (err) {
+              tries[`${host} ${label}`] = (err as Error).message;
+            }
+          }
+        }
+        tries['longueur cle acces'] = this.accessKey.length;
+        tries['longueur cle secrete'] = this.secretKey.length;
+        return tries;
+      });
+    }
     const parcel = { weightGrams: 900, lengthCm: 30, widthCm: 20, heightCm: 10 };
     let offers: Awaited<ReturnType<BoxtalShippingProvider['rawQuote']>> = [];
     await step('cotation_v1', async () => {

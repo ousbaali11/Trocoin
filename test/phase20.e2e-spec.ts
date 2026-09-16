@@ -35,7 +35,7 @@ function fakeBoxtal() {
         if (state.failToken || req.headers.authorization !== `Basic ${Buffer.from('AK:SK').toString('base64')}`) return json(401, { message: 'invalid credentials' });
         return json(200, { accessToken: 'tok-123', expiresIn: 600 });
       }
-      if (url === '/api/v1/cotation') {
+      if (url.startsWith('/api/v1/cotation?')) {
         if (state.failV1Auth || !(req.headers.authorization || '').includes(Buffer.from('login:pw').toString('base64'))) return json(401, {});
         res.writeHead(200, { 'Content-Type': 'application/xml' });
         return res.end(`<?xml version="1.0"?><cotation><shipment><offer><mode>PICKUP</mode><operator><code>MONR</code><label>Mondial Relay</label></operator><service><code>CpourToi</code><label>Point Relais</label></service><price><currency>EUR</currency><tax-exclusive>4.58</tax-exclusive><tax-inclusive>5.49</tax-inclusive></price><delivery><type><code>PICKUP_POINT</code><label>Point relais</label></type><date>2026-09-19</date></delivery></offer><offer><mode>HOME</mode><operator><code>POFR</code><label>Colissimo</label></operator><service><code>ColissimoAccess</code><label>Colissimo Domicile</label></service><price><currency>EUR</currency><tax-exclusive>7.42</tax-exclusive><tax-inclusive>8.90</tax-inclusive></price><delivery><type><code>HOME</code><label>Domicile</label></type><date>2026-09-18</date></delivery></offer><offer><mode>PICKUP</mode><operator><code>POFR</code><label>Colissimo</label></operator><service><code>ColissimoPickup</code><label>Colissimo Point Retrait</label></service><price><currency>EUR</currency><tax-inclusive>7.35</tax-inclusive></price><delivery><type><code>PICKUP_POINT</code><label>Point retrait</label></type></delivery></offer></shipment></cotation>`);
@@ -84,11 +84,11 @@ describe('Boxtal (faux serveur) : cotation v1, étiquette v3, erreurs', () => {
     ]);
     const mr = await provider.quote({ carrier: 'mondial_relay', parcel: { weightGrams: 900 }, fromPostalCode: '69003', toPostalCode: '75017' });
     expect(mr).toEqual([expect.objectContaining({ mode: 'point_relais', priceCents: 549, offerCode: 'MONR-RELAIS', label: 'Mondial Relay Point Relais' })]);
-    const call = fake.calls.find((c) => c.url === '/api/v1/cotation')!;
-    expect(call.method).toBe('POST');
-    expect(call.body).toContain('colis_1.poids=0.9');
-    expect(call.body).toContain('recipient.code_postal=75017');
-    expect(call.body).toContain('shipper.ville=Lyon');
+    const call = fake.calls.find((c) => c.url.startsWith('/api/v1/cotation?'))!;
+    expect(call.method).toBe('GET');
+    expect(call.url).toContain('colis_1.poids=0.9');
+    expect(call.url).toContain('recipient.code_postal=75017');
+    expect(call.url).toContain('shipper.ville=Lyon');
   });
 
   it('points relais : filtrés sur le réseau du transporteur, adresse lisible', async () => {
