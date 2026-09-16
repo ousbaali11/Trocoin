@@ -2569,3 +2569,48 @@ vert clair de la palette qui s'estompe vers le bas.
   boutons 167 px chacun dans le cadre, textes entiers.
 - Survol de « Maison & Jardin » : rayon 16 px / 16 px, fond `linear-gradient(rgb(228, 243, 238) 0%,
   rgb(255, 255, 255) 100%)`. Captures avant/après dans le dossier de preuves.
+
+## 50. Console admin : défilement de la colonne de navigation bloqué par intermittence — 17 septembre 2026
+
+Demande (capture) : en faisant défiler la colonne de gauche de la console, le bas (« Retour au site public »,
+compte connecté, « Se déconnecter ») n'était parfois plus atteignable. Reproduire selon la hauteur de
+fenêtre, le zoom et la page, trouver la cause exacte, corriger, prouver sur plusieurs hauteurs.
+
+### Reproduction et cause (pile locale, front 1.25.2, admin du seed)
+
+La colonne mesure 792 px de contenu (marque, 6 groupes, 8 liens, retour, compte, bouton). Elle était
+`position: sticky; top: 0; height: 100vh` **sans `overflow`** : plus haute que la fenêtre, elle débordait
+sous sa boîte de 100vh et restait collée en haut. Le bas ne devenait visible que si la page elle-même
+pouvait être défilée jusqu'au bout (la colonne collante remonte alors avec la fin de son conteneur) :
+
+| Page | Fenêtre | Résultat avant |
+|---|---|---|
+| Tableau de bord (courte) | 900 px | atteignable (colonne 900 ≥ contenu) |
+| Tableau de bord (courte) | 700 px | **bloqué** (bas du bouton à 782 px, page défilable de 116 px seulement) |
+| Tableau de bord (courte) | 600 px | **bloqué** (bas du bouton à 782 px) |
+| Journal d'audit (longue) | 700 / 600 px | atteignable seulement après avoir défilé la page jusqu'en bas |
+| Toute page, zoom 150 % | 900 px | **bloqué** (fenêtre utile de 600 px) |
+
+D'où l'intermittence : ça dépendait de la hauteur de la fenêtre, du zoom (qui réduit la hauteur utile)
+et de la longueur de la page courante, pas d'un défaut aléatoire.
+
+### Correction (1.25.3)
+
+`.admin-side` devient son propre conteneur de défilement : `overflow-y: auto`, `height: 100dvh` (avec
+repli `100vh`), `overscroll-behavior: contain`, barre fine assortie au fond sombre ; ses enfants ne
+rétrécissent pas (`flex-shrink: 0`) pour que le pied garde sa hauteur. Sur mobile (≤ 900 px) le bandeau
+horizontal existant est inchangé.
+
+### Vérification
+
+- Même script après correction, front 1.25.3 : page courte et page longue, fenêtres de **900, 700, 600 et
+  500 px** : la colonne défile (scrollTop 110 / 210 / 310), bas du bouton « Se déconnecter » à 672 / 572 /
+  472 px, toujours dans la fenêtre → atteignable dans les 8 cas (captures à 600 et 500 px). Le zoom
+  navigateur équivaut à une fenêtre plus basse (150 % à 900 px = 600 px utiles), couvert par ces cas.
+- Test `21-admin-droits` ajouté : à 900, 700 et 600 px, sur `/admin` et `/admin/journal`, molette sur la
+  colonne puis « Se déconnecter » et « Retour au site public » entièrement dans la fenêtre, `overflow-y`
+  = `auto`. Spécifications admin 06, 09, 21 : 8 réussis ; CI verte sur `da01fca`.
+- Production : API **1.25.3**, feuille de style de la console déployée avec la règle
+  `.admin-side{…height:100dvh;…position:sticky;top:0;overflow-y:auto}` (lue sur www.trocoin.fr/admin).
+  Aucun identifiant admin de production n'étant disponible, la preuve fonctionnelle est celle de la pile
+  locale sur le même code.
