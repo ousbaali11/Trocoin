@@ -2358,3 +2358,5 @@ Vérification : `e2e/22-confirmer-email.spec.ts` (2 scénarios : connecté → m
 refus temporaire d'une minute après l'e-mail d'inscription, bouton en attente ; anonyme → message + connexion
 puis retour sur la page avec le bouton) ; captures : anonyme (message + bouton de connexion), connecté
 (message + bouton de renvoi), après renvoi (« E-mail envoyé à … à 17:11 »), lien incomplet après connexion.
+
+Déploiement : CI verte (suite Playwright complète, tests API SQLite et Postgres 16, image Docker, Render), API en **1.23.0** (`/health` ok), front Vercel à jour : `/confirmer-email?token=invalide` en production affiche le nouveau message et le bouton de connexion (capture). Aucun compte de test créé en production.
