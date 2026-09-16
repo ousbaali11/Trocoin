@@ -114,11 +114,11 @@ export class BoxtalShippingProvider implements IShippingProvider {
 
   // ------------------------------------------------------------------ v3 : jeton et appels
 
-  private async bearer(): Promise<string> {
-    if (this.token && this.token.expiresAt > Date.now() + 60_000) return this.token.value;
+  private async bearer(base = this.v3Base): Promise<string> {
+    if (base === this.v3Base && this.token && this.token.expiresAt > Date.now() + 60_000) return this.token.value;
     let res: Response;
     try {
-      res = await fetch(`${this.v3Base}/iam/account-app/token`, {
+      res = await fetch(`${base}/iam/account-app/token`, {
         method: 'POST',
         headers: { Authorization: `Basic ${Buffer.from(`${this.accessKey}:${this.secretKey}`).toString('base64')}`, Accept: 'application/json' },
       });
@@ -130,15 +130,15 @@ export class BoxtalShippingProvider implements IShippingProvider {
       const code = res.status === 401 || res.status === 403 ? 'non_configure' : 'transporteur_indisponible';
       throw new ShippingProviderError('boxtal', code, `jeton v3 refusé (HTTP ${res.status}${body.message ? ' ' + body.message : ''}) — vérifier BOXTAL_V3_ACCESS_KEY / BOXTAL_V3_SECRET_KEY et BOXTAL_ENV`);
     }
-    this.token = { value: body.accessToken, expiresAt: Date.now() + (body.expiresIn ?? 300) * 1000 };
+    if (base === this.v3Base) this.token = { value: body.accessToken, expiresAt: Date.now() + (body.expiresIn ?? 300) * 1000 };
     return body.accessToken;
   }
 
-  private async v3<T>(method: string, path: string, body?: unknown, raw = false): Promise<{ status: number; data: T; text: string }> {
-    const token = await this.bearer();
+  private async v3<T>(method: string, path: string, body?: unknown, raw = false, base = this.v3Base): Promise<{ status: number; data: T; text: string }> {
+    const token = await this.bearer(base);
     let res: Response;
     try {
-      res = await fetch(`${this.v3Base}${path}`, {
+      res = await fetch(`${base}${path}`, {
         method,
         headers: { Authorization: `Bearer ${token}`, Accept: raw ? '*/*' : 'application/json', ...(body ? { 'Content-Type': 'application/json' } : {}) },
         body: body ? JSON.stringify(body) : undefined,
@@ -173,12 +173,12 @@ export class BoxtalShippingProvider implements IShippingProvider {
 
   // ------------------------------------------------------------------ v1 : cotation
 
-  private async v1Cotation(params: Record<string, string>): Promise<string> {
+  private async v1Cotation(params: Record<string, string>, base = this.v1Base): Promise<string> {
     // La cotation se lit en GET (la bibliothèque officielle construit server + action + '?' + query ; POST répond 405)
     const query = new URLSearchParams({ ...params, platform: 'trocoin', platform_version: '1', module_version: '1' });
     const attempt = async (authHeader: string) => {
       try {
-        return await fetch(`${this.v1Base}/api/v1/cotation?${query.toString()}`, {
+        return await fetch(`${base}/api/v1/cotation?${query.toString()}`, {
           method: 'GET',
           headers: { Authorization: authHeader, 'Api-Version': '1.3.7', 'Accept-Language': 'fr-FR', Accept: 'application/xml' },
         });
@@ -201,7 +201,7 @@ export class BoxtalShippingProvider implements IShippingProvider {
   }
 
   /** Offres brutes de la cotation v1 (toutes), utilisées par quote() et par le diagnostic. */
-  async rawQuote(input: QuoteInput & { fromCity?: string; toCity?: string }): Promise<Array<ShippingRate & { operatorCode: string; operatorLabel: string; serviceCode: string; serviceLabel: string; deliveryType: string; carrier: ShippingCarrier | null }>> {
+  async rawQuote(input: QuoteInput & { fromCity?: string; toCity?: string }, v1Base = this.v1Base): Promise<Array<ShippingRate & { operatorCode: string; operatorLabel: string; serviceCode: string; serviceLabel: string; deliveryType: string; carrier: ShippingCarrier | null }>> {
     const today = new Date().toISOString().slice(0, 10);
     const xml = await this.v1Cotation({
       'shipper.pays': 'FR',
@@ -219,7 +219,7 @@ export class BoxtalShippingProvider implements IShippingProvider {
       code_contenu: this.contentCode,
       collecte: today,
       delai: 'aucun',
-    });
+    }, v1Base);
     return xmlBlocks(xml, 'offer').map((offer) => {
       const operatorCode = xmlText(offer, 'operator/code');
       const operatorLabel = xmlText(offer, 'operator/label');
@@ -271,9 +271,9 @@ export class BoxtalShippingProvider implements IShippingProvider {
 
   // ------------------------------------------------------------------ v3 : points relais, étiquette, suivi
 
-  async searchRelayPoints(carrier: ShippingCarrier, postalCode: string, city?: string): Promise<RelayPoint[]> {
+  async searchRelayPoints(carrier: ShippingCarrier, postalCode: string, city?: string, v3Base = this.v3Base): Promise<RelayPoint[]> {
     const qs = new URLSearchParams({ countryIsoCode: 'FR', postalCode, ...(city ? { city } : {}) });
-    const r = await this.v3<{ content?: Array<{ parcelPoint?: { code?: string; name?: string; network?: unknown; location?: { number?: string; street?: string; postalCode?: string; city?: string }; openingDays?: unknown }; distanceFromSearchLocation?: number }> }>('GET', `/shipping/v3.1/parcel-point?${qs}`);
+    const r = await this.v3<{ content?: Array<{ parcelPoint?: { code?: string; name?: string; network?: unknown; location?: { number?: string; street?: string; postalCode?: string; city?: string }; openingDays?: unknown }; distanceFromSearchLocation?: number }> }>('GET', `/shipping/v3.1/parcel-point?${qs}`, undefined, false, v3Base);
     if (r.status >= 400) throw this.v3Error(r.status, r.text, 'transporteur_indisponible');
     const all = (r.data?.content || []).map((p) => {
       const pp = p.parcelPoint || {};
@@ -447,6 +447,20 @@ export class BoxtalShippingProvider implements IShippingProvider {
             }
           }
         }
+        // Même chose pour la cotation v1 : hôte de test et hôte de production, en-tête avec et sans « Basic »
+        const q = new URLSearchParams({ 'shipper.pays': 'FR', 'shipper.code_postal': '69003', 'shipper.ville': 'Lyon', 'shipper.type': 'individual', 'recipient.pays': 'FR', 'recipient.code_postal': '75017', 'recipient.ville': 'Paris', 'recipient.type': 'individual', 'colis_1.poids': '0.9', 'colis_1.longueur': '30', 'colis_1.largeur': '20', 'colis_1.hauteur': '10', code_contenu: this.contentCode, collecte: new Date().toISOString().slice(0, 10), delai: 'aucun' });
+        const cred = Buffer.from(`${this.v1Login}:${this.v1Password}`).toString('base64');
+        for (const [host, base] of Object.entries(V1)) {
+          for (const [label, header] of [['Basic', `Basic ${cred}`], ['nu', cred]] as const) {
+            try {
+              const r = await fetch(`${base}/api/v1/cotation?${q}`, { headers: { Authorization: header, 'Api-Version': '1.3.7', 'Accept-Language': 'fr-FR', Accept: 'application/xml' } });
+              const t = await r.text();
+              tries[`v1 ${host} ${label}`] = `${r.status}${r.ok ? ' ' + xmlBlocks(t, 'offer').length + ' offre(s)' : ' ' + (xmlText(t, 'error_description') || xmlText(t, 'error/message') || '').slice(0, 80)}`;
+            } catch (err) {
+              tries[`v1 ${host} ${label}`] = (err as Error).message;
+            }
+          }
+        }
         tries['longueur cle acces'] = this.accessKey.length;
         tries['longueur cle secrete'] = this.secretKey.length;
         return tries;
@@ -459,6 +473,19 @@ export class BoxtalShippingProvider implements IShippingProvider {
       return offers.map((o) => ({ operateur: `${o.operatorCode} ${o.operatorLabel}`, service: `${o.serviceCode} ${o.serviceLabel}`, livraison: o.deliveryType, transporteur: o.carrier, mode: o.mode, prixTtcCents: o.priceCents, codeOffre: o.offerCode }));
     });
     await step('points_relais_v3', async () => (await this.searchRelayPoints('mondial_relay', '75017', 'Paris')).slice(0, 3));
+    if (!(out.jeton_v3 as { ok: boolean }).ok && this.env === 'sandbox') {
+      // Les clés ne sont pas acceptées par le sandbox : lectures sans effet (cotation, points relais) sur l'hôte de
+      // production pour valider les formats d'échange. Aucune commande n'est jamais passée hors sandbox ici.
+      await step('lecture_seule_production', async () => {
+        const offers = await this.rawQuote({ carrier: 'colissimo', parcel, fromPostalCode: '69003', toPostalCode: '75017', fromCity: 'Lyon', toCity: 'Paris' }, V1.production).catch((e) => ({ erreur: e instanceof ShippingProviderError ? { code: e.code, reason: e.reason } : String((e as Error).message) }));
+        const points = await this.searchRelayPoints('mondial_relay', '75017', 'Paris', V3.production).catch((e) => ({ erreur: e instanceof ShippingProviderError ? { code: e.code, reason: e.reason } : String((e as Error).message) }));
+        return {
+          avertissement: 'clés acceptées par api.boxtal.com et non par api.boxtal.build : les applications ont été créées dans le compte de production ; aucune étiquette ne sera achetée tant que BOXTAL_ENV=sandbox',
+          cotation: Array.isArray(offers) ? offers.map((o) => ({ operateur: `${o.operatorCode} ${o.operatorLabel}`, service: `${o.serviceCode} ${o.serviceLabel}`, livraison: o.deliveryType, transporteur: o.carrier, mode: o.mode, prixTtcCents: o.priceCents, codeOffre: o.offerCode })) : offers,
+          pointsRelais: Array.isArray(points) ? points.slice(0, 3) : points,
+        };
+      });
+    }
     if (withLabel) {
       const candidate = offers.find((o) => o.carrier && o.mode === 'domicile' && o.priceCents) || offers.find((o) => o.carrier && o.priceCents);
       await step('etiquette_v3', async () => {
