@@ -218,6 +218,39 @@ compte Boxtal ordinaire (production). Le bac à sable Boxtal est un **compte à 
 l'hôte de production : les formats d'échange sont validés par les lectures ci-dessus, l'achat de test
 attend des clés de bac à sable.
 
+### Deuxième test réel (compte sandbox `shipping.boxtal.build`, 16 septembre 2026, 12 h 33)
+
+Clés d'un compte ouvert sur `shipping.boxtal.build` (Render : `BOXTAL_ENV=sandbox`, `SHIPPING_PROVIDER=boxtal`).
+`GET https://api.trocoin.fr/shipping/diagnostic?label=1` :
+
+| Étape | Hôte | Résultat |
+|---|---|---|
+| Jeton v3 (clé d'accès : clé secrète) | `api.boxtal.build` | **200**, jeton obtenu |
+| Cotation v1 (identifiant + mot de passe) | `test.envoimoinscher.com` | **200, 23 offres** (Mondial Relay relais 5,02 €, Colissimo relais 7,86 €, Mondial Relay domicile 9,72 €, Colissimo Access 9,73 €…) |
+| Points relais v3 | `api.boxtal.build` | **200**, lockers réels autour de 75017 (370–490 m) |
+| Sonde des codes d'offre (`GET /shipping/v3.2/parcel-point-by-shipping-offer`) | `api.boxtal.build` | `MONR_DomicileFrance` → **400 ValidationException.ValidShippingOfferCode** ; `MONR-DomicileFrance` → **200** (idem pour POFR-ColissimoAccess, POFR-ColissimoPickupStation, MONR-CpourToi) |
+| Commande d'expédition (`POST /shipping/v3.1/shipping-order`) | `api.boxtal.build` | **201** avec `MONR-DomicileFrance` : commande `2609161233MONR50HZFR`, 9,72 € TTC |
+| Étiquette (`GET …/shipping-document`) | `api.boxtal.build` | **PDF de 3 508 octets** (« Test Carrier / Test Service », code-barres 2609161233MONR50HZFR, expéditeur Lyon → destinataire Paris) |
+| Suivi (`GET …/tracking`) | `api.boxtal.build` | état « étiquette créée », aucun évènement |
+| Annulation (`DELETE …/shipping-order/{id}`) | `api.boxtal.build` | **annulée** (rien ne reste dans le compte sandbox) |
+| Listage des offres (`GET/POST /shipping/v3.x/shipping-offer`, `/contract`) | `api.boxtal.build` | 404 : l'API v3 n'expose pas les offres du compte ; elles se lisent dans le portail développeur |
+
+**Cause de l'échec du premier essai (12 h 09) et correction** : la commande v3 était refusée
+(`422 NoShippingOfferException`) parce que Trocoin construisait le code d'offre v3 à partir de la
+cotation v1 avec un tiret bas (`MONR_DomicileFrance`, forme `opérateur_service` de l'API v1),
+alors que l'API v3 attend `OPÉRATEUR-Service` avec un tiret (`MONR-DomicileFrance`). Le code dérivé
+utilise maintenant le tiret (`rawQuote`, `boxtal-shipping.provider.ts`) ; les variables
+`BOXTAL_OFFER_*` restent prioritaires si elles sont renseignées. La sonde en lecture seule et les
+essais successifs de codes font désormais partie de la route de diagnostic.
+
+**Parcours utilisateur réel (vendeur → étiquette → acheteur)** : préparé en production le 16
+septembre 2026 (deux comptes de test, annonce livrable « Enceinte Bluetooth JBL Flip 6 (test
+étiquette) », achat Colissimo avec adresse de livraison, transaction `5b87cd20…` en attente de
+paiement). Le paiement passe par Stripe Checkout en mode test : la saisie d'une carte (même de test)
+n'est pas faite par l'assistant ; une fois la transaction payée, le panneau « Étiquette d'envoi »
+du vendeur achète l'étiquette sur le sandbox Boxtal et l'acheteur voit le suivi. Le parcours
+lui-même est couvert par `e2e/17-expedition.spec.ts` (fournisseur simulé, mêmes écrans).
+
 ### À faire côté utilisateur pour finir le test d'achat
 
 1. Créer un compte de test sur `shipping.boxtal.build` (distinct du compte boxtal.com).

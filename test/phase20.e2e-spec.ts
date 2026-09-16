@@ -79,8 +79,8 @@ describe('Boxtal (faux serveur) : cotation v1, étiquette v3, erreurs', () => {
   it('cotation : offres du transporteur demandé, une par mode, prix TTC en centimes, code d\'offre configuré ou dérivé', async () => {
     const colissimo = await provider.quote({ carrier: 'colissimo', parcel: { weightGrams: 900 }, fromPostalCode: '69003', toPostalCode: '75017', fromCity: 'Lyon', toCity: 'Paris' });
     expect(colissimo.map((r) => [r.mode, r.priceCents, r.offerCode])).toEqual([
-      ['point_relais', 735, 'POFR_ColissimoPickup'],
-      ['domicile', 890, 'POFR_ColissimoAccess'],
+      ['point_relais', 735, 'POFR-ColissimoPickup'],
+      ['domicile', 890, 'POFR-ColissimoAccess'],
     ]);
     const mr = await provider.quote({ carrier: 'mondial_relay', parcel: { weightGrams: 900 }, fromPostalCode: '69003', toPostalCode: '75017' });
     expect(mr).toEqual([expect.objectContaining({ mode: 'point_relais', priceCents: 549, offerCode: 'MONR-RELAIS', label: 'Mondial Relay Point Relais' })]);
@@ -138,7 +138,7 @@ describe('Boxtal (faux serveur) : cotation v1, étiquette v3, erreurs', () => {
     await expect(bad.searchRelayPoints('colissimo', '75017')).rejects.toMatchObject({ code: 'non_configure' });
     await expect(bad.quote({ carrier: 'colissimo', parcel: { weightGrams: 500 }, fromPostalCode: '69003', toPostalCode: '75017' })).rejects.toMatchObject({ code: 'non_configure' });
 
-    const base = { carrier: 'colissimo' as const, mode: 'domicile' as const, offerCode: 'POFR_ColissimoAccess', parcel: { weightGrams: 500 }, sender: { name: 'A B', line1: '1 rue Test', postalCode: '69003', city: 'Lyon', country: 'FR' }, reference: 'tx', contentDescription: 'x', declaredValueCents: 1000 };
+    const base = { carrier: 'colissimo' as const, mode: 'domicile' as const, offerCode: 'POFR-ColissimoAccess', parcel: { weightGrams: 500 }, sender: { name: 'A B', line1: '1 rue Test', postalCode: '69003', city: 'Lyon', country: 'FR' }, reference: 'tx', contentDescription: 'x', declaredValueCents: 1000 };
     await expect(provider.createLabel({ ...base, recipient: { name: 'C D', line1: '2 rue Test', postalCode: '99999', city: 'Nulle part', country: 'FR' } })).rejects.toMatchObject({ code: 'adresse_invalide' });
 
     fake.state.down = true;

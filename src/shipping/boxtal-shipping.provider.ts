@@ -239,7 +239,9 @@ export class BoxtalShippingProvider implements IShippingProvider {
         mode,
         priceCents: Math.round((Number.isFinite(price) ? price : 0) * 100),
         deliveryDays: days,
-        offerCode: configured || `${operatorCode}_${serviceCode}`,
+        // Code d'offre v3 = « OPÉRATEUR-Service » (tiret) : vérifié en sandbox le 16 septembre 2026 (MONR-DomicileFrance
+        // accepté, MONR_DomicileFrance refusé « ValidShippingOfferCode »)
+        offerCode: configured || `${operatorCode}-${serviceCode}`,
         label: `${operatorLabel || CARRIER_LABEL[carrier || 'colissimo']} ${serviceLabel || ''}`.trim(),
         operatorCode,
         operatorLabel,

@@ -1898,3 +1898,29 @@ Ligne sous chaque annonce publiée (pas sur les brouillons) : **vues · favoris 
   comptées par affichage réel, donc plus basses à trafic égal.
 
 Déploiement : CI verte (migration `TelephoneEtStatistiques` jouée par le job Postgres 16, puis Render), API en **1.16.0** (`/health`) avec `POST /listings/:id/view` (200) et `POST /listings/:id/phone` / `GET /listings/mine` réservés aux membres (401), front Vercel servant la ligne de statistiques de « Mes annonces », vérifiés le 16 septembre 2026.
+
+## 36. Test réel d'achat d'étiquette sur le sandbox Boxtal — 16 septembre 2026
+
+Clés d'un compte `shipping.boxtal.build` sur Render (`BOXTAL_ENV=sandbox`, `SHIPPING_PROVIDER=boxtal`).
+Détail, tableau par étape et cause de l'échec initial : `docs/etiquettes-transporteur.md` §8
+« Deuxième test réel ».
+
+- **Hôte de test confirmé** : jeton v3 sur `api.boxtal.build` (200), cotation v1 sur
+  `test.envoimoinscher.com` (200, 23 offres), points relais v3 (200). Plus aucun appel n'est
+  nécessaire sur l'hôte de production.
+- **Premier essai d'étiquette refusé** (`422 NoShippingOfferException`) : le code d'offre v3 dérivé de
+  la cotation v1 utilisait un tiret bas (`MONR_DomicileFrance`) ; l'API v3 attend un tiret
+  (`MONR-DomicileFrance`). Diagnostic étendu (sonde en lecture seule des codes via
+  `parcel-point-by-shipping-offer`, essais successifs, PDF renvoyé en base64) et **correction** du
+  code dérivé (`OPÉRATEUR-Service`). Les codes `BOXTAL_OFFER_*` restent prioritaires.
+- **Achat de test complet réussi** : commande `2609161233MONR50HZFR` (Mondial Relay domicile,
+  9,72 € TTC sandbox), PDF de 3 508 octets (« Test Carrier / Test Service », code-barres), suivi
+  « étiquette créée », **commande annulée** dans la foulée. Preuves : `diagnostic-sandbox-resultat.json`,
+  `etiquette-test-sandbox.pdf`.
+- **Parcours utilisateur réel** : préparé en production (comptes de test vendeur / acheteur sur
+  `ousbaali11+vendeur-…@gmail.com` / `+acheteur-…`, annonce livrable, achat Colissimo avec adresse de
+  livraison). Bloqué au paiement : Stripe Checkout (mode test) exige la saisie d'une carte, que
+  l'assistant ne fait pas. Une fois la transaction `5b87cd20…` payée, le panneau du vendeur achète
+  l'étiquette sur le sandbox et l'acheteur voit le suivi ; les comptes de test seront supprimés
+  après ce dernier passage. Le parcours est couvert par `e2e/17-expedition.spec.ts` (simulé).
+- Tests : `npm test` phase 20 adapté aux codes à tiret ; CI verte.
