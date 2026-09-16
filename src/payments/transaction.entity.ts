@@ -101,6 +101,32 @@ export class Transaction {
   @Column({ type: DATE_TYPE, nullable: true })
   resolvedAt?: Date;
 
+  // ----- Échéances du séquestre (AUDIT §37) : une autorisation de carte non capturée expire (7 jours
+  // en ligne, 5 pour Visa initiée par le marchand, 30 seulement avec une autorisation prolongée). -----
+  /** Autorisation obtenue = entrée en séquestre. */
+  @Column({ type: DATE_TYPE, nullable: true })
+  paidAt?: Date;
+
+  /** Date limite de capture donnée par le fournisseur (Stripe : `capture_before` du paiement) ou estimée prudemment. */
+  @Column({ type: DATE_TYPE, nullable: true })
+  captureBefore?: Date;
+
+  /** Réception présumée : date à laquelle la réception sera considérée acquise sans action de l'acheteur (annoncée à l'avance). */
+  @Column({ type: DATE_TYPE, nullable: true })
+  autoConfirmAt?: Date;
+
+  /** Rappels d'échéance déjà envoyés : 0 aucun, 1 rappel, 2 dernier avis (24 h avant l'action automatique). */
+  @Column({ default: 0 })
+  escrowStage: number;
+
+  /** Action automatique appliquée : reception_presumee, capture_echeance, annulation_echeance. */
+  @Column({ nullable: true })
+  autoResolution?: string;
+
+  /** Après une capture automatique, l'acheteur peut encore ouvrir un litige jusqu'à cette date. */
+  @Column({ type: DATE_TYPE, nullable: true })
+  disputeAllowedUntil?: Date;
+
   @CreateDateColumn({ type: DATE_TYPE })
   createdAt: Date;
 

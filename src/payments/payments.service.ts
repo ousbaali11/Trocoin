@@ -39,6 +39,26 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 /** Une page de paiement hébergée commencée depuis moins longtemps que cela bloque l'annonce (double vente). */
 const PENDING_TTL_MS = CHECKOUT_TTL_MINUTES * 60_000;
 
+// ----- Échéances du séquestre (AUDIT §37) -----
+const DAY_MS = 86_400_000;
+const HOUR_MS = 3_600_000;
+const envNum = (name: string, fallback: number) => {
+  const v = Number(process.env[name]);
+  return Number.isFinite(v) && v > 0 ? v : fallback;
+};
+/** Validité supposée d'une autorisation quand le fournisseur ne la donne pas (5 jours = fenêtre la plus courte, Visa initiée par le marchand). */
+export const ESCROW_DEFAULT_AUTH_DAYS = envNum('ESCROW_DEFAULT_AUTH_DAYS', 5);
+/** Marge avant la date limite de capture : l'action automatique a lieu ce nombre d'heures avant l'expiration. */
+export const ESCROW_SAFETY_HOURS = envNum('ESCROW_SAFETY_HOURS', 24);
+/** Réception présumée : jours après l'expédition sans confirmation ni litige (plafonné par la date limite de capture). */
+export const ESCROW_AUTO_CONFIRM_DAYS = envNum('ESCROW_AUTO_CONFIRM_DAYS', 4);
+/** Après une capture automatique, l'acheteur garde ce nombre de jours pour ouvrir un litige. */
+export const ESCROW_DISPUTE_WINDOW_DAYS = envNum('ESCROW_DISPUTE_WINDOW_DAYS', 7);
+/** Seuil du filet de sécurité admin : transactions non résolues dont la date limite est à moins de N heures. */
+export const ESCROW_ADMIN_ALERT_HOURS = envNum('ESCROW_ADMIN_ALERT_HOURS', 48);
+
+const frDate = (d: Date) => new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' }).format(d);
+
 export function computeQuote(price: number) {
   const commission = round2(price * COMMISSION_RATE);
   const buyerFee = round2(Math.min(price * BUYER_FEE_RATE + BUYER_FEE_FIXED, BUYER_FEE_CAP));
@@ -175,11 +195,144 @@ export class PaymentsService {
     }
 
     const intent = await this.paymentProvider.createPaymentIntent({ amountEuros: q.buyerTotal, applicationFeeEuros, sellerConnectedAccountId, metadata });
-    const transaction = await this.transactionsRepo.save(
-      this.transactionsRepo.create({ ...base, status: 'sequestre', providerPaymentId: intent.providerPaymentId }),
-    );
+    const fresh = this.transactionsRepo.create({ ...base, status: 'sequestre', providerPaymentId: intent.providerPaymentId });
+    this.enterEscrow(fresh, intent.captureBefore);
+    const transaction = await this.transactionsRepo.save(fresh);
     await this.notifySellerPaid(transaction, listing.title);
     return { transaction: this.viewFor(transaction, buyerId), clientSecret: intent.clientSecret, quote: q };
+  }
+
+  /**
+   * Entrée en séquestre : date d'autorisation et date limite de capture. Sans date donnée par le
+   * fournisseur, on retient la fenêtre la plus courte connue (ESCROW_DEFAULT_AUTH_DAYS) plutôt que la
+   * plus longue : mieux vaut agir un peu tôt que laisser l'autorisation expirer.
+   */
+  private enterEscrow(tx: Transaction, captureBefore?: Date) {
+    tx.paidAt = new Date();
+    tx.captureBefore = captureBefore ?? new Date(tx.paidAt.getTime() + ESCROW_DEFAULT_AUTH_DAYS * DAY_MS);
+    tx.escrowStage = 0;
+  }
+
+  /** Dernier instant où une action automatique doit avoir eu lieu (marge avant l'expiration de l'autorisation). */
+  private escrowDeadline(tx: Transaction): Date {
+    const before = tx.captureBefore ? new Date(tx.captureBefore) : new Date(new Date(tx.paidAt ?? tx.createdAt).getTime() + ESCROW_DEFAULT_AUTH_DAYS * DAY_MS);
+    return new Date(before.getTime() - ESCROW_SAFETY_HOURS * HOUR_MS);
+  }
+
+  /** Capture (versement au vendeur) après action automatique : statut confirmé, fenêtre de litige ouverte pour l'acheteur. */
+  private async captureAutomatically(tx: Transaction, reason: 'reception_presumee' | 'capture_echeance', note: string) {
+    await this.paymentProvider.capture(tx.providerPaymentId!);
+    if (tx.status !== 'litige') tx.status = 'confirme';
+    tx.confirmedAt = new Date();
+    tx.autoResolution = reason;
+    tx.resolutionNote = note;
+    tx.disputeAllowedUntil = new Date(Date.now() + ESCROW_DISPUTE_WINDOW_DAYS * DAY_MS);
+    await this.transactionsRepo.save(tx);
+    if (tx.status === 'confirme') await this.listingsRepo.update({ id: tx.listingId, status: In(['en_ligne', 'expiree']) }, { status: 'vendue' });
+  }
+
+  /**
+   * Tâche périodique des échéances du séquestre (toutes les 15 minutes) : rappels, réception présumée,
+   * puis, avant l'expiration de l'autorisation, une action par défaut pour qu'aucune transaction ne reste
+   * bloquée : capture si l'article a été expédié (ou en litige, pour préserver les fonds jusqu'à la décision),
+   * annulation avec remboursement s'il n'a pas été expédié ou remis. Idempotente (escrowStage).
+   */
+  @Cron('*/15 * * * *')
+  async runEscrowSchedule(now: Date = new Date()): Promise<{ reminders: number; notices: number; confirmed: number; captured: number; cancelled: number }> {
+    const result = { reminders: 0, notices: 0, confirmed: 0, captured: 0, cancelled: 0 };
+    const open = await this.transactionsRepo.find({ where: { status: In(['sequestre', 'livree', 'litige']) }, take: 500 });
+    for (const tx of open) {
+      try {
+        if (!tx.captureBefore) {
+          // Transaction antérieure à ce mécanisme : date limite estimée depuis l'autorisation
+          this.enterEscrow(tx, new Date(new Date(tx.paidAt ?? tx.createdAt).getTime() + ESCROW_DEFAULT_AUTH_DAYS * DAY_MS));
+          tx.paidAt = tx.paidAt ?? tx.createdAt;
+          await this.transactionsRepo.save(tx);
+        }
+        const deadline = this.escrowDeadline(tx);
+        const listing = await this.listingsRepo.findOne({ where: { id: tx.listingId } });
+        const title = listing?.title ?? 'votre transaction';
+        const link = `/compte/transactions/${tx.id}`;
+
+        // 1. Réception présumée (article expédié, aucun litige) : rappel 48 h avant, dernier avis 24 h avant, puis confirmation
+        if (tx.status === 'livree' && tx.deliveryMethod !== 'main_propre') {
+          const autoAt = tx.autoConfirmAt ? new Date(tx.autoConfirmAt) : deadline;
+          if (now >= autoAt) {
+            await this.captureAutomatically(tx, 'reception_presumee', `Réception présumée le ${frDate(now)} : aucune confirmation ni litige depuis l'expédition`);
+            result.confirmed += 1;
+            await this.notifications.notify(tx.buyerId, { type: 'transaction', title: 'Réception considérée acquise', body: `Sans nouvelle de votre part, la réception de « ${title} » est considérée acquise et le vendeur est payé. Un problème ? Vous pouvez encore ouvrir un litige jusqu'au ${frDate(tx.disputeAllowedUntil!)}.`, link });
+            await this.notifications.notify(tx.sellerId, { type: 'transaction', title: 'Vente confirmée', body: `Réception présumée de « ${title} » : les fonds vous sont versés.`, link });
+            continue;
+          }
+          if (tx.escrowStage < 2 && now >= new Date(autoAt.getTime() - 24 * HOUR_MS)) {
+            tx.escrowStage = 2;
+            await this.transactionsRepo.save(tx);
+            result.notices += 1;
+            await this.notifications.notify(tx.buyerId, { type: 'transaction', title: 'Dernier rappel : confirmez la réception', body: `Sans action de votre part, la réception de « ${title} » sera considérée acquise le ${frDate(autoAt)} et le vendeur sera payé. Confirmez la réception ou signalez un problème avant cette date.`, link });
+            continue;
+          }
+          if (tx.escrowStage < 1 && now >= new Date(autoAt.getTime() - 48 * HOUR_MS)) {
+            tx.escrowStage = 1;
+            await this.transactionsRepo.save(tx);
+            result.reminders += 1;
+            await this.notifications.notify(tx.buyerId, { type: 'transaction', title: 'Avez-vous bien reçu votre colis ?', body: `Confirmez la réception de « ${title} » ou signalez un problème avant le ${frDate(autoAt)} : passé cette date, la réception sera considérée acquise.`, link });
+          }
+          continue;
+        }
+
+        // 2. Échéance de l'autorisation : action par défaut, précédée de rappels 48 h et 24 h avant
+        if (now >= deadline) {
+          if (tx.status === 'litige' || tx.status === 'livree') {
+            // Fonds préservés : capturés avant expiration (en litige, la décision remboursera l'acheteur si besoin)
+            await this.captureAutomatically(tx, 'capture_echeance', `Fonds capturés le ${frDate(now)} avant l'expiration de l'autorisation bancaire`);
+            result.captured += 1;
+            const body = tx.status === 'litige'
+              ? `Pour que l'argent ne soit pas perdu par l'expiration de l'autorisation bancaire, le paiement de « ${title} » a été encaissé par Trocoin. Il reste bloqué jusqu'à la décision du médiateur (remboursement ou versement au vendeur).`
+              : `Le paiement de « ${title} » a été encaissé avant l'expiration de l'autorisation bancaire et versé au vendeur. Un problème ? Vous pouvez ouvrir un litige jusqu'au ${frDate(tx.disputeAllowedUntil!)}.`;
+            for (const uid of [tx.buyerId, tx.sellerId]) await this.notifications.notify(uid, { type: 'transaction', title: tx.status === 'litige' ? 'Fonds mis en sécurité' : 'Paiement encaissé', body, link });
+          } else {
+            // Ni expédié ni remis avant l'échéance : l'acheteur récupère son argent, l'annonce reste en ligne
+            await this.paymentProvider.refund(tx.providerPaymentId!);
+            tx.status = 'annulee';
+            tx.resolvedAt = now;
+            tx.autoResolution = 'annulation_echeance';
+            tx.resolutionNote = tx.deliveryMethod === 'main_propre' ? 'Remise non confirmée avant l\'échéance : vente annulée, acheteur remboursé' : 'Article non expédié avant l\'échéance : vente annulée, acheteur remboursé';
+            await this.transactionsRepo.save(tx);
+            result.cancelled += 1;
+            await this.notifications.notify(tx.buyerId, { type: 'transaction', title: 'Achat annulé, remboursement intégral', body: `« ${title} » n'a pas été ${tx.deliveryMethod === 'main_propre' ? 'remis' : 'expédié'} dans le délai : votre paiement est libéré. L'annonce reste disponible si vous souhaitez racheter.`, link });
+            await this.notifications.notify(tx.sellerId, { type: 'transaction', title: 'Vente annulée (délai dépassé)', body: `« ${title} » n'a pas été ${tx.deliveryMethod === 'main_propre' ? 'remis (code non saisi)' : 'expédié'} avant l'échéance du paiement : l'acheteur est remboursé, votre annonce reste en ligne.`, link });
+          }
+          continue;
+        }
+        if (tx.status === 'litige') continue; // le médiateur est déjà saisi : pas de rappel automatique
+        const stageTargets: Array<{ stage: number; at: Date }> = [{ stage: 1, at: new Date(deadline.getTime() - 48 * HOUR_MS) }, { stage: 2, at: new Date(deadline.getTime() - 24 * HOUR_MS) }];
+        for (const { stage, at } of stageTargets) {
+          if (tx.escrowStage >= stage || now < at) continue;
+          tx.escrowStage = stage;
+          await this.transactionsRepo.save(tx);
+          if (stage === 1) result.reminders += 1; else result.notices += 1;
+          const when = frDate(deadline);
+          if (tx.deliveryMethod === 'main_propre') {
+            await this.notifications.notify(tx.sellerId, { type: 'transaction', title: stage === 1 ? 'Remise à faire avant le ' + when : 'Dernier rappel : remise avant le ' + when, body: `Saisissez le code de remise de « ${title} » avant le ${when}. Sans remise confirmée, la vente sera annulée et l'acheteur remboursé.`, link });
+            await this.notifications.notify(tx.buyerId, { type: 'transaction', title: stage === 1 ? 'Rendez-vous à organiser' : 'Dernier rappel : remise avant le ' + when, body: `Convenez de la remise de « ${title} » avant le ${when} : sans code saisi par le vendeur (ou confirmation de votre part), votre paiement sera libéré et l'achat annulé.`, link });
+          } else {
+            await this.notifications.notify(tx.sellerId, { type: 'transaction', title: stage === 1 ? 'Expédiez avant le ' + when : 'Dernier rappel : expédiez avant le ' + when, body: `« ${title} » doit être expédié (numéro de suivi ou étiquette) avant le ${when}. Sans expédition, la vente sera annulée et l'acheteur remboursé.`, link });
+          }
+        }
+      } catch (e) {
+        this.logger.error(`Échéance du séquestre ${tx.id} : ${(e as Error).message}`);
+      }
+    }
+    if (result.confirmed || result.captured || result.cancelled) this.logger.log(`Échéances du séquestre : ${JSON.stringify(result)}`);
+    return result;
+  }
+
+  /** Filet de sécurité admin : transactions non résolues dont la date limite de capture approche. */
+  async escrowDueSoon(now: Date = new Date()): Promise<Transaction[]> {
+    const limit = new Date(now.getTime() + ESCROW_ADMIN_ALERT_HOURS * HOUR_MS);
+    const items = await this.transactionsRepo.find({ where: { status: In(['sequestre', 'livree', 'litige']), captureBefore: LessThan(limit) }, order: { captureBefore: 'ASC' }, take: 100 });
+    for (const tx of items) this.logger.warn(`Séquestre à échéance : transaction ${tx.id} (${tx.status}) capture avant ${tx.captureBefore?.toISOString()}`);
+    return items;
   }
 
   private async notifySellerPaid(tx: Transaction, title?: string) {
@@ -211,6 +364,8 @@ export class PaymentsService {
     if (sync.status === 'sequestre') {
       tx.status = 'sequestre';
       if (sync.providerPaymentId) tx.providerPaymentId = sync.providerPaymentId;
+      this.enterEscrow(tx, sync.captureBefore);
+      if (sync.extendedAuthorization) this.logger.log(`Transaction ${tx.id} : autorisation prolongée accordée (capture avant ${tx.captureBefore?.toISOString()})`);
       const saved = await this.transactionsRepo.save(tx);
       await this.notifySellerPaid(saved);
       return { tx: saved };
@@ -333,11 +488,19 @@ export class PaymentsService {
     tx.deliveryTrackingNumber = tracking;
     await this.shipments.update({ transactionId: tx.id, status: 'etiquette_prete' }, { status: 'expediee' });
     tx.shippedAt = new Date();
+    if (tx.deliveryMethod !== 'main_propre') {
+      // Réception présumée : N jours après l'expédition, jamais après la marge de sécurité de l'autorisation
+      const wanted = tx.shippedAt.getTime() + ESCROW_AUTO_CONFIRM_DAYS * DAY_MS;
+      tx.autoConfirmAt = new Date(Math.min(wanted, this.escrowDeadline(tx).getTime()));
+      tx.escrowStage = 0; // les rappels repartent sur la nouvelle échéance (réception)
+    }
     const saved = await this.transactionsRepo.save(tx);
     await this.notifications.notify(tx.buyerId, {
       type: 'transaction',
       title: tx.deliveryMethod === 'main_propre' ? 'Le vendeur est prêt pour la remise' : 'Votre colis est en route',
-      body: tracking ? `Numéro de suivi : ${tracking}` : 'Convenez d\'un rendez-vous et confirmez la réception une fois l\'objet en main.',
+      body: tracking
+        ? `Numéro de suivi : ${tracking}. Confirmez la réception ou signalez un problème avant le ${frDate(saved.autoConfirmAt!)} : passé cette date, la réception sera considérée acquise.`
+        : 'Convenez d\'un rendez-vous et confirmez la réception une fois l\'objet en main.',
       link: `/compte/transactions/${tx.id}`,
     });
     return saved;
@@ -406,7 +569,9 @@ export class PaymentsService {
 
   async openDispute(transactionId: string, userId: string, reason: string): Promise<Transaction> {
     const tx = await this.getOwned(transactionId, userId);
-    if (!['sequestre', 'livree'].includes(tx.status)) {
+    // Après une capture automatique (réception présumée, échéance), l'acheteur garde une fenêtre de litige
+    const postCaptureWindow = tx.status === 'confirme' && !!tx.autoResolution && !!tx.disputeAllowedUntil && new Date(tx.disputeAllowedUntil).getTime() > Date.now() && userId === tx.buyerId;
+    if (!['sequestre', 'livree'].includes(tx.status) && !postCaptureWindow) {
       throw new BadRequestException(`Impossible d'ouvrir un litige sur une transaction "${tx.status}".`);
     }
     tx.status = 'litige';
@@ -431,12 +596,14 @@ export class PaymentsService {
     if (!tx) throw new NotFoundException('Transaction introuvable.');
     if (tx.status !== 'litige') throw new BadRequestException('Cette transaction n\'est pas en litige.');
     if (decision === 'rembourser') {
+      // Autorisation encore ouverte : annulée ; fonds déjà capturés (échéance, réception présumée) : remboursés
       await this.paymentProvider.refund(tx.providerPaymentId!);
       tx.status = 'rembourse';
+      if (tx.confirmedAt) await this.listingsRepo.update({ id: tx.listingId, status: 'vendue' }, { status: 'en_ligne' });
     } else {
-      await this.paymentProvider.capture(tx.providerPaymentId!);
+      if (!tx.confirmedAt) await this.paymentProvider.capture(tx.providerPaymentId!); // déjà capturé si l'échéance est passée
       tx.status = 'confirme';
-      tx.confirmedAt = new Date();
+      tx.confirmedAt = tx.confirmedAt ?? new Date();
       await this.listingsRepo.update({ id: tx.listingId, status: In(['en_ligne', 'expiree']) }, { status: 'vendue' });
     }
     tx.resolutionNote = note;

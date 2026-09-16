@@ -115,6 +115,12 @@ export default function TransactionPage() {
             {tx.confirmedAt && <li>Réception confirmée : {formatDateTime(tx.confirmedAt)}</li>}
             {tx.disputeReason && <li>Litige : « {tx.disputeReason} »</li>}
             {tx.resolutionNote && <li>Décision : {tx.resolutionNote}</li>}
+            {tx.status === "livree" && tx.autoConfirmAt && tx.deliveryMethod !== "main_propre" && (
+              <li data-testid="auto-confirm-at">Réception considérée acquise le {formatDateTime(tx.autoConfirmAt)} sans confirmation ni litige d&apos;ici là</li>
+            )}
+            {["sequestre", "litige"].includes(tx.status) && tx.captureBefore && (
+              <li data-testid="capture-before">Échéance de l&apos;autorisation bancaire : {formatDateTime(tx.captureBefore)} — {tx.status === "litige" ? "les fonds seront encaissés avant cette date et bloqués jusqu'à la décision du médiateur" : tx.deliveryMethod === "main_propre" ? "sans remise confirmée la veille, la vente est annulée et l'acheteur remboursé" : "sans expédition la veille, la vente est annulée et l'acheteur remboursé"}</li>
+            )}
           </ul>
         </section>
       </div>
@@ -158,6 +164,16 @@ export default function TransactionPage() {
             <p className="small muted" style={{ margin: 0 }}>Le vendeur doit maintenant {tx.deliveryMethod === "main_propre" ? "organiser la remise avec vous" : "expédier l'article"}. Vous pouvez annuler tant qu&apos;il n&apos;a pas expédié.</p>
             <button className="btn btn-ghost" style={{ alignSelf: "flex-start" }} disabled={busy} onClick={async () => (await confirm({ title: "Annuler mon achat ?", text: "Vous serez intégralement remboursé, frais compris.", confirmLabel: "Annuler l'achat", danger: true })) && run(() => api(`/transactions/${tx.id}/cancel`, { method: "POST" }), "Achat annulé, remboursement en cours.")}>Annuler mon achat</button>
           </div>
+        )}
+        {tx.status === "livree" && buyer && tx.autoConfirmAt && tx.deliveryMethod !== "main_propre" && (
+          <div className="alert alert-info" role="status" data-testid="confirm-deadline" style={{ margin: "12px 0 0" }}>
+            <strong>Confirmez la réception ou signalez un problème avant le {formatDateTime(tx.autoConfirmAt)}.</strong> Passé cette date, la réception sera considérée acquise et le vendeur payé ; vous garderez 7 jours pour ouvrir un litige.
+          </div>
+        )}
+        {tx.status === "confirme" && buyer && tx.autoResolution && tx.disputeAllowedUntil && new Date(tx.disputeAllowedUntil).getTime() > Date.now() && (
+          <p className="small muted" style={{ margin: "0 0 8px" }} data-testid="post-capture-dispute">
+            {tx.autoResolution === "reception_presumee" ? "Réception considérée acquise sans action de votre part." : "Paiement encaissé avant l'expiration de l'autorisation bancaire."} Un problème avec cet achat ? <button className="btn btn-ghost btn-sm" onClick={() => setDisputeOpen(true)}>Ouvrir un litige</button> (possible jusqu&apos;au {formatDateTime(tx.disputeAllowedUntil)}).
+          </p>
         )}
         {["sequestre", "livree"].includes(tx.status) && buyer && (
           <div className="stack" style={{ marginTop: 12 }}>

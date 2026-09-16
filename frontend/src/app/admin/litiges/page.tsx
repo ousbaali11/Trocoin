@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useToast } from "@/lib/toast-context";
 import { useConfirm } from "@/lib/confirm-context";
@@ -22,15 +23,20 @@ interface AdminTx {
   resolutionNote?: string | null;
   createdAt: string;
   shippedAt?: string | null;
+  captureBefore?: string | null;
+  autoConfirmAt?: string | null;
+  autoResolution?: string | null;
   buyer: { id: string; displayName: string } | null;
   seller: { id: string; displayName: string } | null;
   listing: { id: string; title: string } | null;
 }
 
-export default function AdminDisputesPage() {
+function AdminDisputesInner() {
   const { toast } = useToast();
   const confirm = useConfirm();
-  const [status, setStatus] = useState("litige");
+  const params = useSearchParams();
+  // `?due=1` (tableau de bord) : ouvrir directement les séquestres à échéance
+  const [status, setStatus] = useState(params.get("due") === "1" ? "due" : "litige");
   const [page, setPage] = useState(1);
   const [data, setData] = useState<Paged<AdminTx> | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
@@ -39,7 +45,8 @@ export default function AdminDisputesPage() {
 
   const load = useCallback(() => {
     const p = new URLSearchParams({ page: String(page), page_size: "25" });
-    if (status) p.set("status", status);
+    if (status === "due") p.set("due", "1");
+    else if (status) p.set("status", status);
     setError(null);
     return api<Paged<AdminTx>>(`/admin/transactions?${p}`).then(setData).catch((e) => setError((e as Error).message));
   }, [status, page]);
@@ -68,7 +75,7 @@ export default function AdminDisputesPage() {
       <div className="a-head"><div><h1>Transactions et litiges</h1><p>Vue globale du paiement sécurisé. Un litige se tranche par remboursement de l&apos;acheteur ou libération des fonds au vendeur.</p></div></div>
       <div className="a-filters">
         <select className="a-select" aria-label="État des transactions" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
-          <option value="litige">Litiges en cours</option><option value="sequestre">Séquestre</option><option value="livree">Expédiées</option><option value="confirme">Terminées</option><option value="rembourse">Remboursées</option><option value="annulee">Annulées</option><option value="">Toutes</option>
+          <option value="litige">Litiges en cours</option><option value="due">Séquestres à échéance (48 h)</option><option value="sequestre">Séquestre</option><option value="livree">Expédiées</option><option value="confirme">Terminées</option><option value="rembourse">Remboursées</option><option value="annulee">Annulées</option><option value="">Toutes</option>
         </select>
       </div>
       {error && <div className="a-alert danger">{error}</div>}
@@ -87,6 +94,10 @@ export default function AdminDisputesPage() {
                     <dt>Acheteur</dt><dd>{t.buyer ? <Link href={`/admin/utilisateurs/${t.buyer.id}`} style={{ textDecoration: "underline" }}>{t.buyer.displayName}</Link> : "—"}</dd>
                     <dt>Vendeur</dt><dd>{t.seller ? <Link href={`/admin/utilisateurs/${t.seller.id}`} style={{ textDecoration: "underline" }}>{t.seller.displayName}</Link> : "—"}</dd>
                     <dt>Remise</dt><dd>{DELIVERY_LABELS[t.deliveryMethod]}{t.deliveryTrackingNumber && ` · suivi ${t.deliveryTrackingNumber}`}{t.shippedAt && ` · expédiée ${formatDateTime(t.shippedAt)}`}</dd>
+                    {t.captureBefore && ["sequestre", "livree", "litige"].includes(t.status) && (
+                      <><dt>Échéance</dt><dd data-testid="admin-capture-before">autorisation bancaire jusqu&apos;au {formatDateTime(t.captureBefore)}{t.autoConfirmAt && ` · réception présumée le ${formatDateTime(t.autoConfirmAt)}`}</dd></>
+                    )}
+                    {t.autoResolution && <><dt>Automatique</dt><dd>{t.autoResolution === "reception_presumee" ? "réception présumée" : t.autoResolution === "capture_echeance" ? "capture avant expiration de l'autorisation" : "annulation à l'échéance"}</dd></>}
                     {t.disputeReason && <><dt>Litige</dt><dd>« {t.disputeReason} » — ouvert par {t.disputeOpenedBy === t.buyer?.id ? "l'acheteur" : "le vendeur"}</dd></>}
                     {t.resolutionNote && <><dt>Décision</dt><dd>{t.resolutionNote}</dd></>}
                   </dl>
@@ -109,4 +120,8 @@ export default function AdminDisputesPage() {
       {data && <AdminPager page={data.page} pageSize={data.pageSize} total={data.total} onChange={setPage} />}
     </div>
   );
+}
+
+export default function AdminDisputesPage() {
+  return <Suspense><AdminDisputesInner /></Suspense>;
 }

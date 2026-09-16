@@ -8,7 +8,7 @@ import { formatDateTime, formatEuros } from "@/lib/format";
 interface Stats {
   users: { total: number; pro: number; suspended: number; newToday: number };
   listings: { active: number; pending: number; newToday: number };
-  transactions: { today: number; month: number; disputes: number; gmvMonth: number; revenueMonth: number };
+  transactions: { today: number; month: number; disputes: number; escrowDueSoon: number; gmvMonth: number; revenueMonth: number };
   reports: { open: number };
   generatedAt: string;
 }
@@ -22,7 +22,7 @@ export default function AdminDashboard() {
   if (error) return <div className="a-alert danger">{error}</div>;
   if (!stats) return <div className="skeleton" style={{ height: 200 }} />;
 
-  const todo = stats.listings.pending + stats.reports.open + stats.transactions.disputes;
+  const todo = stats.listings.pending + stats.reports.open + stats.transactions.disputes + stats.transactions.escrowDueSoon;
   return (
     <div>
       <div className="a-head">
@@ -40,6 +40,7 @@ export default function AdminDashboard() {
           {stats.reports.open > 0 && <Link href="/admin/signalements">{stats.reports.open} signalement(s)</Link>}
           {(stats.listings.pending > 0 || stats.reports.open > 0) && stats.transactions.disputes > 0 && " · "}
           {stats.transactions.disputes > 0 && <Link href="/admin/litiges">{stats.transactions.disputes} litige(s)</Link>}
+          {stats.transactions.escrowDueSoon > 0 && <> · <Link href="/admin/litiges?due=1">{stats.transactions.escrowDueSoon} séquestre(s) à échéance sous 48 h</Link></>}
         </div>
       ) : (
         <div className="a-alert" style={{ background: "var(--a-ok-soft)", color: "#166534" }}>Aucune action en attente. Tout est à jour.</div>
@@ -66,6 +67,7 @@ export default function AdminDashboard() {
         <Stat v={formatEuros(stats.transactions.gmvMonth)} l="Volume confirmé ce mois" />
         <Stat v={formatEuros(stats.transactions.revenueMonth)} l="Revenus plateforme ce mois" />
         <Stat v={stats.transactions.disputes} l="Litiges en cours" />
+        <Stat v={stats.transactions.escrowDueSoon} l="Séquestres à échéance (48 h)" />
       </div>
     </div>
   );

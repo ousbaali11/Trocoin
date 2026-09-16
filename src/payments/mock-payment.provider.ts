@@ -20,7 +20,8 @@ export class MockPaymentProvider implements IPaymentProvider {
     this.logger.log(
       `Séquestre simulé de ${params.amountEuros} € (part plateforme ${params.applicationFeeEuros} €, vendeur ${params.sellerConnectedAccountId || 'non connecté'}) réf ${providerPaymentId}`,
     );
-    return { providerPaymentId, status: 'requires_capture' };
+    // Comme une carte en ligne chez Stripe : l'autorisation vaut 7 jours (date limite de capture)
+    return { providerPaymentId, status: 'requires_capture', captureBefore: new Date(Date.now() + 7 * 86_400_000) };
   }
 
   async capture(providerPaymentId: string) {

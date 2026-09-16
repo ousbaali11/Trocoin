@@ -90,6 +90,10 @@ export class StripePaymentProvider implements IPaymentProvider {
           ? { application_fee_amount: this.toCents(params.applicationFeeEuros), transfer_data: { destination: params.sellerConnectedAccountId } }
           : {}),
       },
+      // Autorisation prolongée (jusqu'à 30 jours) demandée « si disponible » : accordée seulement avec la
+      // tarification IC+ et selon le réseau ; sinon fenêtre standard de 7 jours. La date réelle est relue
+      // dans `capture_before` (syncCheckout) et pilote les échéances du séquestre (PaymentsService).
+      payment_method_options: { card: { request_extended_authorization: 'if_available' } as unknown as Stripe.Checkout.SessionCreateParams.PaymentMethodOptions.Card },
       metadata: params.metadata,
       success_url: params.successUrl,
       cancel_url: params.cancelUrl,
@@ -100,10 +104,18 @@ export class StripePaymentProvider implements IPaymentProvider {
   }
 
   async syncCheckout(providerSessionId: string): Promise<CheckoutSync> {
-    const session = await this.stripe.checkout.sessions.retrieve(providerSessionId, { expand: ['payment_intent'] });
+    const session = await this.stripe.checkout.sessions.retrieve(providerSessionId, { expand: ['payment_intent', 'payment_intent.latest_charge'] });
     const intent = session.payment_intent as Stripe.PaymentIntent | null;
     if (intent && (intent.status === 'requires_capture' || intent.status === 'succeeded')) {
-      return { status: 'sequestre', providerPaymentId: intent.id };
+      // Date limite de capture réelle (réseau de la carte, autorisation prolongée ou non) : pilote les échéances du séquestre
+      const charge = intent.latest_charge && typeof intent.latest_charge !== 'string' ? intent.latest_charge : null;
+      const card = charge?.payment_method_details?.card as { capture_before?: number; extended_authorization?: { status?: string } } | undefined;
+      return {
+        status: 'sequestre',
+        providerPaymentId: intent.id,
+        captureBefore: card?.capture_before ? new Date(card.capture_before * 1000) : undefined,
+        extendedAuthorization: card?.extended_authorization?.status === 'enabled',
+      };
     }
     if (session.status === 'expired' || intent?.status === 'canceled') return { status: 'annulee', providerPaymentId: intent?.id };
     return { status: 'en_attente', checkoutUrl: session.url ?? undefined };

@@ -38,7 +38,7 @@ cd frontend && npm install && cp .env.example .env.local && npm run dev -- -p 30
 ## Tests
 
 ```bash
-npm test                 # 138 tests e2e (API, supertest)
+npm test                 # 145 tests e2e (API, supertest)
 npm run e2e:build        # construit l'API (dist/) et le front (next build) pour les tests navigateur
 npm run e2e              # 110 scénarios Playwright dans Chromium (desktop 1280 px + mobile 375 px) : parcours, accessibilité (axe) site + back-office, clavier, SEO
 node scripts/charge.js --api https://api.trocoin.fr --front https://www.trocoin.fr --vus 10 --minutes 3   # test de charge léger (lectures publiques)
@@ -185,6 +185,17 @@ absent/faible, `CORS_ORIGINS` absent, `DB_TYPE≠postgres`, un fournisseur (`SMS
 `PAYMENT`, `NOTIFICATION`) laissé en `mock`, ou les clés du fournisseur SMS absentes.
 Modes autorisés en production sans prestataire : `PAYMENT_PROVIDER=disabled` (503 explicite)
 et `NOTIFICATION_PROVIDER=none` (in-app uniquement).
+
+### Échéances du séquestre (AUDIT §37)
+
+Une autorisation de carte non capturée expire (Stripe : 7 jours en ligne, 5 pour Visa initiée par le
+marchand ; la date exacte `capture_before` est enregistrée sur la transaction). Tâche
+`runEscrowSchedule` toutes les 15 minutes : réception présumée 4 jours après l'expédition (rappels à
+l'acheteur 48 h et 24 h avant, puis capture, litige encore possible 7 jours), et 24 h avant
+l'expiration une action par défaut — capture si l'article est expédié ou en litige, annulation avec
+remboursement s'il n'a été ni expédié ni remis (rappels aux deux parties 48 h et 24 h avant). Filet de
+sécurité admin : compteur « Séquestres à échéance (48 h) » et `GET /admin/transactions?due=1`.
+Variables `ESCROW_*` dans `.env.example`.
 
 ### Sessions
 

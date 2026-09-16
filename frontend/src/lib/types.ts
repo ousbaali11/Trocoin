@@ -290,6 +290,14 @@ export interface Transaction {
   shippedAt?: string | null;
   confirmedAt?: string | null;
   createdAt: string;
+  /** Échéances du séquestre : autorisation bancaire limitée dans le temps (AUDIT §37). */
+  paidAt?: string | null;
+  captureBefore?: string | null;
+  /** Réception présumée : sans action de l'acheteur à cette date, le vendeur est payé. */
+  autoConfirmAt?: string | null;
+  autoResolution?: "reception_presumee" | "capture_echeance" | "annulation_echeance" | null;
+  /** Après une capture automatique, litige encore possible jusqu'à cette date. */
+  disputeAllowedUntil?: string | null;
   /** Paiement hébergé (Stripe Checkout) encore ouvert : URL pour reprendre le paiement (acheteur, statut en_attente). */
   checkoutUrl?: string;
   role?: "acheteur" | "vendeur";

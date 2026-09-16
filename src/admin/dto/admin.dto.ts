@@ -129,6 +129,10 @@ export class AdminResolveReportDto {
 export class AdminTransactionsQueryDto extends AdminPaginationDto {
   @IsOptional() @IsIn(['en_attente', 'sequestre', 'livree', 'confirme', 'litige', 'rembourse', 'annulee'])
   status?: string;
+
+  /** « 1 » : séquestres non résolus dont la date limite de capture approche (filet de sécurité, AUDIT §37). */
+  @IsOptional() @IsIn(['1'])
+  due?: string;
 }
 
 export class AdminResolveTransactionDto {

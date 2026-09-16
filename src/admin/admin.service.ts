@@ -7,7 +7,7 @@ import { ListingPhoto } from '../listings/listing-photo.entity';
 import { Listing } from '../listings/listing.entity';
 import { ListingsService } from '../listings/listings.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { PaymentsService } from '../payments/payments.service';
+import { ESCROW_ADMIN_ALERT_HOURS, PaymentsService } from '../payments/payments.service';
 import { Transaction } from '../payments/transaction.entity';
 import { Report } from '../reports/report.entity';
 import { Review } from '../reviews/review.entity';
@@ -159,10 +159,12 @@ export class AdminService {
       .andWhere('t.confirmedAt >= :d', { d: monthStart })
       .getRawOne<{ sum: number }>();
 
+    // Filet de sécurité : séquestres dont la date limite de capture approche (mécanisme automatique en plus, AUDIT §37)
+    const escrowDueSoon = (await this.paymentsService.escrowDueSoon()).length;
     return {
       users: { total: usersTotal, pro: usersPro, suspended: usersSuspended, newToday: usersToday },
       listings: { active: listingsActive, pending: listingsPending, newToday: listingsToday },
-      transactions: { today: txToday, month: txMonth, disputes: txDisputes, gmvMonth: Number(gmvMonth?.sum || 0), revenueMonth: Number(revenueMonth?.sum || 0) },
+      transactions: { today: txToday, month: txMonth, disputes: txDisputes, escrowDueSoon, gmvMonth: Number(gmvMonth?.sum || 0), revenueMonth: Number(revenueMonth?.sum || 0) },
       reports: { open: reportsOpen },
       generatedAt: now,
     };
@@ -443,6 +445,12 @@ export class AdminService {
     const pageSize = query.page_size || 25;
     const qb = this.transactionsRepo.createQueryBuilder('t').orderBy('t.createdAt', 'DESC');
     if (query.status) qb.andWhere('t.status = :status', { status: query.status });
+    if (query.due === '1') {
+      // Séquestres à échéance : non résolus et date limite de capture sous ESCROW_ADMIN_ALERT_HOURS
+      qb.andWhere('t.status IN (:...open)', { open: ['sequestre', 'livree', 'litige'] })
+        .andWhere('t.captureBefore < :limit', { limit: new Date(Date.now() + ESCROW_ADMIN_ALERT_HOURS * 3_600_000) })
+        .orderBy('t.captureBefore', 'ASC');
+    }
     qb.skip((page - 1) * pageSize).take(pageSize);
     const [items, total] = await qb.getManyAndCount();
     const enriched: any[] = [];

@@ -11,6 +11,8 @@ export interface PaymentIntentResult {
   providerPaymentId: string;
   clientSecret?: string;
   status: 'requires_capture' | 'succeeded' | 'processing';
+  /** Date limite de capture de l'autorisation, quand le fournisseur la connaît (Stripe : `capture_before`). */
+  captureBefore?: Date;
 }
 
 /** Paiement hébergé (page de paiement du fournisseur, ex. Stripe Checkout). */
@@ -37,6 +39,10 @@ export interface CheckoutSync {
   providerPaymentId?: string;
   /** URL de la page de paiement tant que la session est ouverte. */
   checkoutUrl?: string;
+  /** Date limite de capture de l'autorisation (Stripe : `payment_method_details.card.capture_before` du paiement). */
+  captureBefore?: Date;
+  /** Autorisation prolongée accordée par le réseau (jusqu'à 30 jours) ; sinon fenêtre standard. */
+  extendedAuthorization?: boolean;
 }
 
 /** Évènement de webhook normalisé (après vérification de la signature). */

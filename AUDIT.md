@@ -1924,3 +1924,92 @@ Détail, tableau par étape et cause de l'échec initial : `docs/etiquettes-tran
   l'étiquette sur le sandbox et l'acheteur voit le suivi ; les comptes de test seront supprimés
   après ce dernier passage. Le parcours est couvert par `e2e/17-expedition.spec.ts` (simulé).
 - Tests : `npm test` phase 20 adapté aux codes à tiret ; CI verte.
+
+## 37. Expiration de l'autorisation bancaire pendant le séquestre — 16 septembre 2026
+
+### Le délai réel (documentation Stripe, page « Bloquer une somme sur un moyen de paiement », lue le 16 septembre 2026)
+
+- Carte en ligne, transaction initiée par le client (notre cas : Checkout) : **7 jours** pour Visa,
+  Mastercard, American Express, Discover. Transaction initiée par le marchand : **5 jours** pour Visa
+  (fenêtre exacte 4 jours 18 h). Passé ce délai, la retenue est levée et le paiement passe `canceled` :
+  **le vendeur ne peut plus être payé**.
+- La date exacte est fournie par Stripe pour chaque paiement (`payment_method_details.card.capture_before`
+  sur le paiement) : c'est elle qui fait foi, pas une estimation.
+- Autorisation prolongée (jusqu'à 30 jours, 29 j 18 h pour Visa) : réservée à la tarification IC+,
+  +0,08 % par transaction hors hôtellerie / location, réseau par réseau. Trocoin la **demande « si
+  disponible »** (`request_extended_authorization: if_available`) et lit le résultat, mais ne compte
+  pas dessus. Klarna 28 jours, PayPal 10 + 10 jours (fournisseur PayPal différé).
+- Constat sur le code : la seule gestion d'expiration existante (`expirePendingCheckouts`, statut
+  `en_attente`) concernait la page de paiement non finalisée (30 min). Rien ne surveillait l'attente
+  après autorisation : une réception confirmée au 8e jour aurait appelé `capture` sur un paiement
+  déjà annulé, et le vendeur n'aurait rien touché.
+
+### Solutions évaluées
+
+| Piste | Verdict |
+|---|---|
+| Ré-autorisation automatique (annuler puis recréer une autorisation sur la carte enregistrée) | **écartée** : nouvelle transaction initiée par le marchand (fenêtre Visa réduite à 5 jours), soumise à un refus possible (plafond, carte bloquée, authentification forte hors session), double retenue visible par l'acheteur, et complexité forte (client Stripe, moyen de paiement enregistré) pour un bénéfice incertain |
+| Séquestre sur le solde de la plateforme (capture immédiate, virement au vendeur à la confirmation, modèle « paiements et transferts distincts ») | **la plus robuste à terme** : plus aucune expiration, litiges sans limite de durée ; mais c'est un changement d'architecture Connect (transferts, annulations de transfert, responsabilité des soldes négatifs, entité de règlement) qui touche directement l'argent des utilisateurs : proposé, pas appliqué sans décision (voir « Recommandation ») |
+| Réception présumée + capture avant expiration + action par défaut | **retenue** : reste dans le modèle actuel (capture manuelle, destination charges), garantit qu'aucune autorisation n'expire, protège l'acheteur par des rappels, une fenêtre de litige après capture et le remboursement possible après capture (`reverse_transfer`) |
+
+### Mécanisme mis en place (`src/payments/payments.service.ts`, tâche toutes les 15 minutes)
+
+1. **Date limite réelle** : à l'entrée en séquestre, `paidAt` et `captureBefore` sont enregistrés
+   (Stripe `capture_before` relu dans `syncCheckout` ; sinon fenêtre la plus courte,
+   `ESCROW_DEFAULT_AUTH_DAYS` = 5). L'action automatique a lieu `ESCROW_SAFETY_HOURS` (24 h) avant.
+2. **Réception présumée** (article expédié) : confirmation automatique `ESCROW_AUTO_CONFIRM_DAYS`
+   (4) jours après l'expédition, jamais après la marge de sécurité ; l'acheteur est prévenu à
+   l'expédition (« confirmez ou signalez un problème avant le … »), 48 h avant et 24 h avant.
+   Après capture, il garde `ESCROW_DISPUTE_WINDOW_DAYS` (7) jours pour ouvrir un litige, que
+   l'admin peut trancher par remboursement (paiement capturé → remboursement avec annulation du
+   transfert au vendeur).
+3. **Échéance de l'autorisation** (action par défaut, rappels aux deux parties 48 h et 24 h avant) :
+   - article expédié ou **litige ouvert** → **capture** (les fonds ne peuvent plus être perdus ; en litige
+     ils restent bloqués jusqu'à la décision, remboursement possible) ;
+   - ni expédié ni remis (colis non parti, remise en main propre sans code) → **annulation et
+     remboursement** de l'acheteur, l'annonce reste en ligne.
+   Aucune transaction ne dépasse donc l'échéance sans résolution.
+4. **Filet de sécurité** : compteur « Séquestres à échéance (48 h) » sur le tableau de bord admin
+   (lien vers la liste filtrée `?due=1`), avertissement dans les logs à chaque calcul, colonnes
+   « Échéance » et « Automatique » dans la liste des transactions.
+5. **Interface** : chronologie de la transaction (date limite, réception présumée), bandeau à
+   l'acheteur « Confirmez la réception ou signalez un problème avant le … », bouton « Ouvrir un
+   litige » encore proposé après une capture automatique tant que la fenêtre est ouverte.
+
+### Compromis choisi et recommandation
+
+Le mécanisme retenu garde l'argent en sécurité **dans les deux sens** : le vendeur qui a expédié est
+payé au plus tard la veille de l'expiration, l'acheteur silencieux est relancé trois fois, et un
+acheteur qui n'a rien reçu conserve sept jours de litige après la capture (remboursement avec
+annulation du transfert). Le prix de ce compromis : un paiement peut être capturé avant que
+l'acheteur ait confirmé (au plus 6 jours après l'autorisation), donc un remboursement après capture
+dépend du solde Connect du vendeur — Stripe débite le compte connecté, la plateforme répond des
+soldes négatifs (montants plafonnés à 2 500 €, fenêtre de litige courte, virements Stripe Express
+différés de plusieurs jours en France).
+
+**Recommandation pour la suite** : passer au séquestre sur le solde de la plateforme (paiements et
+transferts distincts, capture immédiate, transfert au vendeur à la confirmation). C'est le modèle des
+grandes places de marché, il supprime toute notion d'expiration et rend les litiges longs possibles
+sans risque ; il demande une décision (Trocoin devient entité de règlement, responsable des
+remboursements sur son solde) et un test Connect complet en mode test avant bascule. Le mécanisme
+livré aujourd'hui reste valable tel quel jusque-là et la plupart de ses règles (réception présumée,
+rappels, action par défaut) resteraient identiques après la bascule.
+
+### Vérification
+
+| Contrôle | Résultat |
+|---|---|
+| `test/phase22.e2e-spec.ts` (7 tests, fournisseur simulé, temps simulé) | date limite enregistrée et exposée ; rappels J-2 / J-1 puis réception présumée avec capture ; **cas limite** : expédition au 5e jour, réception présumée voulue au 9e → capture au 6e jour (avant l'expiration au 7e), vendeur payé ; non expédié → annulation + remboursement ; remise en main propre non confirmée → annulation, confirmée → rien ; litige à l'échéance → capture puis remboursement admin ; filet admin (`?due=1`, compteur) |
+| `npm test` | 145 réussis, 1 ignoré (suite complète, SQLite) |
+| Migration `SequestreEcheances` | jouée par le job CI Postgres 16 puis Render |
+
+### Limites connues
+
+- Les transactions en séquestre antérieures à ce déploiement reçoivent une date limite estimée
+  (autorisation + 5 jours) au premier passage de la tâche : celles déjà au-delà seront traitées au
+  passage suivant (capture si expédiées, annulation sinon), avec les notifications correspondantes.
+- Stripe Checkout n'accepte pas d'autres moyens à capture différée que la carte dans cette
+  intégration ; PayPal (10 + 10 jours) est différé et suivrait la même règle via `captureBefore`.
+- Un remboursement après capture automatique suppose un solde suffisant sur le compte Connect du
+  vendeur, sinon la plateforme avance les fonds (cf. compromis). Le passage au séquestre sur solde
+  de plateforme lève cette limite.

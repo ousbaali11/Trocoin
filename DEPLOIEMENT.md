@@ -53,6 +53,7 @@ automatiquement) ou Fly.io. Les étapes ci-dessous restent les mêmes, seule l'i
    | `JWT_EXPIRES_IN` | `15m` |
    | `REFRESH_TOKEN_TTL_DAYS` | `30` (durée pendant laquelle un utilisateur reste connecté sans revenir ; chaque visite la prolonge) |
    | `REFRESH_REUSE_GRACE_MS` | `30000` (facultatif : tolérance de réutilisation d'un jeton tout juste tourné, onglets concurrents) |
+   | `ESCROW_DEFAULT_AUTH_DAYS`, `ESCROW_SAFETY_HOURS`, `ESCROW_AUTO_CONFIRM_DAYS`, `ESCROW_DISPUTE_WINDOW_DAYS`, `ESCROW_ADMIN_ALERT_HOURS` | facultatifs (`5`, `24`, `4`, `7`, `48`) : échéances du séquestre avant l'expiration de l'autorisation bancaire (AUDIT §37) |
    | `CORS_ORIGINS` | `https://<votre-projet>.vercel.app` (puis vos vrais domaines, séparés par des virgules) |
    | `SMS_PROVIDER` | `vonage` ou `twilio` + les clés correspondantes (§5) |
    | `PAYMENT_PROVIDER` | `stripe` + `STRIPE_SECRET_KEY` (`sk_test_…` pour le mode test, `sk_live_…` ensuite) + `STRIPE_WEBHOOK_SECRET` (§5c) ; ou `disabled` (endpoints en 503) |
