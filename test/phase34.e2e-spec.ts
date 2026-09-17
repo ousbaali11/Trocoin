@@ -100,7 +100,11 @@ describe('Phase 34 : suivi dans la messagerie, points de retrait, retour de paie
     await request(server).post(`/transactions/${txId}/dispute`).set(buyer.auth).send({ reason: 'Le vendeur ne répond plus depuis une semaine.' }).expect(201);
     const conv = (await request(server).get(`/conversations/${opened.body.id}`).set(seller.auth).expect(200)).body;
     expect(conv.messages.map((m: any) => m.systemEvent ?? m.type)).toEqual(['text', 'achat_confirme', 'pret_pour_remise', 'litige_ouvert']);
-    expect(JSON.stringify(conv.transaction)).not.toMatch(/handoverCode|\d{6}"/); // le code de remise ne passe jamais par la conversation
+    // Le code de remise ne passe jamais par la conversation (comparaison au vrai code : un identifiant peut finir par 6 chiffres)
+    const code = (await request(server).get(`/transactions/${txId}`).set(buyer.auth).expect(200)).body.handoverCode as string;
+    expect(code).toMatch(/^[0-9]{6}$/);
+    expect(JSON.stringify(conv)).not.toContain('handoverCode');
+    expect(JSON.stringify(conv.transaction)).not.toContain(code);
     expect((await request(server).get('/conversations').set(seller.auth).expect(200)).body).toHaveLength(1);
   });
 
