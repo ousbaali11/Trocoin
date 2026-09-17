@@ -95,3 +95,72 @@
     margin-top: 4px;
   }
 }
+
+/* Déclencheur mobile du bloc de recherche (AUDIT §56) : invisible sur bureau, où le formulaire est toujours déplié */
+.trigger {
+  display: none;
+}
+@media (max-width: 640px) {
+  .trigger {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 48px;
+    padding: 6px 14px;
+    background: var(--white);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    color: var(--ink);
+    cursor: pointer;
+    text-align: left;
+  }
+  .trigger svg {
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+  .triggerText {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.2;
+    min-width: 0;
+    flex: 1;
+  }
+  .triggerText strong {
+    font-size: 0.95rem;
+  }
+  .triggerText span {
+    font-size: 0.8rem;
+    color: var(--ink-muted);
+    letter-spacing: 0.03em;
+  }
+  .chevron {
+    color: var(--ink-muted);
+    font-size: 0.9rem;
+  }
+  .wrap[data-home-search="collapsed"] .form {
+    display: none;
+  }
+  .wrap[data-home-search="expanded"] .form {
+    margin-top: 8px;
+  }
+  .quick {
+    margin-top: 8px;
+  }
+}
+@media (max-width: 640px) {
+  /* Déplié : le déclencheur s'efface (simple lien « Réduire »), le titre de la page est de nouveau affiché au-dessus */
+  .wrap[data-home-search="expanded"] .trigger {
+    min-height: 40px;
+    padding: 2px 4px;
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+    color: var(--ink-soft);
+  }
+  .wrap[data-home-search="expanded"] .trigger strong {
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+}

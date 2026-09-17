@@ -27,7 +27,7 @@ import { CreateListingDto } from './dto/create-listing.dto';
 import { SearchListingsDto } from './dto/search-listings.dto';
 import { ReorderPhotosDto, UpdateListingDto } from './dto/update-listing.dto';
 import { ListingOwnerGuard } from './listing-owner.guard';
-import { ListingsService, MAX_PHOTOS_PER_LISTING } from './listings.service';
+import { ListingsService, MAX_FILES_PER_UPLOAD } from './listings.service';
 
 class PromoteDto {
   @IsIn(['boost', 'urgent'])
@@ -210,9 +210,9 @@ export class ListingsController {
   @Post(':id/photos')
   @Throttle({ default: { limit: 60, ttl: 3_600_000 } })
   @UseInterceptors(
-    FilesInterceptor('files', MAX_PHOTOS_PER_LISTING, {
+    FilesInterceptor('files', MAX_FILES_PER_UPLOAD, {
       storage: imageDiskStorage,
-      limits: { fileSize: MAX_IMAGE_BYTES, files: MAX_PHOTOS_PER_LISTING },
+      limits: { fileSize: MAX_IMAGE_BYTES, files: MAX_FILES_PER_UPLOAD },
       fileFilter: imageFileFilter,
     }),
   )

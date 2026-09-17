@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { LocationPicker, type LocationValue } from "@/components/ui/LocationPicker";
 import { rememberSearch } from "@/components/search/SearchBox";
 import styles from "./HomeSearch.module.css";
@@ -52,9 +52,25 @@ export function HomeSearch({ total }: { total: number }) {
     return `/recherche?${p.toString()}`;
   };
 
+  // Mobile (AUDIT §56) : le bloc de recherche se replie en une ligne pour que les annonces soient visibles dès
+  // l'arrivée ; un tap le déplie (QUOI ?, OÙ ?, Rechercher). Sur bureau, il est toujours déplié (CSS).
+  const [expanded, setExpanded] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  const toggle = () => {
+    setExpanded((v) => {
+      if (!v) window.setTimeout(() => formRef.current?.querySelector<HTMLInputElement>("#home-q")?.focus(), 60);
+      return !v;
+    });
+  };
+
   return (
-    <div className={styles.wrap}>
-      <form onSubmit={submit} role="search" className={styles.form} aria-label="Rechercher une annonce">
+    <div className={styles.wrap} data-home-search={expanded ? "expanded" : "collapsed"}>
+      <button type="button" className={styles.trigger} onClick={toggle} aria-expanded={expanded} aria-controls="home-search-form" data-testid="home-search-toggle">
+        <SearchIcon />
+        <span className={styles.triggerText}>{expanded ? <strong>Réduire la recherche</strong> : <><strong>Rechercher une annonce</strong><span>Quoi ? · Où ?</span></>}</span>
+        <span className={styles.chevron} aria-hidden="true">{expanded ? "▴" : "▾"}</span>
+      </button>
+      <form ref={formRef} id="home-search-form" onSubmit={submit} role="search" className={styles.form} aria-label="Rechercher une annonce">
         <div className={styles.field}>
           <input id="home-q" className={`input ${styles.input}`} placeholder="QUOI ?" aria-label="Quoi ?" value={q} onChange={(e) => setQ(e.target.value)} autoComplete="off" />
         </div>
@@ -65,7 +81,7 @@ export function HomeSearch({ total }: { total: number }) {
           <SearchIcon /> Rechercher
         </button>
       </form>
-      <div className={styles.quick} aria-label="Raccourcis">
+      <div className={`${styles.quick} quick-filters`} aria-label="Raccourcis" data-scroll-x>
         <span className={styles.quickLabel}>{total > 0 ? `${total.toLocaleString("fr-FR")} annonce${total > 1 ? "s" : ""} en ligne` : "Raccourcis"}</span>
         <Link href={quick({ price_type: "gratuit" })} className={`${styles.chip} ${styles.chipGift}`}>🎁 Dons uniquement</Link>
         <Link href={quick({ price_type: "echange" })} className={styles.chip}>🔁 Échanges</Link>

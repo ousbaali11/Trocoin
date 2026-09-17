@@ -35,7 +35,12 @@ import { Listing, ListingStatus } from './listing.entity';
 import { moderateText } from './moderation';
 import { RetentionService } from '../retention/retention.service';
 
-export const MAX_PHOTOS_PER_LISTING = 10;
+/**
+ * Photos : plus de plafond par annonce (AUDIT §56, choix du propriétaire). Restent les garde-fous contre l'abus de
+ * stockage et de bande passante : 10 fichiers par envoi (le site envoie par lots), 60 envois par heure et par adresse,
+ * et le plafond glissant par compte MAX_PHOTOS_PER_DAY (150 par 24 h par défaut, réglable).
+ */
+export const MAX_FILES_PER_UPLOAD = 10;
 export const BOOST_DAYS = 7;
 export const URGENT_DAYS = 7;
 const NO_DELIVERY_ROOTS = ['immobilier', 'vehicules', 'emploi', 'services', 'vacances', 'animaux'];
@@ -538,10 +543,6 @@ export class ListingsService {
       throw new BadRequestException(`Limite de ${maxPerDay} photos par 24 h atteinte pour ce compte. Réessayez demain.`);
     }
     const existingCount = await this.photosRepo.count({ where: { listingId } });
-    if (existingCount + urls.length > MAX_PHOTOS_PER_LISTING) {
-      await Promise.all(urls.flatMap((u) => [deleteUploadedFile(u.url), deleteUploadedFile(u.thumbUrl)]));
-      throw new BadRequestException(`Maximum ${MAX_PHOTOS_PER_LISTING} photos par annonce.`);
-    }
     // Ajouter des photos à une annonce publiée reste permis (AUDIT §54) : elles viennent APRÈS les photos de
     // publication, qui restent visibles et en tête. Le dépôt crée l'annonce puis envoie ses photos : celles qui
     // arrivent dans les minutes qui suivent la publication en font partie et sont verrouillées d'emblée ; les photos

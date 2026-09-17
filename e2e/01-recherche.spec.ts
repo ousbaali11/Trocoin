@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { expectNoHorizontalOverflow, mockGeo, readSeed } from './helpers';
+import { expectNoHorizontalOverflow, mockGeo, openHomeSearch, readSeed } from './helpers';
 
 /**
  * Recherche : mot-clé, filtre catégorie, « Toute la France », rayon en kilomètres, tri.
@@ -16,8 +16,9 @@ test.beforeEach(async ({ page }) => {
 test('mot-clé depuis l\'accueil : « QUOI ? » ne renvoie que les annonces correspondantes', async ({ page }) => {
   await page.goto('/');
   await expectNoHorizontalOverflow(page);
+  await openHomeSearch(page);
   await page.getByPlaceholder('QUOI ?').fill('playstation');
-  await page.getByRole('button', { name: 'Rechercher' }).click();
+  await page.getByRole('button', { name: 'Rechercher', exact: true }).click();
   await expect(page).toHaveURL(/\/recherche\?.*q=playstation/);
   await expect(page.getByRole('heading', { level: 1 })).toContainText('playstation');
   await expect(page.getByRole('link', { name: L.ps5.title, exact: true }).first()).toBeVisible();
@@ -38,12 +39,13 @@ test('filtre catégorie : la catégorie Vélos ne montre que le VTT et le fil d\
 
 test('« Toute la France » : choisi depuis l\'accueil, affiché dans le champ « OÙ ? », et les annonces de toutes les villes sont listées', async ({ page }) => {
   await page.goto('/');
+  await openHomeSearch(page);
   const where = page.getByPlaceholder('OÙ ?');
   await where.click();
   await page.getByRole('dialog', { name: 'Menu des localisations' }).getByRole('button', { name: 'Toute la France' }).click();
   await expect(where).toHaveValue('Toute la France');
   await expect(page.getByRole('button', { name: 'Effacer la localisation' })).toBeVisible();
-  await page.getByRole('button', { name: 'Rechercher' }).click();
+  await page.getByRole('button', { name: 'Rechercher', exact: true }).click();
   await expect(page).toHaveURL(/\/recherche(\?.*)?$/);
   expect(page.url()).not.toMatch(/city|lat=|radius=/);
   await expect(page.getByText(/\d+ annonces · Toute la France/).first()).toBeVisible();
@@ -58,6 +60,7 @@ test('« Toute la France » : choisi depuis l\'accueil, affiché dans le champ �
 
 test('rayon en kilomètres autour de Lyon : 5 km inclut Villeurbanne, 1 km ne garde que le 3e, tri par distance', async ({ page }) => {
   await page.goto('/');
+  await openHomeSearch(page);
   const where = page.getByPlaceholder('OÙ ?');
   await where.fill('Lyon');
   // Lyon regroupe ses arrondissements : « toute la ville » d'abord, puis le sous-menu déplié
@@ -68,7 +71,7 @@ test('rayon en kilomètres autour de Lyon : 5 km inclut Villeurbanne, 1 km ne ga
   const panel = page.getByTestId('radius-panel');
   await expect(panel).toContainText('Dans un rayon de 5 km');
   await panel.getByRole('button', { name: 'Valider' }).click();
-  await page.getByRole('button', { name: 'Rechercher' }).click();
+  await page.getByRole('button', { name: 'Rechercher', exact: true }).click();
   await expect(page).toHaveURL(/radius=5/);
   await expect(page.getByText('· Lyon (5 km)')).toBeVisible();
   await expect(page.getByRole('link', { name: L.vtt.title, exact: true }).first()).toBeVisible();
@@ -237,6 +240,7 @@ test('cartes réduites : au plus 215 px de large, 4 colonnes ou plus sur bureau,
 
 test('localisation : arrondissements de Paris regroupés sous « toute la ville », et communes récentes proposées avant la saisie', async ({ page }) => {
   await page.goto('/');
+  await openHomeSearch(page);
   const where = page.getByPlaceholder('OÙ ?');
   await where.fill('Paris');
   // Une seule entrée pour Paris, ses arrondissements dans un sous-menu (comme sur leboncoin)
@@ -248,11 +252,12 @@ test('localisation : arrondissements de Paris regroupés sous « toute la ville 
   await sub.getByRole('button', { name: 'Paris 11e (75011)' }).click();
   await expect(page.getByTestId('radius-panel')).toContainText('Paris (75011)');
   await page.getByTestId('radius-panel').getByRole('button', { name: 'Valider' }).click();
-  await page.getByRole('button', { name: 'Rechercher' }).click();
+  await page.getByRole('button', { name: 'Rechercher', exact: true }).click();
   await expect(page).toHaveURL(/city_label=Paris/);
 
   // Retour à l'accueil : la commune vient d'être utilisée, elle est proposée en « Récents » avant de taper
   await page.goto('/');
+  await openHomeSearch(page);
   await page.getByPlaceholder('OÙ ?').focus();
   await expect(page.getByText('Récents')).toBeVisible();
   const recent = page.getByTestId('recent-location');

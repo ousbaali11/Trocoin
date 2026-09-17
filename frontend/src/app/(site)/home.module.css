@@ -167,17 +167,93 @@
     grid-template-columns: repeat(6, 1fr);
   }
 }
-@media (max-width: 560px) {
+/* Mobile (AUDIT §56) : les trois blocs de tête restent mais se compactent pour que les annonces soient visibles
+   dès l'arrivée, comme sur leboncoin — catégories sur une ligne défilante, recherche repliée en une ligne (le titre
+   et le texte reviennent quand on la déplie), raccourcis sur une ligne défilante. */
+@media (max-width: 640px) {
+  .catBand {
+    padding: 8px 0 2px;
+  }
   .categories {
-    grid-template-columns: repeat(4, 1fr);
+    display: flex;
     gap: 2px;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 4px;
+    /* Le bord droit s'estompe : il reste des familles à faire défiler */
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 30px), transparent);
+    mask-image: linear-gradient(90deg, #000 calc(100% - 30px), transparent);
+  }
+  .categories::-webkit-scrollbar {
+    display: none;
+  }
+  .category {
+    flex: 0 0 78px;
+    min-height: 0;
+    padding: 6px 2px 4px;
+    gap: 5px;
+    font-size: 0.72rem;
+    scroll-snap-align: start;
+  }
+  .category:last-child {
+    margin-right: 26px;
+  }
+  .categoryIcon {
+    width: 40px;
+    height: 40px;
   }
   .hero {
-    padding: 20px 0 18px;
+    padding: 10px 0 10px;
   }
   .heroTitle {
     font-size: 1.25rem;
   }
+  .heroHead {
+    margin-bottom: 10px;
+  }
+  /* Recherche repliée : le titre et le texte restent dans la page (lecteurs d'écran, référencement) sans occuper l'écran */
+  .hero:has([data-home-search="collapsed"]) .heroHead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    margin: 0;
+  }
+  .latest {
+    margin-top: 14px !important;
+  }
+  /* Titre et lien « Tout voir » sur une seule ligne : les cartes remontent d'autant */
+  .latest :global(.page-head) {
+    flex-wrap: nowrap;
+    align-items: flex-end;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .latest :global(.page-head) h2 {
+    font-size: 1.2rem;
+  }
+  .latest :global(.page-head) :global(.eyebrow) {
+    margin-bottom: 2px;
+    font-size: 0.68rem;
+  }
+  .latest :global(.page-head) :global(.btn) {
+    padding: 6px 12px;
+    font-size: 0.82rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .labelLong {
+    display: none;
+  }
+  .labelShort {
+    display: inline !important;
+  }
+}
+.labelShort {
+  display: none;
 }
 .steps {
   display: grid;

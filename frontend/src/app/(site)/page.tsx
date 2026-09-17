@@ -62,13 +62,16 @@ export default async function HomePage() {
 
       <RecentlyViewed />
 
-      <section className="container" style={{ marginTop: 40 }}>
+      <section className={`container ${styles.latest}`} style={{ marginTop: 40 }} data-testid="latest-listings">
         <div className="page-head">
           <div>
             <p className="eyebrow">Fraîchement publiées</p>
             <h2 style={{ margin: 0 }}>Les dernières annonces</h2>
           </div>
-          <Link href="/recherche" className="btn btn-outline">Voir toutes les annonces</Link>
+          <Link href="/recherche" className="btn btn-outline">
+            <span className={styles.labelLong}>Voir toutes les annonces</span>
+            <span className={styles.labelShort}>Tout voir</span>
+          </Link>
         </div>
         {!ok && <div className="alert alert-error">Le service est momentanément indisponible. Réessayez dans quelques instants.</div>}
         {ok && recent.length === 0 && (

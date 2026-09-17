@@ -122,6 +122,13 @@ test('dépôt : barre de progression, catégorie suggérée d\'après le titre, 
   await page.getByLabel('Type *').selectOption('VTT');
   await page.getByLabel('Description').fill('Description courte.');
   await page.getByRole('button', { name: 'Continuer' }).click();
+  // Étape Photos : rien d'autre que les photos (AUDIT §56) ; la checklist attend l'aperçu final
+  await expect(progress).toContainText('Étape 3 sur 5');
+  await expect(page.getByTestId('completeness')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Continuer' }).click();
+  await page.getByLabel('Ville ou code postal').fill('69003');
+  await page.getByRole('button', { name: 'Continuer' }).click();
+  await expect(page.getByRole('heading', { name: 'Aperçu avant publication' })).toBeVisible();
   // Checklist : « Faire → » ramène au champ concerné
   const check = page.getByTestId('completeness');
   await expect(check).toContainText('Complétez la description');

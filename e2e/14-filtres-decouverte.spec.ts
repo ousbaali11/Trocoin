@@ -221,6 +221,68 @@ test('panneau « Tous les filtres » : « Tout effacer » et « Rechercher » et
   }
 });
 
+test("accueil mobile : catégories sur une ligne défilante, recherche repliée, raccourcis sur une ligne — les annonces sont visibles dès l'arrivée ; bureau inchangé (AUDIT §56)", async ({ page, isMobile }) => {
+  test.setTimeout(180_000); // l'attente de la régénération ISR peut dépasser le délai par défaut
+  await page.goto('/');
+  const tiles = page.getByTestId('category-tiles');
+  // Accueil pré-rendu sans API à la construction (ISR 60 s) : on recharge jusqu'à ce que catégories et annonces soient là
+  await expect.poll(async () => {
+    const n = Math.min(await tiles.locator('a').count(), await page.getByTestId('latest-listings').locator('article').count());
+    if (n === 0) await page.reload();
+    return n;
+  }, { timeout: 120_000, intervals: [3_000] }).toBeGreaterThan(0);
+  const toggle = page.getByTestId('home-search-toggle');
+  const form = page.getByRole('search', { name: 'Rechercher une annonce' });
+  const shortcuts = page.getByLabel('Raccourcis');
+  const firstCard = page.getByTestId('latest-listings').locator('article').first();
+  await expect(firstCard).toBeVisible();
+  // Le titre de la page reste dans le document dans tous les cas (lecteurs d'écran, référencement)
+  await expect(page.getByRole('heading', { level: 1, name: 'Rechercher une annonce' })).toHaveCount(1);
+  if (!isMobile) {
+    // Bureau : rien ne change — pas de déclencheur, formulaire déplié, catégories en grille
+    await expect(toggle).toBeHidden();
+    await expect(form).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Rechercher une annonce' })).toBeVisible();
+    expect(await tiles.evaluate((el) => getComputedStyle(el).display)).toBe('grid');
+    return;
+  }
+  // Bloc A : une seule ligne, qui défile horizontalement sans faire défiler la page
+  const ys = await tiles.locator('a').evaluateAll((els) => [...new Set(els.map((e) => Math.round(e.getBoundingClientRect().top)))]);
+  expect(ys).toHaveLength(1);
+  expect(await tiles.evaluate((el) => el.scrollWidth > el.clientWidth + 100)).toBe(true);
+  expect((await tiles.boundingBox())!.height).toBeLessThanOrEqual(96);
+  await expectNoHorizontalOverflow(page);
+  // Bloc B : replié en une ligne ; bloc C : une ligne défilante
+  await expect(toggle).toBeVisible();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(form).toBeHidden();
+  expect((await toggle.boundingBox())!.height).toBeLessThanOrEqual(56);
+  await expect(shortcuts).toBeVisible();
+  await expect(shortcuts).toContainText(/annonces? en ligne/);
+  expect((await shortcuts.boundingBox())!.height).toBeLessThanOrEqual(48);
+  // Les annonces arrivent dans le premier écran : haut de la première carte avant 55 % de la hauteur, visuel entièrement visible
+  const card = (await firstCard.boundingBox())!;
+  const viewport = page.viewportSize()!;
+  expect(card.y).toBeLessThan(viewport.height * 0.55);
+  expect(card.y + card.width).toBeLessThanOrEqual(viewport.height); // visuel carré de la carte (large comme elle) entièrement à l'écran
+  // Un tap déplie la recherche complète (titre, texte, QUOI ?, OÙ ?, Rechercher), curseur dans « QUOI ? » ; un second la replie
+  await toggle.tap();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(form).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Rechercher une annonce' })).toBeVisible();
+  await expect(page.getByPlaceholder('QUOI ?')).toBeFocused();
+  await expect(page.getByPlaceholder('OÙ ?')).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await toggle.tap();
+  await expect(form).toBeHidden();
+  // Dernière famille atteignable en faisant défiler la ligne
+  const last = tiles.getByRole('link', { name: 'Animaux', exact: true });
+  await last.scrollIntoViewIfNeeded();
+  const lb = (await last.boundingBox())!;
+  expect(lb.x).toBeGreaterThanOrEqual(0);
+  expect(lb.x + lb.width).toBeLessThanOrEqual(viewport.width);
+});
+
 test('grille d\'icônes (bureau) : au survol d\'une tuile, panneau de sous-catégories en colonnes posé sous la tuile, fermé par Échap ; les tuiles restent identiques (AUDIT §48)', async ({ page, isMobile }) => {
   test.skip(isMobile, 'Sur mobile, les catégories sont dans le menu principal (accordéon).');
   await page.goto('/');

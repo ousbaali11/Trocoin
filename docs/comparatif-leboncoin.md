@@ -35,7 +35,7 @@ Statuts : **présent** (déjà là avant ce tour) · **ajouté** (dans ce tour) 
 | Fonctionnalité leboncoin | Trocoin | Statut |
 |---|---|---|
 | Tableau de bord | Statistiques, dernières annonces, messages, transactions en cours, notifications | présent |
-| Dépôt d'annonce : catégorie, champs par catégorie, photos (ordre, couverture), prix (fixe, négociable, don, échange), localisation, livraison, aperçu, brouillon | Identique, 10 photos réordonnables, brouillon, modération des annonces sensibles | présent |
+| Dépôt d'annonce : catégorie, champs par catégorie, photos (ordre, couverture), prix (fixe, négociable, don, échange), localisation, livraison, aperçu, brouillon | Identique, photos sans plafond par annonce, réordonnables, brouillon, modération des annonces sensibles | présent |
 | Gestion des annonces : modifier, renouveler, dupliquer, mettre en pause, marquer vendue, statistiques | Identique, plus « Mettre en avant » et « Urgent » (gratuits pendant le lancement) | présent |
 | Messagerie temps réel, réponses rapides, photos, offres de prix, « Vu », « en train d'écrire » | Identique (WebSocket) | présent |
 | Favoris, recherches sauvegardées avec alertes, annonces consultées | Identique | présent |

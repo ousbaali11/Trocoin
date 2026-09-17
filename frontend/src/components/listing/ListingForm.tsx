@@ -17,7 +17,8 @@ import { titleExample } from "@/lib/title-examples";
 
 const NO_DELIVERY_ROOTS = ["immobilier", "vehicules", "emploi", "services", "vacances", "animaux"];
 const NO_CONDITION_ROOTS = ["emploi", "services", "immobilier", "vacances"];
-const MAX_PHOTOS = 10;
+/** Envoi des photos par lots : l'API accepte 10 fichiers par requête ; le nombre de photos par annonce n'est plus limité (AUDIT §56). */
+const UPLOAD_BATCH = 10;
 /** Champ verrouillé après publication (AUDIT §54) : visiblement grisé, jamais simplement bloqué en silence. */
 const LOCKED_STYLE = { background: "var(--ivory-warm)", color: "var(--ink-muted)", cursor: "not-allowed" } as const;
 
@@ -122,7 +123,8 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
   /** Actions de la checklist « Fiche complète » : aller directement au champ concerné. */
   const completenessAction = (action: "photos" | "description" | "prix" | "criteres") => {
     if (action === "photos") {
-      (document.querySelector('input[aria-label="Choisir des photos"]') as HTMLInputElement | null)?.click();
+      // La checklist vit sur l'aperçu (AUDIT §56) : « Faire » ramène à l'étape Photos
+      setStep(2);
       return;
     }
     setStep(1);
@@ -199,11 +201,17 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
 
   const uploadPending = async (id: string) => {
     if (pending.length === 0) return;
-    const fd = new FormData();
-    pending.forEach((f) => fd.append("files", f));
-    const uploaded = await api<ListingPhoto[]>(`/listings/${id}/photos`, { method: "POST", formData: fd });
-    setPhotos((p) => [...p, ...uploaded]);
-    setPending([]);
+    // Par lots de 10 : chaque lot réussi quitte la file d'attente, un échec laisse le reste « À envoyer »
+    let rest = [...pending];
+    while (rest.length > 0) {
+      const batch = rest.slice(0, UPLOAD_BATCH);
+      const fd = new FormData();
+      batch.forEach((f) => fd.append("files", f));
+      const uploaded = await api<ListingPhoto[]>(`/listings/${id}/photos`, { method: "POST", formData: fd });
+      rest = rest.slice(batch.length);
+      setPhotos((p) => [...p, ...uploaded]);
+      setPending(rest);
+    }
   };
 
   const submit = async (draft: boolean) => {
@@ -259,8 +267,7 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
     if (!files) return;
     const incoming = Array.from(files).filter((f) => ["image/jpeg", "image/png", "image/webp"].includes(f.type) && f.size <= 8 * 1024 * 1024);
     if (incoming.length !== files.length) toast("Seules les images JPEG, PNG ou WEBP de moins de 8 Mo sont acceptées.", "error");
-    const room = MAX_PHOTOS - photos.length - pending.length;
-    const accepted = incoming.slice(0, Math.max(0, room));
+    const accepted = incoming; // plus de plafond par annonce (AUDIT §56)
     setPending((p) => [...p, ...accepted]);
     // Recadrage proposé pour la première photo ajoutée
     if (accepted[0]) setCropping({ file: accepted[0], index: pending.length });
@@ -473,8 +480,7 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
       {step === 2 && (
         <div>
           <h2>Ajoutez des photos</h2>
-          <CompletenessHint photosCount={photos.length + pending.length} description={form.description} price={form.price} priceType={form.priceType} attributes={form.attributes} schema={schema} onAction={completenessAction} hideActions={["photos"]} />
-          <p className="muted">Jusqu&apos;à {MAX_PHOTOS} photos (JPEG, PNG, WEBP, 8 Mo max). Un recadrage vous est proposé à l&apos;ajout. La première est la photo de couverture : <strong>glissez-déposez</strong> pour réorganiser.</p>
+          <p className="muted">Autant de photos que vous voulez (JPEG, PNG, WEBP, 8 Mo max chacune). Un recadrage vous est proposé à l&apos;ajout. La première est la photo de couverture : <strong>glissez-déposez</strong> pour réorganiser.</p>
           {lockedCount > 0 && (
             <p className="alert alert-info" data-testid="locked-photos-note" style={{ marginBottom: 12 }}>
               🔒 Les {lockedCount > 1 ? `${lockedCount} photos` : "photo"} de l&apos;annonce publiée {lockedCount > 1 ? "restent" : "reste"} en place : {lockedCount > 1 ? "elles ne peuvent" : "elle ne peut"} plus être retirée{lockedCount > 1 ? "s" : ""}, remplacée{lockedCount > 1 ? "s" : ""} ni déplacée{lockedCount > 1 ? "s" : ""} (protection contre la tromperie). Vous pouvez toujours <strong>ajouter</strong> des photos : elles viennent à la suite et restent retirables.
@@ -484,12 +490,12 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
             onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) e.preventDefault(); }} onDrop={(e) => { if (e.dataTransfer.files.length) { e.preventDefault(); addFiles(e.dataTransfer.files); } }}>
             {/* Tuile d'ajout, en tête de grille comme sur leboncoin (AUDIT §55) : un « + » et le nombre de photos possibles.
                 Le champ fichier reste accessible au clavier (rendu hors écran, pas masqué) ; on peut aussi glisser des fichiers sur la grille. */}
-            {photos.length + pending.length < MAX_PHOTOS && (
+            {(
               <div role="listitem" data-testid="add-photos" style={{ display: "grid" }}>
               <label className="add-photo-tile" style={{ display: "grid", placeItems: "center", alignContent: "center", gap: 8, minHeight: 150, padding: 10, textAlign: "center", border: "1.5px dashed var(--ink-muted)", borderRadius: 8, background: "var(--white)", cursor: "pointer", fontWeight: 600, lineHeight: 1.25 }}>
                 <input type="file" accept="image/jpeg,image/png,image/webp" multiple className="sr-only" aria-label="Choisir des photos" onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
                 <span aria-hidden="true" style={{ width: 44, height: 44, borderRadius: "50%", background: "var(--accent)", color: "var(--white)", display: "grid", placeItems: "center", fontSize: "1.7rem", fontWeight: 700, lineHeight: 1 }}>+</span>
-                <span>{photos.length + pending.length === 0 ? `Ajouter jusqu'à ${MAX_PHOTOS} photos` : `Ajouter des photos (${MAX_PHOTOS - photos.length - pending.length} possible${MAX_PHOTOS - photos.length - pending.length > 1 ? "s" : ""})`}</span>
+                <span>{photos.length + pending.length === 0 ? "Ajouter des photos" : "Ajouter d'autres photos"}</span>
               </label>
               </div>
             )}
@@ -542,6 +548,7 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
       {step === 4 && (
         <div>
           <h2>Aperçu avant publication</h2>
+          <CompletenessHint photosCount={photos.length + pending.length} description={form.description} price={form.price} priceType={form.priceType} attributes={form.attributes} schema={schema} onAction={completenessAction} />
           <div className="card" style={{ display: "grid", gridTemplateColumns: "180px 1fr", gap: 16 }}>
             <div style={{ aspectRatio: "4/3", background: "var(--ivory-warm)", borderRadius: 8, overflow: "hidden" }}>
               {(photos[0] || pending[0]) && (

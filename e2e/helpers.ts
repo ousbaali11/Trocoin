@@ -106,6 +106,15 @@ export async function expectNoHorizontalOverflow(page: Page) {
   expect(r.bad, 'éléments qui dépassent le bord droit').toEqual([]);
 }
 
+/**
+ * Accueil mobile (AUDIT §56) : le bloc « QUOI ? / OÙ ? » est replié en une ligne pour laisser la place aux annonces ;
+ * on le déplie avant de s'en servir. Sur bureau, le déclencheur n'existe pas à l'écran : rien à faire.
+ */
+export async function openHomeSearch(page: Page) {
+  const toggle = page.getByTestId('home-search-toggle');
+  if ((await toggle.isVisible()) && (await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click();
+}
+
 /** Message d'erreur du site (le lecteur de route de Next porte aussi role=alert : on cible la classe). */
 export function errorAlert(page: Page) {
   return page.locator('.alert-error');

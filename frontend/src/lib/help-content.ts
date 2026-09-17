@@ -106,7 +106,7 @@ Une transaction en cours empêche la suppression : terminez-la d'abord.`,
         body: `Le dépôt est **gratuit**. Le formulaire vous guide en cinq étapes :
 1. **Catégorie** : choisissez la plus précise, elle détermine les critères demandés et les filtres de recherche.
 2. **Description** : titre (un exemple adapté à la catégorie est proposé), prix, état, critères de la catégorie, description libre. Une **estimation de prix** s'affiche à partir des annonces comparables.
-3. **Photos** : jusqu'à 10 photos (JPEG, PNG, WEBP, 8 Mo). Un recadrage est proposé ; la première est la couverture, glissez-déposez pour réordonner.
+3. **Photos** : autant de photos que vous voulez (JPEG, PNG, WEBP, 8 Mo chacune). Un recadrage est proposé ; la première est la couverture, glissez-déposez pour réordonner.
 4. **Localisation** : ville ou code postal ; seule une position approximative (environ 1 km) est publique.
 5. **Aperçu** puis publication.
 
@@ -147,7 +147,7 @@ Les onglets filtrent par statut : en ligne, en vérification, brouillons, en pau
         title: "Photos : formats, limites et confidentialité",
         summary: "Ce que Trocoin fait de vos images.",
         keywords: ["photo", "exif", "gps", "taille"],
-        body: `Jusqu'à 10 photos par annonce, JPEG, PNG ou WEBP de 8 Mo maximum. Chaque image est **ré-encodée** par Trocoin : les métadonnées (dont la position GPS de l'appareil) sont supprimées et la taille est réduite à 1 600 px maximum.
+        body: `Pas de limite au nombre de photos par annonce ; JPEG, PNG ou WEBP de 8 Mo maximum chacune (150 photos par compte et par 24 heures, garde-fou contre les abus). Chaque image est **ré-encodée** par Trocoin : les métadonnées (dont la position GPS de l'appareil) sont supprimées et la taille est réduite à 1 600 px maximum.
 
 Un plafond quotidien d'envois protège la plateforme contre les abus ; en usage normal vous ne l'atteindrez pas.`,
       },

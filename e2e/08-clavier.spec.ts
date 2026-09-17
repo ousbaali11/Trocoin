@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { mockGeo, readSeed } from './helpers';
+import { mockGeo, openHomeSearch, readSeed } from './helpers';
 
 /**
  * Navigation au clavier seul (aucun clic de souris) sur les parcours critiques :
@@ -26,6 +26,7 @@ test("lien d'évitement puis recherche complète au clavier : mots-clés, commun
   expect(await active(page)).toMatch(/^main#contenu/);
 
   // Champ « QUOI ? » puis « OÙ ? » par tabulation
+  await openHomeSearch(page);
   await page.getByPlaceholder('QUOI ?').focus();
   await page.keyboard.type('vtt');
   await page.keyboard.press('Tab');
@@ -52,7 +53,7 @@ test("lien d'évitement puis recherche complète au clavier : mots-clés, commun
   await page.keyboard.press('Escape');
   await expect(panel).toHaveCount(0);
   await expect(page.getByPlaceholder('OÙ ?')).toHaveValue('Lyon (69003) · 1 km');
-  await page.getByRole('button', { name: 'Rechercher' }).focus();
+  await page.getByRole('button', { name: 'Rechercher', exact: true }).focus();
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/recherche\?.*radius=1/);
   await expect(page.getByRole('link', { name: L.vtt.title, exact: true }).first()).toBeVisible();

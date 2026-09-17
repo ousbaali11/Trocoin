@@ -68,7 +68,7 @@ déploiement qui ne remonte pas en 15 minutes fait échouer la CI.
 | Téléphone | Mobile français obligatoire (+33 6/7), normalisé et validé serveur, unique | [exécuté] | **Non prouvé par SMS** depuis la phase 5 : un inscrit peut saisir le numéro d'un tiers et le bloquer ; règle « un humain = un compte » affaiblie. Choix produit assumé (§6), réactivable en ~20 lignes (`AuthService.register` → `OtpService`) |
 | Comptes pro | SIRET : clé de Luhn **et** existence/activité au registre public (`recherche-entreprises.api.gouv.fr`) ; SIRET fermé ou inconnu refusé ; registre injoignable → compte accepté marqué « non vérifié » (visible admin) ; unicité du SIRET | [exécuté] tests phase 9 (mock + client HTTP simulé) ; appel réel depuis le poste : Google France → actif | L'API publique peut être limitée en débit ; pas de vérification que la personne est mandataire de l'entreprise |
 | Entrées | `ValidationPipe` whitelist, DTO stricts, attributs de catégorie validés contre un schéma (types, bornes, listes), longueurs bornées, LIKE échappé, requêtes paramétrées | [exécuté] tests listings, phase 6 | — |
-| Fichiers | MIME + signature binaire, ré-encodage `sharp` (orientation appliquée, **EXIF/GPS/ICC purgés**), ≤ 1600 px, fichiers corrompus rejetés, nom = UUID serveur, `nosniff`, 8 Mo max, 10 photos/annonce, **150 photos/compte/24 h** | [exécuté] tests phase 7, 8, 9 | Stockage encore sur disque éphémère Render (§5) ; pas d'antivirus |
+| Fichiers | MIME + signature binaire, ré-encodage `sharp` (orientation appliquée, **EXIF/GPS/ICC purgés**), ≤ 1600 px, fichiers corrompus rejetés, nom = UUID serveur, `nosniff`, 8 Mo max, photos sans plafond par annonce depuis §56 (10 fichiers par envoi), **150 photos/compte/24 h** | [exécuté] tests phase 7, 8, 9 | Stockage encore sur disque éphémère Render (§5) ; pas d'antivirus |
 | HTTP | Helmet (CSP, HSTS, nosniff, frame-options), CORS restreint à `https://trocoin.vercel.app` (403 sinon), `TRUST_PROXY` pour la vraie IP, rate limiting global 100 req/min/IP + limites par route sensibles | [exécuté] sur la production | Rate limiting en mémoire → une seule instance (Redis prêt, §5) |
 | Production | Démarrage refusé si `JWT_SECRET` faible/absent, CORS absent, base ≠ Postgres, fournisseur `mock` (SMS, paiement, notifications, e-mail, Sirene) ou clés manquantes ; `synchronize` désactivé, migrations seules ; `/dev/*` → 404 ; utilisateur Docker non-root ; `npm audit` bloquant en CI | [exécuté] boot de contrôle en mode production ; CI | Sentry non alimenté (pas de DSN) |
 | Autorisation | Rôle admin relu en base à chaque requête ; aucune route HTTP ne promeut admin ; audit log des actions admin (dont réinitialisation de mot de passe) ; propriété vérifiée sur annonces/photos/conversations | [exécuté] tests | — |
@@ -85,7 +85,7 @@ Synthèse par domaine (le détail filtre par filtre et famille par famille est e
 | Domaine | leboncoin | Trocoin | Écart restant |
 |---|---|---|---|
 | Compte | SMS/e-mail, pro avec SIRET | Formulaire particulier/pro, SIRET vérifié au registre, mot de passe, username | Pas de connexion sociale ; téléphone non vérifié (différé) |
-| Dépôt | Champs par catégorie, exemple de titre, photos, brouillon | Idem : 60 exemples de titre, schémas alignés (voir ci-dessous), 10 photos retraitées, brouillon, import CSV/XML, multi-utilisateurs pro, prix moyen constaté, fiche complète | Listes dépendantes marque → modèle → finition (référentiel constructeur absent) |
+| Dépôt | Champs par catégorie, exemple de titre, photos, brouillon | Idem : 60 exemples de titre, schémas alignés (voir ci-dessous), photos retraitées (sans plafond par annonce, §56), brouillon, import CSV/XML, multi-utilisateurs pro, prix moyen constaté, fiche complète | Listes dépendantes marque → modèle → finition (référentiel constructeur absent) |
 | Recherche | Mots-clés, localisation (Autour de moi / Toute la France / commune + rayon), filtres, tri, carte, sauvegarde | Identique, paliers de rayon exacts (0/1/5/10/20/30/50/100/200 km, 5 par défaut), plein texte français, dons/échanges en un clic | Historique des localisations ; arrondissements « toute la ville » |
 | Annonce | Galerie, critères, vendeur, similaires, annonces du pro, partage, signalement | Identique + badge « Fiche complète », menu Partager (lien, WhatsApp, e-mail, Facebook, X, natif), « autres annonces de ce vendeur » | — |
 | Messagerie / transaction | Messagerie, paiement sécurisé, livraison | Messagerie temps réel, offres de prix, photos ; paiement sécurisé Stripe (Checkout, capture à la réception) | Activation Render (§15) ; pas d'étiquettes transporteur |
@@ -2860,3 +2860,56 @@ et « À envoyer » se chevauchaient sur la première tuile.
   téléphone prérempli puis invalide. L'achat réel d'une étiquette n'est pas rejoué en production (il est payant).
 
 Production 1.27.2 (CI verte sur `685026f`) : formulaire de dépôt ouvert avec un compte de démonstration, sans rien publier — tuile « + Ajouter jusqu'à 10 photos » présente sur bureau et mobile 375 px, ancienne zone « Cliquez pour choisir des photos » absente, aucun lien « Faire » pour les photos (captures).
+
+## 56. Accueil mobile : les annonces dès l'arrivée (les trois blocs de tête conservés) ; dépôt : étape Photos réservée aux photos, sans plafond — 17 septembre 2026
+
+### 1. Accueil mobile (≤ 640 px) — bureau inchangé
+
+Constat mesuré en production 1.27.2 à 375 × 812 : la première annonce commençait à **975 px**, soit sous le premier
+écran ; le visiteur voyait trois blocs (A : grille d'icônes sur trois rangées ; B : « Rechercher une annonce » avec
+titre, texte, QUOI ?, OÙ ?, bouton ; C : compteur et raccourcis sur trois lignes) avant toute annonce. Demande du
+propriétaire : garder les trois blocs, mais que l'on tombe sur les annonces, comme sur leboncoin.
+
+Choix retenu — compacter sans rien retirer, tout reste à un geste :
+
+- **A — catégories sur une seule ligne défilante** (tuiles de 78 px, accroche magnétique, bord droit estompé pour
+  signaler la suite). Le tap déplie toujours les sous-catégories sous la ligne (§54).
+- **B — recherche repliée en une ligne** « Rechercher une annonce · Quoi ? · Où ? » (48 px). Un tap déplie le bloc
+  complet d'origine (titre, texte, QUOI ?, OÙ ?, Rechercher) et place le curseur dans « QUOI ? » ; « Réduire la
+  recherche » le replie. Le `h1` et le texte restent dans le document quand le bloc est replié (masquage visuel
+  seulement : lecteurs d'écran et référencement inchangés). `aria-expanded` / `aria-controls` sur le déclencheur.
+- **C — compteur et raccourcis sur une ligne défilante** (même mécanisme que les filtres rapides de la recherche).
+- En-tête « Les dernières annonces » : titre et lien « Tout voir » sur une ligne, marges réduites.
+
+Pistes écartées : masquer les blocs au défilement (ils ne seraient plus « là » à l'arrivée), déplacer les blocs sous
+les annonces (la recherche et les catégories doivent rester en tête), faire défiler la page automatiquement jusqu'aux
+annonces (désoriente, casse le retour arrière et l'accessibilité).
+
+Résultat mesuré (pile locale, 375 × 812) : première annonce à **335 px** (975 px avant) ; la première rangée de
+cartes est entièrement dans le premier écran. Tout est en CSS sous `@media (max-width: 640px)` ; le déclencheur
+n'existe pas à l'écran au-delà.
+
+### 2. Dépôt, étape Photos (bureau et mobile)
+
+- Le bloc « Fiche complète » (« Précisez N critères », liens « Faire → ») **n'apparaît plus sur l'étape Photos** :
+  l'étape ne sert qu'à ajouter des images. La checklist n'est pas perdue : elle est affichée à l'étape « Aperçu avant
+  publication », où « Faire → » ramène au champ concerné (photos → étape 3).
+- **Plus de plafond de photos par annonce** (10 auparavant). `MAX_PHOTOS_PER_LISTING` supprimé ; le formulaire
+  envoie les photos **par lots de 10** (limite technique d'un envoi, `MAX_FILES_PER_UPLOAD`). La tuile reste toujours
+  affichée : « Ajouter des photos » puis « Ajouter d'autres photos ». Aide en ligne et documents mis à jour.
+- Garde-fous conservés, à connaître : 10 fichiers par requête, 60 envois par heure et par adresse, 8 Mo par image,
+  et **150 photos par compte et par 24 h** (`MAX_PHOTOS_PER_DAY`, réglable) — seul vrai plafond restant, contre le
+  remplissage du disque par un compte malveillant. Les verrous du §54 (photos de publication) sont inchangés.
+
+### Vérification
+
+- API : `test/phase33` (23 photos sur une annonce en trois lots, ordre conservé ; 11 fichiers en un envoi → 400, rien
+  de conservé) → **188 tests** réussis, 1 ignoré.
+- Navigateur : nouveau test `14-filtres-decouverte` « accueil mobile » (une seule ligne de tuiles défilante, bloc replié
+  ≤ 56 px, raccourcis ≤ 48 px, première carte avant 55 % de la hauteur et visuel entier à l'écran, dépli/repli,
+  focus dans « QUOI ? », `h1` toujours présent, dernière famille atteignable ; bureau : déclencheur absent, grille et
+  formulaire inchangés) ; `04-depot` et `15-experience` adaptés (pas de checklist à l'étape Photos, checklist à
+  l'aperçu) ; `01-recherche`, `08-clavier` déplient la recherche sur mobile. Suite complète : **115 réussis,
+  11 ignorés, 0 échec** (mobile + bureau, axe compris).
+- Captures : avant (production 1.27.2, mobile), après (accueil mobile replié, déplié, sous-catégories ; bureau ;
+  étape Photos bureau et mobile, vide puis 12 photos).

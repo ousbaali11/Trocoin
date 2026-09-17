@@ -93,7 +93,7 @@ export function CategoryTiles({ tree }: { tree: CategoryNode[] }) {
 
   return (
     <div className={styles.catBand} ref={root} onMouseLeave={leave} onMouseEnter={() => closeTimer.current && window.clearTimeout(closeTimer.current)}>
-      <nav className={`container ${styles.categories}`} aria-label="Catégories" data-testid="category-tiles">
+      <nav className={`container ${styles.categories}`} aria-label="Catégories" data-testid="category-tiles" data-scroll-x>
         {tree.map((c) => (
           <Link
             key={c.slug}
