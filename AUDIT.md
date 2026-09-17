@@ -3120,3 +3120,15 @@ des clés Boxtal de production et un compte approvisionné sont nécessaires pou
   adaptées → suite complète au vert (125 réussis, 11 ignorés).
 - Captures (pile locale) : options et prix, total avec livraison (bureau et mobile), récapitulatif acheteur, vendeur
   avant / après confirmation, bon d'envoi prêt (bureau et mobile) et PDF, conversation acheteur avec le numéro de suivi.
+
+Production 1.31.1 (CI verte sur `4ef5ca3`, migrations jouées sur PostgreSQL ; le premier passage de la CI avait échoué
+sur un **test** de la §57 — motif « six chiffres » déclenché par un identifiant aléatoire —, corrigé, déploiement bloqué
+entre-temps comme prévu). Annonce temporaire de 10 €, colis de 900 g, Lyon → 75017, **prix réels du prestataire** :
+Colissimo domicile 9,73 € / point de retrait 7,86 € ; Mondial Relay domicile 9,72 € / point de retrait 5,02 € (9 relais,
+11 consignes). Fenêtre d'achat (bureau et mobile 375 px) : « Prix de l'article 10,00 € · Frais de protection 1,00 € ·
+**Frais de livraison Mondial Relay 5,02 €** · Total à payer **16,02 €** », bouton « Payer 16,02 € ». Page Stripe réelle :
+trois lignes, dont « Frais de livraison Mondial Relay (en point de retrait) 5,02 € », total 16,02 €. Vente créée : livraison
+5,02 figée, offre `MONR-CpourToi`, point « G20 LEVIS », versement vendeur prévu 9,20 € (inchangé). Annonce sans poids :
+aucun transporteur proposé, achat avec envoi → 400. Retour par « ← » sans payer puis abandon ; annonces et compte
+temporaires supprimés (204). La génération du bon d'envoi demande une vente payée : prouvée par `phase36`,
+`17-expedition`, `26-suivi-messagerie` et les captures de la pile locale — aucun numéro de carte n'est saisi en production.
