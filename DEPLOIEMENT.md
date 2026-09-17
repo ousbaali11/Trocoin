@@ -198,6 +198,13 @@ Express, `/compte/paiements`) est payé par un **Transfer** du montant net (prix
 la confirmation seulement ; les frais acheteur et la commission restent sur le solde de la
 plateforme. Un vendeur sans compte est payé dès qu'il l'a créé (tâche périodique).
 
+**Prérequis côté tableau de bord Stripe (à faire par le titulaire du compte, en mode test comme en mode réel)** :
+activer **Connect** (dashboard.stripe.com/connect → *Get started*, type de plateforme « marketplace ») et compléter le
+**profil de plateforme** (dashboard.stripe.com/settings/connect/platform-profile : responsabilité des pertes,
+description de l'activité). Sans cela Stripe refuse la création des comptes vendeurs : « Configurer mon compte de
+versement » répond alors 503 `CONNECT_NOT_READY` avec un message clair (AUDIT §61 — avant : erreur 500), et, avec des
+clés de test, la cause exacte donnée par Stripe (`reason`) s'affiche sous le bouton.
+
 Points d'attention trésorerie (le compte plateforme détient temporairement l'argent des acheteurs) :
 les transferts sont adossés à la charge d'origine (`source_transaction`) et n'exigent donc pas de
 solde disponible ; en revanche un **remboursement** après que les fonds ont été reversés sur le compte

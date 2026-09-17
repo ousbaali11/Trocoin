@@ -2,7 +2,7 @@
 
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast-context";
 import { LoadError } from "@/components/ui/LoadError";
@@ -21,6 +21,8 @@ function PaiementsInner() {
   const [status, setStatus] = useState<StripeStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
+  // Refus du prestataire de paiement : le message reste à l'écran (un toast disparaît avant d'être lu)
+  const [startError, setStartError] = useState<{ message: string; reason?: string } | null>(null);
   // Barème en vigueur (réglé par l'admin) : jamais de chiffre écrit en dur
   const [fees, setFees] = useState<FeeRates>(DEFAULT_FEE_RATES);
   useEffect(() => {
@@ -52,11 +54,13 @@ function PaiementsInner() {
 
   const start = async () => {
     setBusy(true);
+    setStartError(null);
     try {
       const res = await api<{ url: string; mode: string }>("/users/me/stripe-onboarding-link", { method: "POST" });
       window.location.href = res.url;
     } catch (e) {
-      toast((e as Error).message, "error");
+      const reason = e instanceof ApiError ? (e.details as { reason?: string } | undefined)?.reason : undefined;
+      setStartError({ message: (e as Error).message, reason });
       setBusy(false);
     }
   };
@@ -79,6 +83,12 @@ function PaiementsInner() {
           </div>
         ) : (
           <button className="btn btn-primary" disabled={busy} onClick={start}>{busy ? "Redirection…" : "Configurer mon compte de versement"}</button>
+        )}
+        {startError && (
+          <div className="alert alert-error" role="alert" data-testid="payout-setup-error" style={{ margin: "12px 0 0" }}>
+            {startError.message}
+            {startError.reason && <span className="small" style={{ display: "block", marginTop: 6, opacity: 0.85 }}>Détail technique (mode test) : {startError.reason}</span>}
+          </div>
         )}
         {status?.mode === "mock" && <p className="small muted" style={{ marginTop: 12 }}>Environnement de démonstration : le parcours Stripe est simulé (aucune clé configurée).</p>}
       </section>

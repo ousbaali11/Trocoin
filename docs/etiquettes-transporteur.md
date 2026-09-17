@@ -273,6 +273,10 @@ ce que le transporteur propose réellement autour de son adresse.
 - `GET /shipping/pickup-options?listingId=…&postalCode=…&city=…` (membre connecté, 40 appels / 10 min) : pour Colissimo
   et Mondial Relay, `domicile` et `pointRelais` viennent de la **cotation réelle** du colis de l'annonce (offres Boxtal
   `HOME` / `PICKUP_POINT`), et `points` de la recherche de points du prestataire — jamais une liste écrite à la main.
+  `city` est facultative. **Sans attente (AUDIT §61)** : une seule cotation sert les deux transporteurs, cotation et
+  points sont demandés en parallèle, et les réponses sont gardées en mémoire (tarifs 10 min, points 30 min, demandes
+  en cours partagées, échecs jamais gardés) — la même mémoire sert au paiement. La fiche annonce précharge ces options
+  dès que le code postal de l'acheteur est connu (dernier achat ou profil) : à l'ouverture de la fenêtre, tout est là.
 - Points : d'abord `GET /shipping/v3.2/parcel-point-by-shipping-offer` (points valables pour l'offre de retrait du
   transporteur — `MONR-CpourToi`, `POFR-ColissimoPickupStation`, ou `BOXTAL_OFFER_*` s'ils sont renseignés), à défaut
   `GET /shipping/v3.1/parcel-point` filtré par réseau.

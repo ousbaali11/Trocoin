@@ -49,6 +49,38 @@ export class ShippingService {
     return this.provider.name;
   }
 
+  /**
+   * Mémoire courte des réponses du prestataire (AUDIT §61). Les tarifs d'un colis entre deux codes postaux et les points
+   * de retrait d'un code postal ne changent pas d'une minute à l'autre : les redemander à chaque frappe, à chaque
+   * acheteur et de nouveau au paiement coûtait 1 à 3 s par appel. Seules les réussites sont gardées ; une demande déjà
+   * en cours est partagée (deux acheteurs, ou le préchargement puis l'ouverture de la fenêtre, ne font qu'un appel).
+   */
+  private readonly memo = new Map<string, { at: number; value: Promise<unknown> }>();
+  private cached<T>(key: string, ttlMs: number, load: () => Promise<T>): Promise<T> {
+    const hit = this.memo.get(key);
+    if (hit && Date.now() - hit.at < ttlMs) return hit.value as Promise<T>;
+    const value = load();
+    this.memo.set(key, { at: Date.now(), value });
+    value.catch(() => {
+      if (this.memo.get(key)?.value === value) this.memo.delete(key);
+    });
+    if (this.memo.size > 500) for (const [k, v] of this.memo) if (Date.now() - v.at > 30 * 60_000 || this.memo.size > 400) this.memo.delete(k);
+    return value;
+  }
+  private static readonly QUOTE_TTL = 10 * 60_000;
+  private static readonly POINTS_TTL = 30 * 60_000;
+  private norm(city?: string | null): string {
+    return (city || '').trim().toLowerCase();
+  }
+  private cachedQuote(input: { carrier: ShippingCarrier; parcel: NonNullable<ReturnType<typeof parcelOf>>; fromPostalCode: string; toPostalCode: string; fromCity?: string; toCity?: string }): Promise<ShippingRate[]> {
+    const p = input.parcel;
+    const key = `q|${input.carrier}|${p.weightGrams}|${p.lengthCm ?? ''}x${p.widthCm ?? ''}x${p.heightCm ?? ''}|${input.fromPostalCode}|${input.toPostalCode}|${this.norm(input.toCity)}`;
+    return this.cached(key, ShippingService.QUOTE_TTL, () => this.provider.quote(input));
+  }
+  private cachedPoints(carrier: ShippingCarrier, postalCode: string, city?: string): Promise<RelayPoint[]> {
+    return this.cached(`p|${carrier}|${postalCode}|${this.norm(city)}`, ShippingService.POINTS_TTL, () => this.provider.searchRelayPoints(carrier, postalCode, city));
+  }
+
   /** Tarifs pour le colis déclaré, sur le transporteur choisi par l'acheteur à l'achat. */
   async quote(transactionId: string, sellerId: string, dto: QuoteShipmentDto): Promise<{ carrier: ShippingCarrier; rates: ShippingRate[] }> {
     const tx = await this.sellerTransaction(transactionId, sellerId);
@@ -72,21 +104,30 @@ export class ShippingService {
     if (!listing || !listing.deliveryAvailable) throw new NotFoundException("Cette annonce ne propose pas l'envoi.");
     const parcel = parcelOf(listing);
     if (!parcel || !listing.postalCode) return { postalCode, carriers: [], unavailableReason: NO_WEIGHT_MESSAGE };
-    const carriers: CarrierPickupOptions[] = [];
-    for (const carrier of ['colissimo', 'mondial_relay'] as ShippingCarrier[]) {
+    // AUDIT §61 : les deux transporteurs, et pour chacun le tarif et les points, sont demandés EN MÊME TEMPS (avant :
+    // quatre appels l'un après l'autre — l'acheteur attendait leur somme). Les points sont cherchés sans attendre de
+    // savoir si le retrait est coté : ils ne servent que s'il l'est.
+    const fromPostalCode = listing.postalCode;
+    const carriers = await Promise.all((['colissimo', 'mondial_relay'] as ShippingCarrier[]).map(async (carrier): Promise<CarrierPickupOptions> => {
       const base = { carrier, label: CARRIER_LABELS[carrier] };
       try {
-        const rates = await this.provider.quote({ carrier, parcel, fromPostalCode: listing.postalCode, toPostalCode: postalCode, fromCity: listing.city ?? undefined, toCity: city });
+        const [rates, found] = await Promise.all([
+          this.cachedQuote({ carrier, parcel, fromPostalCode, toPostalCode: postalCode, fromCity: listing.city ?? undefined, toCity: city }),
+          this.cachedPoints(carrier, postalCode, city).catch((err) => {
+            this.logger.warn(`Points de retrait ${carrier} illisibles pour ${postalCode} : ${(err as Error).message}`);
+            return [] as RelayPoint[];
+          }),
+        ]);
         const home = rates.find((r) => r.mode === 'domicile');
         const pickup = rates.find((r) => r.mode === 'point_relais');
-        const points = pickup ? await this.provider.searchRelayPoints(carrier, postalCode, city) : [];
-        carriers.push({ ...base, domicile: !!home, pointRelais: !!pickup && points.length > 0, domicilePriceCents: home?.priceCents, pickupPriceCents: pickup?.priceCents, points });
+        const points = pickup ? found : [];
+        return { ...base, domicile: !!home, pointRelais: !!pickup && points.length > 0, domicilePriceCents: home?.priceCents, pickupPriceCents: pickup?.priceCents, points };
       } catch (err) {
         this.logger.warn(`Options de retrait ${carrier} indisponibles pour ${postalCode} : ${(err as Error).message}`);
         // Sans cotation, pas de prix ferme à faire payer : ce transporteur n'est pas proposé pour l'instant
-        carriers.push({ ...base, domicile: false, pointRelais: false, points: [], pointsUnavailable: true });
+        return { ...base, domicile: false, pointRelais: false, points: [], pointsUnavailable: true };
       }
-    }
+    }));
     return { postalCode, carriers };
   }
 
@@ -98,7 +139,7 @@ export class ShippingService {
   async quoteForPurchase(listing: Listing, carrier: ShippingCarrier, mode: 'domicile' | 'point_relais', toPostalCode: string, toCity?: string) {
     const parcel = parcelOf(listing);
     if (!parcel || !listing.postalCode) throw new BadRequestException(NO_WEIGHT_MESSAGE);
-    const rates = await this.call(() => this.provider.quote({ carrier, parcel, fromPostalCode: listing.postalCode!, toPostalCode, fromCity: listing.city ?? undefined, toCity }));
+    const rates = await this.call(() => this.cachedQuote({ carrier, parcel, fromPostalCode: listing.postalCode!, toPostalCode, fromCity: listing.city ?? undefined, toCity }));
     const rate = rates.find((r) => r.mode === mode);
     if (!rate || !rate.priceCents) throw new BadRequestException(`${CARRIER_LABELS[carrier]} ne propose pas ${mode === 'domicile' ? 'la livraison à domicile' : 'le retrait en point'} pour ce colis et cette adresse.`);
     return { offerCode: rate.offerCode, priceCents: rate.priceCents, mode, ...parcel };
@@ -127,7 +168,7 @@ export class ShippingService {
   async resolvePickupPoint(carrier: ShippingCarrier, pointId: string, postalCode: string, city: string | undefined, fallback: RelayPoint): Promise<RelayPoint> {
     let points: RelayPoint[];
     try {
-      points = await this.provider.searchRelayPoints(carrier, postalCode, city);
+      points = await this.cachedPoints(carrier, postalCode, city);
     } catch (err) {
       this.logger.warn(`Point de retrait ${pointId} non vérifié (${(err as Error).message})`);
       return fallback;

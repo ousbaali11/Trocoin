@@ -28,6 +28,8 @@ export class StripeConnectService {
   private readonly logger = new Logger('StripeConnect');
   private readonly stripe?: Stripe;
   private readonly mode: 'mock' | 'stripe' | 'disabled';
+  /** Clé de test : la cause renvoyée par Stripe peut être jointe à la réponse (aucun secret, utile au réglage du compte). */
+  private readonly testMode: boolean = false;
 
   constructor(
     private config: ConfigService,
@@ -38,6 +40,7 @@ export class StripeConnectService {
     if (provider === 'stripe' && key) {
       this.stripe = new Stripe(key);
       this.mode = 'stripe';
+      this.testMode = key.startsWith('sk_test_') || key.startsWith('rk_test_');
     } else if (provider === 'disabled') {
       this.mode = 'disabled';
     } else {
@@ -62,8 +65,7 @@ export class StripeConnectService {
     }
 
     const stripe = this.stripe!;
-    let accountId = user.stripeAccountId;
-    if (!accountId) {
+    const createAccount = async () => {
       const account = await stripe.accounts.create({
         type: 'express',
         country: 'FR',
@@ -71,17 +73,48 @@ export class StripeConnectService {
         business_type: user.accountType === 'professionnel' ? 'company' : 'individual',
         metadata: { userId: user.id },
       });
-      accountId = account.id;
-      await this.usersService.setStripeAccount(userId, accountId, false);
-    }
+      await this.usersService.setStripeAccount(userId, account.id, false);
+      return account.id;
+    };
+    const createLink = (account: string) => stripe.accountLinks.create({ account, type: 'account_onboarding', return_url: returnUrl, refresh_url: refreshUrl });
 
-    const link = await stripe.accountLinks.create({
-      account: accountId,
-      type: 'account_onboarding',
-      return_url: returnUrl,
-      refresh_url: refreshUrl,
+    // AUDIT §61 : un refus de Stripe (Connect non activé sur la plateforme, profil de plateforme incomplet, compte
+    // connecté effacé ou créé avec d'autres clés…) remontait en erreur 500 « Erreur interne ». Il est maintenant journalisé
+    // et rendu en clair ; un identifiant de compte devenu invalide est remplacé une fois.
+    try {
+      let accountId = user.stripeAccountId || (await createAccount());
+      try {
+        return { url: (await createLink(accountId)).url, accountId, mode: 'stripe' };
+      } catch (err) {
+        if (!this.isUnknownAccount(err) || !user.stripeAccountId) throw err;
+        this.logger.warn(`Compte Connect ${accountId} inconnu de Stripe pour ${userId} : un nouveau compte est créé`);
+        accountId = await createAccount();
+        return { url: (await createLink(accountId)).url, accountId, mode: 'stripe' };
+      }
+    } catch (err) {
+      throw this.unavailable(err, userId);
+    }
+  }
+
+  private isUnknownAccount(err: unknown): boolean {
+    const e = err as { code?: string; statusCode?: number; message?: string };
+    return e?.code === 'account_invalid' || e?.code === 'resource_missing' || (e?.statusCode === 403 && /does not have access to account|application access may have been revoked/i.test(e?.message || ''));
+  }
+
+  /** Refus de Stripe → 503 en français ; la cause exacte est journalisée, et jointe à la réponse avec des clés de test. */
+  private unavailable(err: unknown, userId: string): ServiceUnavailableException {
+    const e = err as { type?: string; code?: string; message?: string; statusCode?: number };
+    const cause = `${e?.type || 'erreur'}${e?.code ? ` / ${e.code}` : ''} : ${e?.message || String(err)}`;
+    this.logger.error(`Compte de versement de ${userId} : refus de Stripe — ${cause}`);
+    const platform = /signed up for Connect|platform profile|platform-profile|managing losses|responsibilities|Connect/i.test(e?.message || '') && e?.type !== 'StripeConnectionError';
+    return new ServiceUnavailableException({
+      statusCode: 503,
+      code: platform ? 'CONNECT_NOT_READY' : 'CONNECT_UNAVAILABLE',
+      message: platform
+        ? "Les versements ne sont pas encore ouverts sur Trocoin : la configuration du prestataire de paiement est en cours de finalisation. Votre argent reste en sécurité, il vous sera versé dès l'ouverture — réessayez un peu plus tard."
+        : "Le service de versement ne répond pas pour le moment. Votre argent reste en sécurité : réessayez dans quelques minutes.",
+      ...(this.testMode ? { reason: cause.slice(0, 400) } : {}),
     });
-    return { url: link.url, accountId, mode: 'stripe' };
   }
 
   async refreshStatus(userId: string): Promise<{ connected: boolean; onboardingComplete: boolean; mode: string }> {
@@ -95,7 +128,17 @@ export class StripeConnectService {
       return { connected: true, onboardingComplete: true, mode: 'mock' };
     }
 
-    const account = await this.stripe!.accounts.retrieve(user.stripeAccountId);
+    // Stripe injoignable ou compte inconnu : l'état connu est rendu tel quel plutôt qu'une erreur 500 sur la page Paiements
+    let account: Stripe.Account;
+    try {
+      account = await this.stripe!.accounts.retrieve(user.stripeAccountId);
+    } catch (err) {
+      this.logger.warn(`État du compte de versement de ${userId} illisible : ${(err as Error).message}`);
+      if (this.isUnknownAccount(err)) {
+        return { connected: false, onboardingComplete: false, mode: 'stripe' };
+      }
+      return { connected: true, onboardingComplete: !!user.stripeOnboardingComplete, mode: 'stripe' };
+    }
     const complete = !!(account.charges_enabled && account.payouts_enabled);
     await this.usersService.setStripeAccount(userId, user.stripeAccountId, complete);
     return { connected: true, onboardingComplete: complete, mode: 'stripe' };

@@ -21,6 +21,7 @@ test('paiement : taper dans les champs d\'adresse garde le focus dans le champ, 
     // Frappe touche par touche, comme une personne : le défaut n'apparaît pas avec un remplissage d'un bloc
     for (const [id, text] of [['#addr-name', 'Nora Acheteur'], ['#addr-line1', '5 avenue des Ternes'], ['#addr-cp', '75017'], ['#addr-city', 'Paris']] as const) {
       const field = dialog.locator(id);
+      await field.fill(''); // la ville peut déjà être déduite du code postal (AUDIT §61) : on repart d'un champ vide
       await field.click();
       await page.keyboard.type(text, { delay: 25 });
       await expect(field).toBeFocused();

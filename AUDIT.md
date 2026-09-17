@@ -3268,3 +3268,44 @@ compte temporaires supprimés (200, 204, 204). Aucun numéro de carte saisi.
 
 Correctif 1.32.1, vu sur les captures : l'aide de l'état « Fonds bloqués » disait au vendeur « le vendeur doit
 expédier… » → « à vous d'expédier ou d'organiser la remise » (conversation et page de la vente).
+
+## 61. « Configurer mon compte de versement » en erreur ; options de réception sans attente — 18 septembre 2026
+
+Deux retours du propriétaire après un achat complet à deux comptes : (1) une fois la réception confirmée, le vendeur
+clique sur « Configurer mon compte de versement » et obtient une erreur, sur grand écran comme sur téléphone ;
+(2) à l'achat avec envoi, il faut attendre avant que les choix « domicile / point relais / bureau ou consigne »
+n'apparaissent — il veut les trouver déjà là, et la liste des points sans attendre.
+
+### 1. Compte de versement
+
+- Reproduit en production : `POST /users/me/stripe-onboarding-link` → **500 « Erreur interne »**. Cause côté code :
+  les appels à Stripe (`accounts.create`, `accountLinks.create`, `accounts.retrieve`) n'étaient pas protégés — tout
+  refus de Stripe devenait une erreur interne, sans explication, et le bouton donnait l'impression d'un bug du site.
+- Correction : le refus est journalisé et rendu en **503, en français** (`CONNECT_NOT_READY` quand la plateforme n'a
+  pas terminé l'activation de Stripe Connect, `CONNECT_UNAVAILABLE` pour une panne), avec « votre argent reste en
+  sécurité » ; avec des clés de test, la cause exacte donnée par Stripe est jointe (`reason`) pour le réglage du
+  compte. Un compte connecté enregistré mais inconnu de Stripe (autres clés, compte effacé) est remplacé une fois.
+  L'état du compte (`stripe-status`) ne renvoie plus d'erreur quand Stripe ne répond pas. Page « Paiements » : le
+  message reste affiché sous le bouton (un toast disparaissait), le bouton redevient cliquable.
+- La limite de 5 essais par 10 minutes explique le message « Trop de tentatives » vu après plusieurs clics.
+
+### 2. Options de réception sans attente
+
+Mesure en production avant correction : **7,2 s** pour `GET /shipping/pickup-options` (6,1 à 6,8 s pour un autre
+code postal), auxquelles s'ajoutaient 500 ms d'attente après la dernière frappe et l'obligation d'avoir saisi la ville.
+Cause : quatre appels au prestataire **l'un après l'autre** (cotation puis points, pour chaque transporteur), dont
+**deux cotations identiques** — la cotation Boxtal contient déjà tous les transporteurs.
+
+- Serveur : tarifs et points des deux transporteurs demandés **en même temps** ; une seule cotation partagée ;
+  réponses gardées en mémoire (tarifs 10 min, points 30 min, demandes en cours partagées, échecs jamais gardés) et
+  réutilisées au paiement (`quoteForPurchase`, `resolvePickupPoint`). Des points illisibles ne retirent plus la
+  livraison à domicile. La ville devient facultative pour la recherche.
+- Navigateur : les trois choix sont **affichés d'emblée** et se cochent tout de suite (prix en attente figurés par un
+  trait, liste figurée par trois lignes) ; la recherche part au **cinquième chiffre du code postal**, sans délai ni
+  ville ; quand la ville se précise, la relecture se fait sans rien effacer et garde le point choisi ; les options déjà
+  lues sont reprises de mémoire (changement de transporteur : aucun appel).
+- **Préchargement** : code postal et ville préremplis (dernier achat sur l'appareil — seuls ces deux champs sont
+  gardés, par compte —, sinon profil) ; dès l'arrivée sur une fiche achetable avec envoi, les options sont lues en
+  arrière-plan. À l'ouverture de la fenêtre, choix, prix et points sont déjà là. La ville est déduite du code postal
+  quand il ne correspond qu'à une commune (jamais pendant que la personne est dans le champ Ville).
+- Une fois la réponse du transporteur connue, seul ce qu'il propose réellement reste affiché (règle de la §57).

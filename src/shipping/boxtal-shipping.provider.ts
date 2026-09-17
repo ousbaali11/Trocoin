@@ -310,8 +310,28 @@ export class BoxtalShippingProvider implements IShippingProvider {
     });
   }
 
+  /**
+   * La cotation v1 renvoie les offres de TOUS les transporteurs pour un trajet et un colis : Colissimo et Mondial Relay,
+   * demandés ensemble par la fenêtre d'achat, partagent donc la même requête (AUDIT §61 — avant : deux requêtes
+   * identiques de plusieurs secondes). Gardée dix minutes ; un échec n'est jamais gardé.
+   */
+  private readonly quoteMemo = new Map<string, { at: number; offers: ReturnType<BoxtalShippingProvider['rawQuote']> }>();
+  private sharedRawQuote(input: QuoteInput & { fromCity?: string; toCity?: string }): ReturnType<BoxtalShippingProvider['rawQuote']> {
+    const p = input.parcel;
+    const key = [input.fromPostalCode, (input.fromCity || '').toLowerCase(), input.toPostalCode, (input.toCity || '').toLowerCase(), p.weightGrams, p.lengthCm ?? '', p.widthCm ?? '', p.heightCm ?? '', new Date().toISOString().slice(0, 10)].join('|');
+    const hit = this.quoteMemo.get(key);
+    if (hit && Date.now() - hit.at < 10 * 60_000) return hit.offers;
+    const offers = this.rawQuote(input);
+    this.quoteMemo.set(key, { at: Date.now(), offers });
+    offers.catch(() => {
+      if (this.quoteMemo.get(key)?.offers === offers) this.quoteMemo.delete(key);
+    });
+    if (this.quoteMemo.size > 300) for (const [k, v] of this.quoteMemo) if (Date.now() - v.at > 10 * 60_000 || this.quoteMemo.size > 200) this.quoteMemo.delete(k);
+    return offers;
+  }
+
   async quote(input: QuoteInput & { fromCity?: string; toCity?: string }): Promise<ShippingRate[]> {
-    const offers = await this.rawQuote(input);
+    const offers = await this.sharedRawQuote(input);
     const seen = new Set<string>();
     const rates: ShippingRate[] = [];
     for (const o of offers) {

@@ -11,7 +11,8 @@ import type { ListingDetail, Quote } from "@/lib/types";
 import { FavoriteButton } from "@/components/ui/FavoriteButton";
 import { Modal } from "@/components/ui/Modal";
 import { ShareMenu } from "@/components/ui/ShareMenu";
-import { DeliveryChooser, type DeliveryChoice } from "./DeliveryChooser";
+import { suggestCities } from "@/lib/geo";
+import { clearPickupOptions, DeliveryChooser, loadPickupOptions, type DeliveryChoice } from "./DeliveryChooser";
 import { ReportListingButton } from "./ReportListingButton";
 
 export function ListingActions({ listing }: { listing: ListingDetail }) {
@@ -30,6 +31,34 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
     if (user?.phoneNumber) setAddress((a) => (a.phone ? a : { ...a, phone: formatPhone(user.phoneNumber!) }));
   }, [user?.phoneNumber]);
   const setAddr = (k: keyof typeof address, v: string) => setAddress((a) => ({ ...a, [k]: v }));
+  // Sans attente (AUDIT §61). Code postal et ville préremplis : ceux du dernier achat sur cet appareil, sinon ceux du
+  // profil — la recherche des options de réception peut ainsi partir dès l'arrivée sur la fiche.
+  useEffect(() => {
+    if (!user) return;
+    let last: { postalCode?: string; city?: string } = {};
+    try {
+      last = JSON.parse(window.localStorage.getItem(`trocoin_livraison_${user.id}`) || "{}");
+    } catch {
+      /* stockage indisponible : on se contente du profil */
+    }
+    const postalCode = /^\d{5}$/.test(last.postalCode || "") ? last.postalCode! : /^\d{5}$/.test(user.postalCode || "") ? user.postalCode! : "";
+    const city = postalCode && postalCode === last.postalCode ? last.city || "" : postalCode ? user.city || "" : "";
+    if (postalCode) setAddress((a) => (a.postalCode || a.city ? a : { ...a, postalCode, city }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+  // Ville déduite du code postal quand il ne correspond qu'à une commune : un champ de moins à saisir
+  useEffect(() => {
+    if (!/^\d{5}$/.test(address.postalCode) || address.city.trim()) return;
+    const ctrl = new AbortController();
+    const cp = address.postalCode;
+    suggestCities(cp, ctrl.signal).then((found) => {
+      const names = [...new Set(found.filter((f) => f.postcode === cp).map((f) => f.city))];
+      // Jamais pendant que la personne est dans le champ Ville : sa frappe s'ajouterait à la valeur déduite
+      if (names.length === 1 && document.activeElement?.id !== "addr-city") setAddress((a) => (a.postalCode === cp && !a.city.trim() ? { ...a, city: names[0] } : a));
+    });
+    return () => ctrl.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [address.postalCode]);
   // Lieu de réception (AUDIT §57) : domicile, point relais, bureau de poste ou consigne — selon ce que le transporteur propose pour l'adresse
   const [choice, setChoice] = useState<DeliveryChoice>({ receiveAt: null, point: null, complete: false, shippingCents: null, pointsUnavailable: false });
   // Frais de livraison (AUDIT §59) : tarif réel de l'option choisie, ajouté au total que l'acheteur paie
@@ -73,6 +102,13 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
     if (!active) return;
     api<Quote>(`/transactions/quote?listingId=${listing.id}`).then(setQuote).catch(() => setQuote(null));
   }, [listing.id, active, user?.id]);
+  // Préchargement (AUDIT §61) : dès que l'achat avec envoi est possible et que le code postal est connu, les options des
+  // deux transporteurs sont lues en arrière-plan — à l'ouverture de la fenêtre, choix, prix et points sont déjà là.
+  useEffect(() => {
+    if (!user || isOwner || !active || !listing.deliveryAvailable || !quote?.eligible || !/^\d{5}$/.test(address.postalCode)) return;
+    loadPickupOptions(listing.id, address.postalCode, address.city).catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, quote?.eligible, address.postalCode, buyOpen]);
   // Arrivée depuis la conversation (« Payer 15,00 € ») : la fenêtre de paiement s'ouvre directement
   useEffect(() => {
     if (!user || !quote?.eligible || isOwner || typeof window === "undefined") return;
@@ -108,6 +144,13 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
     setBusy(true);
     try {
       const res = await api<{ transaction: { id: string }; checkoutUrl?: string }>("/transactions", { method: "POST", body: { listingId: listing.id, deliveryMethod: delivery, expectedTotal: payTotal, ...(delivery !== "main_propre" ? { deliveryMode: choice.receiveAt === "domicile" ? "domicile" : "point_relais", ...(choice.point ? { pickupPoint: { id: choice.point.id, name: choice.point.name, line1: choice.point.line1, postalCode: choice.point.postalCode, city: choice.point.city, type: choice.point.type } } : {}), shippingAddress: { name: address.name.trim(), line1: address.line1.trim(), line2: address.line2.trim() || undefined, postalCode: address.postalCode, city: address.city.trim(), phone: address.phone.trim() || undefined } } : {}) } });
+      if (delivery !== "main_propre" && user) {
+        try {
+          window.localStorage.setItem(`trocoin_livraison_${user.id}`, JSON.stringify({ postalCode: address.postalCode, city: address.city.trim() }));
+        } catch {
+          /* stockage indisponible */
+        }
+      }
       if (res.checkoutUrl) {
         // Paiement hébergé : la carte est saisie sur la page sécurisée Stripe, puis retour sur la transaction
         window.location.assign(res.checkoutUrl);
@@ -123,6 +166,7 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
       if (fresh) {
         const freshShipping = (fresh as { shippingFee?: number }).shippingFee ?? 0;
         setQuote((q) => (q ? { ...q, ...fresh, buyerTotal: Math.round(((fresh.buyerTotal ?? q.buyerTotal ?? 0) - freshShipping) * 100) / 100 } : q));
+        clearPickupOptions();
         setOptionsNonce((n) => n + 1);
       }
       toast(err.message, fresh ? "info" : "error");
