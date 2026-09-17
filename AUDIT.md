@@ -2614,3 +2614,71 @@ horizontal existant est inchangé.
   `.admin-side{…height:100dvh;…position:sticky;top:0;overflow-y:auto}` (lue sur www.trocoin.fr/admin).
   Aucun identifiant admin de production n'étant disponible, la preuve fonctionnelle est celle de la pile
   locale sur le même code.
+
+## 51. Paiement expliqué en chiffres, affichage des frais, commission et frais réglables par l'admin — 17 septembre 2026
+
+Demande : (1) un document qui explique le mécanisme avec un exemple chiffré (article à 10 €) : où va l'argent,
+ce que paie l'acheteur, ce que reçoit le vendeur, ce que garde Trocoin, et si les frais Stripe sont déjà
+déduits ; (2) vérifier que la page de paiement détaille prix et frais ; (3) rendre la commission et les
+frais de protection réglables depuis la console, sans effet rétroactif, avec trace au journal ; (4) le risque
+fiscal ou comptable reste une question pour un comptable.
+
+### 1. Document : `docs/mecanisme-paiement-explique.md`
+
+Article à 10,00 € : l'acheteur paie **11,00 €** (10,00 + 1,00 de frais de protection), le vendeur reçoit
+**9,20 €** (10,00 − 0,80 de commission), Trocoin garde **1,80 € brut**. Les frais Stripe **ne sont calculés
+nulle part dans le code** : Stripe les prélève sur le solde de la plateforme, donc sur la part de Trocoin.
+Barème relu sur stripe.com le 17/09/2026 : carte EEE standard 1,5 % + 0,25 € → 0,42 € sur 11,00 € ; Connect
+0,25 % + 0,10 € par versement → 0,12 € sur 9,20 € ; soit **≈ 1,26 € net par vente**, avant le forfait de
+**2 € par vendeur actif et par mois** (un vendeur qui ne fait qu'une vente à 10 € dans le mois coûte plus
+qu'il ne rapporte). PayPal via Stripe : 0,2 % + 0,10 € plus les frais propres de PayPal. Le document suit
+l'argent étape par étape avec les délais du code (capture sous 24 h, 7 jours pour expédier, réception
+présumée 7 jours après l'envoi, 7 jours de fenêtre de litige, virement à la confirmation, versement bancaire
+au calendrier Stripe), indique où chaque montant est calculé, et liste les questions à poser au comptable.
+Le chiffre « Revenus plateforme » de la console est donc un **brut** (commission + frais acheteur).
+
+### 2. Affichage au paiement
+
+Avant : la fenêtre de confirmation montrait déjà trois lignes (prix, frais, total) mais sans la formule, le
+bouton disait « frais de protection inclus » sans montant, et la page Stripe n'avait **qu'une ligne** au
+total. Maintenant : sous le bouton « Acheter · 11,00 € » → « Paiement sécurisé : 10,00 € + 1,00 € de frais
+de protection » ; dans la fenêtre, « Frais de protection acheteur — 5 % + 0,50 € (plafonnés à 15 €) :
+paiement conservé par Trocoin jusqu'à la réception » et « Le vendeur perçoit 9,20 € (commission Trocoin de
+8 % : 0,80 €) » ; sur la page Stripe, **deux lignes** (l'article, puis « Frais de protection acheteur
+Trocoin »). Fiche transaction vendeur : le taux affiché est celui de la vente, plus « 8 % » en dur. Aide et
+page Versements lisent le barème en vigueur (`/settings/public` → `fees`).
+
+### 3. Barème réglable par l'admin
+
+- Réglages système `commission_percent`, `buyer_fee_percent`, `buyer_fee_fixed_eur`, `buyer_fee_cap_eur`
+  (créés au démarrage avec 8, 5, 0,5, 15 ; bornes 0–30 %, 0–20 €, 0–500 €, deux décimales).
+- Console → Configuration → Monétisation et formules → **« Commission et frais du paiement sécurisé »** :
+  encart « En vigueur actuellement » (taux, exemple à 10 €, dernière modification et son auteur), champs,
+  aperçu chiffré des valeurs saisies, confirmation qui rappelle la portée, bouton inactif sans changement
+  ou avec une valeur invalide.
+- **Non rétroactif** : `createTransaction` lit le barème une fois et fige `amount`, `commission`,
+  `buyerFee` et `feeRates` (migration `1789530000000-BaremeParTransaction`) ; le détail d'une transaction
+  relisait `computeQuote(tx.amount)` avec le barème du jour : corrigé (`quoteOfTransaction`). Une page de
+  paiement déjà ouverte garde son montant (session Stripe). Un total affiché mais pas encore payé est
+  protégé : `expectedTotal` envoyé avec l'achat, réponse **409 `QUOTE_CHANGED`** avec le nouveau devis, la
+  fenêtre l'affiche et rien n'est débité.
+- **Journal d'audit** : `settings.update` avec admin, date, IP et, par réglage, `{"from":8,"to":9}`.
+
+### Vérification
+
+- API : `test/phase29` (3 tests) — barème par défaut à 10 €, changement par l'admin, transaction existante
+  intacte (montants, devis détaillé, barème), 409 puis achat au nouveau barème, journal avec anciennes et
+  nouvelles valeurs, bornes et droits, plafond à 1 000 €. **176 tests API**.
+- Navigateur : `e2e/23-bareme` (fenêtre de paiement bureau + mobile, console, total protégé) ; suite
+  complète 109 réussis + les 3 scénarios corrigés (ils utilisaient une annonce du seed refusée par un autre
+  scénario : annonce propre désormais) ; CI verte sur `352c5ef`.
+- Captures (pile locale, article à 10 €) : fenêtre de paiement bureau et mobile, panneau admin en vigueur,
+  saisie, confirmation, après changement, journal (`{"commission_percent":{"from":8,"to":9},
+  "buyer_fee_fixed_eur":{"from":0.5,"to":0.7}}`).
+- Production 1.26.0 : `/settings/public` expose `fees` 8 / 5 / 0,5 / 15 ; avec un vendeur et une annonce
+  temporaires à 10 € et un compte de démonstration acheteur : devis 11,00 / 9,20, transaction créée avec
+  `feeRates`, **page Stripe (environnement de test) sur deux lignes : 10,00 € + « Frais de protection
+  acheteur Trocoin » 1,00 € = 11,00 €** (capture, aucune carte saisie). Annonce, transaction en attente et
+  compte temporaire supprimés (404 / 0 transaction). À noter : la page Stripe affiche le nom du compte
+  Stripe (« Stratos consulting ») et non « Trocoin » : à changer dans le Dashboard Stripe (nom public).
+- Pas d'identifiants admin de production : le panneau est prouvé sur la pile locale, même code.
