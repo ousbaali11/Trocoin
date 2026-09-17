@@ -26,7 +26,7 @@ test.afterEach(async () => {
   await api('/admin/settings', { method: 'PATCH', token: await adminToken(), body: DEFAULTS });
 });
 
-test('fenêtre de paiement : prix de l\'article, frais de protection (avec leur formule) et total sur trois lignes distinctes', async ({ page }) => {
+test('fenêtre de paiement : prix de l\'article, frais de protection et total sur trois lignes distinctes, sans formule ni net du vendeur', async ({ page }) => {
   await loginAs(page, seed.buyer, `/annonces/${listing.id}`);
   await expect(page.getByTestId('buy-breakdown')).toHaveText(/220,00\s€ \+ 11,50\s€ de frais de protection/);
   await page.getByRole('button', { name: /^Acheter · 231,50/ }).click();
@@ -34,11 +34,14 @@ test('fenêtre de paiement : prix de l\'article, frais de protection (avec leur 
   await expect(pay.getByTestId('quote-price')).toContainText('Prix de l\'article');
   await expect(pay.getByTestId('quote-price')).toContainText(/220,00\s€/);
   await expect(pay.getByTestId('quote-fee')).toContainText('Frais de protection acheteur');
-  await expect(pay.getByTestId('quote-fee')).toContainText(/5\s% \+ 0,50\s€ \(plafonnés à 15\s€\)/);
   await expect(pay.getByTestId('quote-fee')).toContainText(/11,50\s€/);
   await expect(pay.getByTestId('quote-total')).toContainText('Total à payer');
   await expect(pay.getByTestId('quote-total')).toContainText(/231,50\s€/);
-  await expect(pay).toContainText(/Le vendeur perçoit 202,40\s€ \(commission Trocoin de 8\s% : 17,60\s€\)/);
+  // Côté acheteur (AUDIT §53) : ni la formule des frais, ni le net du vendeur, ni la commission ne s'affichent
+  await expect(pay).not.toContainText('plafonnés');
+  await expect(pay).not.toContainText('Le vendeur perçoit');
+  await expect(pay).not.toContainText(/commission/i);
+  await expect(pay).toContainText('Frais de port à convenir avec le vendeur pour un envoi.');
   await expect(pay.getByRole('button', { name: /^Payer 231,50/ })).toBeVisible();
 });
 

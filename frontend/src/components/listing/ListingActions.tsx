@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast-context";
-import { formatBuyerFeeFormula, formatEuros, formatPercent, formatPhone } from "@/lib/format";
+import { formatEuros, formatPhone } from "@/lib/format";
 import type { ListingDetail, Quote } from "@/lib/types";
 import { FavoriteButton } from "@/components/ui/FavoriteButton";
 import { Modal } from "@/components/ui/Modal";
@@ -189,11 +189,11 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
             <table className="table" style={{ marginBottom: 16 }}>
               <tbody>
                 <tr data-testid="quote-price"><td>Prix de l&apos;article</td><td style={{ textAlign: "right" }}>{formatEuros(quote.price)}</td></tr>
-                <tr data-testid="quote-fee"><td>Frais de protection acheteur{quote.rates && <span className="small muted" style={{ display: "block" }}>{formatBuyerFeeFormula(quote.rates)} : paiement conservé par Trocoin jusqu&apos;à la réception</span>}</td><td style={{ textAlign: "right", verticalAlign: "top" }}>{formatEuros(quote.buyerFee)}</td></tr>
+                <tr data-testid="quote-fee"><td>Frais de protection acheteur</td><td style={{ textAlign: "right" }}>{formatEuros(quote.buyerFee)}</td></tr>
                 <tr data-testid="quote-total"><td><strong>Total à payer</strong></td><td style={{ textAlign: "right" }}><strong>{formatEuros(quote.buyerTotal)}</strong></td></tr>
               </tbody>
             </table>
-            <p className="small muted">Frais de port à convenir avec le vendeur pour un envoi. Le vendeur perçoit {formatEuros(quote.sellerPayout)} (commission Trocoin{quote.rates ? ` de ${formatPercent(quote.rates.commissionPercent)}` : ""} : {formatEuros(quote.commission)}).</p>
+            <p className="small muted">Frais de port à convenir avec le vendeur pour un envoi.</p>
             <div className="row" style={{ justifyContent: "flex-end" }}>
               <button className="btn btn-outline" onClick={() => setBuyOpen(false)}>Annuler</button>
               <button className="btn btn-primary" onClick={buy} disabled={busy || !addressOk}>{busy ? "Paiement…" : `Payer ${formatEuros(quote.buyerTotal)}`}</button>

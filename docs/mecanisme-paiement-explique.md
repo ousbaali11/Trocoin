@@ -51,16 +51,17 @@ remboursé.
 - Sur la fiche annonce, le bouton indique « Acheter · 11,00 € » et, dessous, « Paiement sécurisé :
   10,00 € + 1,00 € de frais de protection ».
 - Dans la fenêtre de confirmation, trois lignes : **Prix de l'article 10,00 €**, **Frais de protection
-  acheteur 1,00 €** (avec la formule « 5 % + 0,50 € (plafonnés à 15 €) »), **Total à payer 11,00 €**.
+  acheteur 1,00 €**, **Total à payer 11,00 €**. La formule des frais n'y figure pas (choix du propriétaire,
+  AUDIT §53) : elle se lit dans le centre d'aide.
 - Sur la page de paiement hébergée par Stripe, **deux lignes** depuis AUDIT §51 : l'article (10,00 €) et
   « Frais de protection acheteur Trocoin » (1,00 €). Auparavant, une seule ligne de 11,00 € au nom de
   l'article.
 - Si le barème change entre l'affichage et le clic sur « Payer », le serveur refuse (409) et la fenêtre
   affiche le nouveau total : l'acheteur n'est jamais débité d'un montant qu'il n'a pas vu.
 
-**Le vendeur ne reçoit pas le prix plein : il reçoit 9,20 €.** La même fenêtre le dit à l'acheteur (« Le
-vendeur perçoit 9,20 € (commission Trocoin de 8 % : 0,80 €) »), et la fiche de la transaction côté vendeur
-affiche « Prix de l'article 10,00 € · Commission Trocoin (8 %) − 0,80 € · Montant versé 9,20 € ».
+**Le vendeur ne reçoit pas le prix plein : il reçoit 9,20 €.** L'acheteur ne voit ni ce montant ni la
+commission (retirés de la fenêtre de paiement, AUDIT §53) ; le vendeur les voit sur la fiche de sa
+transaction : « Prix de l'article 10,00 € · Commission Trocoin (8 %) − 0,80 € · Montant versé 9,20 € ».
 
 Plafond : les frais de protection ne dépassent jamais 15 €. Pour un article à 1 000 €, l'acheteur paie
 1 015,00 € (et non 1 050,50 €), le vendeur reçoit 920,00 €, Trocoin garde 95,00 € brut.
