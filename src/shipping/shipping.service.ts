@@ -98,22 +98,30 @@ export class ShippingService {
    * domicile et/ou retrait — et les points de retrait réels renvoyés par le prestataire (jamais une liste inventée).
    * Un prestataire absent ou en panne ne bloque pas l'achat : les deux modes restent proposés, sans liste de points.
    */
-  async pickupOptions(listingId: string, postalCode: string, city?: string): Promise<{ postalCode: string; carriers: CarrierPickupOptions[]; unavailableReason?: string }> {
+  async pickupOptions(listingId: string, postalCode: string, city?: string, part: 'all' | 'points' | 'prices' = 'all'): Promise<{ postalCode: string; part: 'all' | 'points' | 'prices'; carriers: CarrierPickupOptions[]; unavailableReason?: string }> {
     if (!/^\d{5}$/.test(postalCode)) throw new BadRequestException('Code postal à 5 chiffres requis.');
     const listing = await this.listings.findOne({ where: { id: listingId } });
     if (!listing || !listing.deliveryAvailable) throw new NotFoundException("Cette annonce ne propose pas l'envoi.");
     const parcel = parcelOf(listing);
-    if (!parcel || !listing.postalCode) return { postalCode, carriers: [], unavailableReason: NO_WEIGHT_MESSAGE };
+    if (!parcel || !listing.postalCode) return { postalCode, part, carriers: [], unavailableReason: NO_WEIGHT_MESSAGE };
     // AUDIT §61 : les deux transporteurs, et pour chacun le tarif et les points, sont demandés EN MÊME TEMPS (avant :
     // quatre appels l'un après l'autre — l'acheteur attendait leur somme). Les points sont cherchés sans attendre de
     // savoir si le retrait est coté : ils ne servent que s'il l'est.
     const fromPostalCode = listing.postalCode;
     const carriers = await Promise.all((['colissimo', 'mondial_relay'] as ShippingCarrier[]).map(async (carrier): Promise<CarrierPickupOptions> => {
       const base = { carrier, label: CARRIER_LABELS[carrier] };
+      // Moitié « points » : la liste seule, sans attendre la cotation (pointRelais = provisoire, confirmé par les prix)
+      if (part === 'points') {
+        const points = await this.cachedPoints(carrier, postalCode, city).catch((err) => {
+          this.logger.warn(`Points de retrait ${carrier} illisibles pour ${postalCode} : ${(err as Error).message}`);
+          return [] as RelayPoint[];
+        });
+        return { ...base, domicile: false, pointRelais: points.length > 0, points };
+      }
       try {
         const [rates, found] = await Promise.all([
           this.cachedQuote({ carrier, parcel, fromPostalCode, toPostalCode: postalCode, fromCity: listing.city ?? undefined, toCity: city }),
-          this.cachedPoints(carrier, postalCode, city).catch((err) => {
+          (part === 'prices' ? Promise.resolve([] as RelayPoint[]) : this.cachedPoints(carrier, postalCode, city)).catch((err) => {
             this.logger.warn(`Points de retrait ${carrier} illisibles pour ${postalCode} : ${(err as Error).message}`);
             return [] as RelayPoint[];
           }),
@@ -121,14 +129,14 @@ export class ShippingService {
         const home = rates.find((r) => r.mode === 'domicile');
         const pickup = rates.find((r) => r.mode === 'point_relais');
         const points = pickup ? found : [];
-        return { ...base, domicile: !!home, pointRelais: !!pickup && points.length > 0, domicilePriceCents: home?.priceCents, pickupPriceCents: pickup?.priceCents, points };
+        return { ...base, domicile: !!home, pointRelais: !!pickup && (part === 'prices' || points.length > 0), domicilePriceCents: home?.priceCents, pickupPriceCents: pickup?.priceCents, points };
       } catch (err) {
         this.logger.warn(`Options de retrait ${carrier} indisponibles pour ${postalCode} : ${(err as Error).message}`);
         // Sans cotation, pas de prix ferme à faire payer : ce transporteur n'est pas proposé pour l'instant
         return { ...base, domicile: false, pointRelais: false, points: [], pointsUnavailable: true };
       }
     }));
-    return { postalCode, carriers };
+    return { postalCode, part, carriers };
   }
 
   /**

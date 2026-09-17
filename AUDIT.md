@@ -3313,3 +3313,26 @@ Cause : quatre appels au prestataire **l'un après l'autre** (cotation puis poin
   d'action est en `autoFocus`, mais le « focus initial » de la boîte, posé un instant plus tard, le reprenait au profit
   d'« Annuler » — selon la vitesse de la machine, Entrée annulait au lieu de valider. La boîte respecte maintenant un
   focus déjà placé à l'intérieur (`Modal.tsx`).
+
+### Vérification
+
+- API : `test/phase38` (refus Stripe → 503 en français avec cause en mode test, panne → message de réessai, compte
+  inconnu remplacé, état lisible ; quatre appels au prestataire en parallèle puis servis de mémoire ; moitiés
+  `part=points` / `part=prices`) → **211 tests**, 1 ignoré.
+- Navigateur : `30-versement-options-sans-attente` (message de refus affiché et bouton réarmé ; trois choix visibles
+  avant toute adresse, points au code postal seul, choix et point gardés à la relecture, aucun appel au changement de
+  transporteur, préchargement au retour : prix affichés sans requête ni attente) à 375 px et sur grand écran ;
+  `24` adaptée (ville désormais déduite du code postal). Suite complète : 139 réussis, 11 ignorés.
+- Captures (pile locale, bureau et mobile) : choix visibles avant toute adresse, prix et points après le code postal
+  (61–68 ms après le cinquième chiffre, sans ville), message clair sur la page Paiements.
+
+**Production 1.33.1** (CI verte sur `32e6cdc`). Compte temporaire : `POST /users/me/stripe-onboarding-link` →
+**503 `CONNECT_NOT_READY`** avec la cause donnée par Stripe : *« You can only create new accounts if you've signed up
+for Connect, which you can do at https://dashboard.stripe.com/connect »* — **Stripe Connect n'est pas activé sur le
+compte Stripe de Trocoin**. C'est un réglage du tableau de bord Stripe, réservé au titulaire du compte (voir
+`DEPLOIEMENT.md` §5c) ; tant qu'il n'est pas fait, aucun vendeur ne peut créer son compte de versement — le site le dit
+maintenant clairement au lieu d'une « erreur interne ». Options de réception (annonce temporaire, 900 g, Lyon → 33000) :
+**6,0 s à froid** (7,2 s avant), **56 ms** ensuite (939 ms avant), autre ville 4,7 s, autre code postal 5,3 s — la
+lenteur restante est celle du prestataire lui-même (bac à sable Boxtal, une cotation ≈ 5 s), d'où deux mesures de
+plus : **préchargement** dès la fiche, et **deux moitiés indépendantes** (`part=points`, `part=prices`) demandées
+ensemble — la liste des points n'attend pas la cotation, et inversement. Compte et annonce temporaires supprimés.

@@ -113,6 +113,16 @@ describe('Phase 38 : compte de versement (refus Stripe) et options de réception
       expect(again.status).toBe(200);
       expect(again.body.carriers).toEqual(first.body.carriers);
       expect(calls).toEqual({ quote: 2, points: 2 });
+      // Moitiés indépendantes (la fenêtre d'achat les demande ensemble et affiche chacune dès qu'elle arrive)
+      const onlyPoints = await request(server).get(url + '&part=points').set(buyer.auth);
+      expect(onlyPoints.body.part).toBe('points');
+      expect(onlyPoints.body.carriers[0].points.length).toBeGreaterThan(0);
+      expect(onlyPoints.body.carriers[0].pickupPriceCents).toBeUndefined();
+      const onlyPrices = await request(server).get(url + '&part=prices').set(buyer.auth);
+      expect(onlyPrices.body.part).toBe('prices');
+      expect(onlyPrices.body.carriers[0].points).toEqual([]);
+      expect(onlyPrices.body.carriers[0].pickupPriceCents).toBeGreaterThan(0);
+      expect(calls).toEqual({ quote: 2, points: 2 }); // toujours servies de mémoire
     } finally {
       provider.quote = quote;
       provider.searchRelayPoints = points;
