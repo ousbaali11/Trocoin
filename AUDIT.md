@@ -2913,3 +2913,12 @@ n'existe pas à l'écran au-delà.
   11 ignorés, 0 échec** (mobile + bureau, axe compris).
 - Captures : avant (production 1.27.2, mobile), après (accueil mobile replié, déplié, sous-catégories ; bureau ;
   étape Photos bureau et mobile, vide puis 12 photos).
+
+Production 1.28.0 (CI verte sur `f407c56`, `/health` → 1.28.0) — mobile 375 × 812 : 12 tuiles sur **une** ligne (85 px),
+recherche repliée (48 px), raccourcis (37 px), `h1` présent, **première annonce à 335 px** (975 px avant), visuel de
+la première rangée entier à l'écran (bas à 502 px), aucun défilement horizontal de la page ; dépli → QUOI ?, OÙ ? et
+titre visibles, recherche « vélo » lancée depuis le bloc ; tap sur Véhicules → 6 sous-catégories. Bureau 1440 :
+déclencheur absent, formulaire visible, catégories en grille. Dépôt (compte temporaire) : étape Photos sans bloc
+« Fiche complète » ni lien « Faire » sur bureau et mobile ; 12 photos ajoutées dans le formulaire puis « Enregistrer
+en brouillon » → **12 photos enregistrées** côté API (deux lots). Brouillon (jamais publié) et compte temporaire
+supprimés (204, 204).
