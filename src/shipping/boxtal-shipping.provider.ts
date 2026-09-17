@@ -6,6 +6,7 @@ import {
   LabelResult,
   QuoteInput,
   RelayPoint,
+  classifyPickupPoint,
   ShippingCarrier,
   ShippingMode,
   ShippingProviderError,
@@ -66,6 +67,29 @@ function splitName(name: string): { firstName: string; lastName: string } {
 function splitStreet(line1: string): { number?: string; street: string } {
   const m = line1.trim().match(/^(\d+[a-zA-Z]?(?:\s?(?:bis|ter))?)\s+(.+)$/i);
   return m ? { number: m[1], street: m[2] } : { street: line1.trim() };
+}
+/** Nombre de points de retrait proposés autour d'une adresse. */
+const MAX_POINTS = 20;
+/** Offre « point de retrait » de chaque transporteur (codes v3 vérifiés en sandbox le 16 septembre 2026) ; `BOXTAL_OFFER_*` reste prioritaire. */
+const DEFAULT_PICKUP_OFFER: Record<ShippingCarrier, string> = { mondial_relay: 'MONR-CpourToi', colissimo: 'POFR-ColissimoPickupStation' };
+
+interface RawParcelPointHit {
+  parcelPoint?: { code?: string; name?: string; network?: unknown; type?: string; typeCode?: string; parcelPointType?: string; location?: { number?: string; street?: string; postalCode?: string; city?: string }; openingDays?: unknown };
+  distanceFromSearchLocation?: number;
+}
+function mapParcelPoint(p: RawParcelPointHit, postalCode: string, city?: string): RelayPoint {
+  const pp = p.parcelPoint || {};
+  const name = pp.name || 'Point de retrait';
+  return {
+    id: pp.code || '',
+    name,
+    type: classifyPickupPoint(name, [pp.type, pp.typeCode, pp.parcelPointType].filter(Boolean).join(' ')),
+    line1: [pp.location?.number, pp.location?.street].filter(Boolean).join(' '),
+    postalCode: pp.location?.postalCode || postalCode,
+    city: pp.location?.city || city || '',
+    hours: pp.openingDays ? summarizeHours(pp.openingDays) : undefined,
+    distanceMeters: p.distanceFromSearchLocation,
+  };
 }
 function carrierOf(operatorCode: string, operatorLabel: string): ShippingCarrier | null {
   const s = `${operatorCode} ${operatorLabel}`.toLowerCase();
@@ -307,30 +331,55 @@ export class BoxtalShippingProvider implements IShippingProvider {
 
   // ------------------------------------------------------------------ v3 : points relais, étiquette, suivi
 
+  /**
+   * Points de retrait réels du transporteur autour d'une adresse : relais commerçants, bureaux de poste et consignes
+   * automatiques (AUDIT §57). D'abord les points valables pour l'offre « point de retrait » du transporteur
+   * (v3.2, `parcel-point-by-shipping-offer`, côté arrivée) ; à défaut, la recherche générale v3.1 filtrée par réseau.
+   */
   async searchRelayPoints(carrier: ShippingCarrier, postalCode: string, city?: string, v3Base = this.v3Base): Promise<RelayPoint[]> {
+    const byOffer = await this.pointsByOffer(carrier, postalCode, city, v3Base).catch(() => [] as RelayPoint[]);
+    if (byOffer.length) return byOffer;
     const qs = new URLSearchParams({ countryIsoCode: 'FR', postalCode, ...(city ? { city } : {}) });
-    const r = await this.v3<{ content?: Array<{ parcelPoint?: { code?: string; name?: string; network?: unknown; location?: { number?: string; street?: string; postalCode?: string; city?: string }; openingDays?: unknown }; distanceFromSearchLocation?: number }> }>('GET', `/shipping/v3.1/parcel-point?${qs}`, undefined, false, v3Base);
+    const r = await this.v3<{ content?: RawParcelPointHit[] }>('GET', `/shipping/v3.1/parcel-point?${qs}`, undefined, false, v3Base);
     if (r.status >= 400) throw this.v3Error(r.status, r.text, 'transporteur_indisponible');
-    const all = (r.data?.content || []).map((p) => {
-      const pp = p.parcelPoint || {};
-      const net = JSON.stringify(pp.network || '').toLowerCase();
-      return {
-        id: pp.code || '',
-        name: pp.name || 'Point relais',
-        line1: [pp.location?.number, pp.location?.street].filter(Boolean).join(' '),
-        postalCode: pp.location?.postalCode || postalCode,
-        city: pp.location?.city || city || '',
-        hours: pp.openingDays ? summarizeHours(pp.openingDays) : undefined,
-        distanceMeters: p.distanceFromSearchLocation,
-        network: net,
-      };
-    });
+    const all = (r.data?.content || []).map((p) => ({ point: mapParcelPoint(p, postalCode, city), network: JSON.stringify(p.parcelPoint?.network || '').toLowerCase() }));
     const wanted = carrier === 'mondial_relay' ? /monr|mondial|inpost/ : /pofr|colissimo|poste|pickup/;
     const filtered = all.filter((p) => wanted.test(p.network));
-    return (filtered.length ? filtered : all).slice(0, 12).map(({ network, ...p }) => {
-      void network;
-      return p;
-    });
+    return (filtered.length ? filtered : all).slice(0, MAX_POINTS).map((p) => p.point);
+  }
+
+  /** Points valables pour l'offre « point de retrait » du transporteur (code configuré, sinon code public de l'offre). */
+  private async pointsByOffer(carrier: ShippingCarrier, postalCode: string, city: string | undefined, v3Base: string): Promise<RelayPoint[]> {
+    const offer = this.offerCodes[`${carrier}:point_relais`] || DEFAULT_PICKUP_OFFER[carrier];
+    const qs = new URLSearchParams({ countryIsoCode: 'FR', operationType: 'ARRIVAL', shippingOfferCode: offer, postalCode, ...(city ? { city } : {}) });
+    const r = await this.v3<{ content?: RawParcelPointHit[] }>('GET', `/shipping/v3.2/parcel-point-by-shipping-offer?${qs}`, undefined, false, v3Base);
+    if (r.status >= 400) return [];
+    return (r.data?.content || []).map((p) => mapParcelPoint(p, postalCode, city)).filter((p) => p.id).slice(0, MAX_POINTS);
+  }
+
+  /** Diagnostic : forme brute d'un point (noms de champs seulement) et répartition par nature, pour vérifier le classement. */
+  async describeParcelPoints(carrier: ShippingCarrier, postalCode: string, city?: string): Promise<{ source: string; champs: string[]; reseaux: string[]; parNature: Record<string, number>; exemples: Array<{ nom: string; nature: string }> }> {
+    const offer = this.offerCodes[`${carrier}:point_relais`] || DEFAULT_PICKUP_OFFER[carrier];
+    const qsOffer = new URLSearchParams({ countryIsoCode: 'FR', operationType: 'ARRIVAL', shippingOfferCode: offer, postalCode, ...(city ? { city } : {}) });
+    let r = await this.v3<{ content?: RawParcelPointHit[] }>('GET', `/shipping/v3.2/parcel-point-by-shipping-offer?${qsOffer}`);
+    let source = `v3.2 par offre ${offer} → ${r.status}`;
+    if (r.status >= 400 || !(r.data?.content || []).length) {
+      const qs = new URLSearchParams({ countryIsoCode: 'FR', postalCode, ...(city ? { city } : {}) });
+      r = await this.v3<{ content?: RawParcelPointHit[] }>('GET', `/shipping/v3.1/parcel-point?${qs}`);
+      source += ` ; repli v3.1 → ${r.status}`;
+    }
+    const hits = r.data?.content || [];
+    const first = (hits[0]?.parcelPoint || {}) as Record<string, unknown>;
+    const points = hits.map((p) => mapParcelPoint(p, postalCode, city));
+    const parNature: Record<string, number> = {};
+    for (const p of points) parNature[p.type] = (parNature[p.type] || 0) + 1;
+    return {
+      source,
+      champs: Object.keys(first).map((k) => `${k}:${Array.isArray(first[k]) ? 'liste' : typeof first[k]}${typeof first[k] === 'string' && /type|kind|categ/i.test(k) ? '=' + String(first[k]) : ''}`),
+      reseaux: [...new Set(hits.map((p) => JSON.stringify(p.parcelPoint?.network ?? null)))].slice(0, 6),
+      parNature,
+      exemples: points.slice(0, 12).map((p) => ({ nom: p.name, nature: p.type })),
+    };
   }
 
   async createLabel(input: CreateLabelInput): Promise<LabelResult> {
@@ -509,6 +558,7 @@ export class BoxtalShippingProvider implements IShippingProvider {
       return offers.map((o) => ({ operateur: `${o.operatorCode} ${o.operatorLabel}`, service: `${o.serviceCode} ${o.serviceLabel}`, livraison: o.deliveryType, transporteur: o.carrier, mode: o.mode, prixTtcCents: o.priceCents, codeOffre: o.offerCode }));
     });
     await step('points_relais_v3', async () => (await this.searchRelayPoints('mondial_relay', '75017', 'Paris')).slice(0, 3));
+    await step('nature_des_points', async () => ({ mondial_relay: await this.describeParcelPoints('mondial_relay', '75017', 'Paris'), colissimo: await this.describeParcelPoints('colissimo', '75017', 'Paris') }));
     if (!(out.jeton_v3 as { ok: boolean }).ok && this.env === 'sandbox') {
       // Les clés ne sont pas acceptées par le sandbox : lectures sans effet (cotation, points relais) sur l'hôte de
       // production pour valider les formats d'échange. Aucune commande n'est jamais passée hors sandbox ici.

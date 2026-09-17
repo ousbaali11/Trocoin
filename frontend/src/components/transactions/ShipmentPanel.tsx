@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { formatEuros, formatPhone } from "@/lib/format";
+import { PICKUP_TYPE_LABELS, formatEuros, formatPhone } from "@/lib/format";
 
 /** Téléphone français à 10 chiffres (fixe ou mobile), écrit avec ou sans espaces, points, +33 ou 0033. */
 const isFrenchPhone = (raw?: string | null): boolean => {
@@ -25,7 +25,9 @@ const CARRIER: Record<string, string> = { colissimo: "Colissimo", mondial_relay:
 export function ShipmentPanel({ tx, onChanged }: { tx: Transaction; onChanged: () => void }) {
   const { user } = useAuth();
   const [shipment, setShipment] = useState<Shipment | null | undefined>(undefined);
-  const [mode, setMode] = useState<ShippingMode>(tx.deliveryMethod === "mondial_relay" ? "point_relais" : "domicile");
+  // Choix de l'acheteur au paiement (AUDIT §57) : mode et point de retrait ne se changent pas ici. Ventes antérieures : le vendeur choisit.
+  const buyerChoice = !!tx.deliveryMode;
+  const [mode, setMode] = useState<ShippingMode>(tx.deliveryMode ?? (tx.deliveryMethod === "mondial_relay" ? "point_relais" : "domicile"));
   const [weight, setWeight] = useState("1000");
   const [dims, setDims] = useState({ l: "", w: "", h: "" });
   // Colis déclaré au dépôt de l'annonce (le vendeur en est propriétaire : la fiche répond même réservée)
@@ -41,7 +43,7 @@ export function ShipmentPanel({ tx, onChanged }: { tx: Transaction; onChanged: (
   const [recipient, setRecipient] = useState<DeliveryAddress>(tx.shippingAddress ?? { name: tx.other?.displayName ?? "", line1: "", line2: "", postalCode: "", city: "", phone: "" });
   const [rates, setRates] = useState<ShippingRate[] | null>(null);
   const [points, setPoints] = useState<RelayPoint[]>([]);
-  const [relayPointId, setRelayPointId] = useState("");
+  const [relayPointId, setRelayPointId] = useState(tx.pickupPoint?.id ?? "");
   const [busy, setBusy] = useState<"" | "tarifs" | "etiquette">("");
   const [addressesOpen, setAddressesOpen] = useState(() => !tx.shippingAddress || !(user?.postalCode && user?.city) || !isFrenchPhone(user?.phoneNumber));
   const [error, setError] = useState<string | null>(null);
@@ -76,7 +78,7 @@ export function ShipmentPanel({ tx, onChanged }: { tx: Transaction; onChanged: (
       const r = await api<{ rates: ShippingRate[] }>(`/transactions/${tx.id}/shipment/quote`, { method: "POST", body: { parcel: parcel(), fromPostalCode: sender.postalCode, toPostalCode: recipient.postalCode, fromCity: sender.city, toCity: recipient.city } });
       setRates(r.rates);
       if (!r.rates.length) setError("Aucune offre pour ce colis. Vérifiez le poids et les codes postaux, ou saisissez votre numéro de suivi à la main.");
-      if (mode === "point_relais") {
+      if (mode === "point_relais" && !tx.pickupPoint) {
         const pts = await api<RelayPoint[]>(`/transactions/${tx.id}/shipment/relay-points?postalCode=${recipient.postalCode}&city=${encodeURIComponent(recipient.city)}`).catch(() => []);
         setPoints(pts);
         if (pts[0] && !relayPointId) setRelayPointId(pts[0].id);
@@ -133,8 +135,16 @@ export function ShipmentPanel({ tx, onChanged }: { tx: Transaction; onChanged: (
       <div className="row" style={{ gap: 16, flexWrap: "wrap", alignItems: "flex-start" }}>
         <div className="field" style={{ flex: "1 1 220px", marginBottom: 0 }}>
           <span className="label">Mode d&apos;envoi ({CARRIER[tx.deliveryMethod]})</span>
-          {tx.deliveryMethod === "colissimo" && <label className="checkbox"><input type="radio" name="ship-mode" checked={mode === "domicile"} onChange={() => setMode("domicile")} /> À domicile</label>}
-          <label className="checkbox"><input type="radio" name="ship-mode" checked={mode === "point_relais"} onChange={() => setMode("point_relais")} /> En point relais</label>
+          {buyerChoice ? (
+            <p className="small" style={{ margin: "4px 0 0" }} data-testid="ship-mode-fixed">
+              Choisi par l&apos;acheteur : <strong>{mode === "domicile" ? "à domicile" : tx.pickupPoint ? `${PICKUP_TYPE_LABELS[tx.pickupPoint.type].toLowerCase()} « ${tx.pickupPoint.name} » (${tx.pickupPoint.postalCode} ${tx.pickupPoint.city})` : "en point de retrait"}</strong>
+            </p>
+          ) : (
+            <>
+              <label className="checkbox"><input type="radio" name="ship-mode" checked={mode === "domicile"} onChange={() => setMode("domicile")} /> À domicile</label>
+              <label className="checkbox"><input type="radio" name="ship-mode" checked={mode === "point_relais"} onChange={() => setMode("point_relais")} /> En point relais</label>
+            </>
+          )}
         </div>
         <div className="field" style={{ flex: "1 1 220px", marginBottom: 0 }}>
           <label htmlFor="ship-weight">Poids du colis (g)</label>
@@ -161,12 +171,12 @@ export function ShipmentPanel({ tx, onChanged }: { tx: Transaction; onChanged: (
       </div>
       {rates && rates.length > 0 && (
         <div style={{ marginTop: 12 }} data-testid="rates">
-          {rates.map((r) => (
+          {rates.filter((r) => !buyerChoice || r.mode === mode).map((r) => (
             <label key={r.offerCode} className="checkbox">
               <input type="radio" name="ship-rate" checked={mode === r.mode} onChange={() => setMode(r.mode)} /> {r.label} — <strong>{formatEuros(r.priceCents / 100)}</strong> <span className="muted small">· {r.deliveryDays} j ouvrés</span>
             </label>
           ))}
-          {mode === "point_relais" && points.length > 0 && (
+          {mode === "point_relais" && !tx.pickupPoint && points.length > 0 && (
             <div className="field" style={{ marginTop: 8, maxWidth: 480 }}>
               <label htmlFor="ship-point">Point relais</label>
               <select id="ship-point" className="select" value={relayPointId} onChange={(e) => setRelayPointId(e.target.value)}>

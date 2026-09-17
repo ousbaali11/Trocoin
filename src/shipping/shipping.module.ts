@@ -9,13 +9,14 @@ import { MockShippingProvider } from './mock-shipping.provider';
 import { Shipment } from './shipment.entity';
 import { ShippingController } from './shipping.controller';
 import { ShippingDiagnosticController } from './shipping-diagnostic.controller';
+import { ShippingOptionsController } from './shipping-options.controller';
 import { SHIPPING_PROVIDER } from './shipping.constants';
 import { ShippingService } from './shipping.service';
 import { UnconfiguredShippingProvider } from './unconfigured-shipping.provider';
 
 @Module({
   imports: [TypeOrmModule.forFeature([Shipment, Transaction, Listing, User]), ConfigModule],
-  controllers: [ShippingController, ShippingDiagnosticController],
+  controllers: [ShippingController, ShippingDiagnosticController, ShippingOptionsController],
   providers: [
     ShippingService,
     {

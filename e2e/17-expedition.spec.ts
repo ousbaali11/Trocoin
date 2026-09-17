@@ -24,13 +24,31 @@ test("achat avec envoi : l'acheteur saisit son adresse, le vendeur obtient un ta
   await loginAs(page, seed.buyer, `/annonces/${listing.id}`);
   await page.getByRole('button', { name: /^Acheter/ }).click();
   const dialog = page.getByRole('dialog', { name: 'Paiement sécurisé' });
-  await dialog.getByLabel('Mondial Relay en point relais').check();
+  await dialog.getByLabel('Envoi par Mondial Relay').check();
   const pay = dialog.getByRole('button', { name: /^Payer/ });
   await expect(pay).toBeDisabled(); // adresse manquante
   await dialog.getByLabel('Nom et prénom').fill('Alex Acheteur');
   await dialog.getByLabel('Adresse', { exact: true }).fill('5 avenue des Ternes');
   await dialog.getByLabel('Code postal').fill('75017');
   await dialog.getByLabel('Ville').fill('Paris');
+  // Lieu de réception (AUDIT §57) : ce que le transporteur propose autour de l'adresse — domicile, point relais,
+  // bureau de poste ou consigne — avec les points réels du prestataire ; rien n'est payable sans ce choix
+  const options = dialog.getByTestId('delivery-options');
+  await expect(options).toBeVisible();
+  await expect(pay).toBeDisabled();
+  // Seul ce que le transporteur propose s'affiche : ici Mondial Relay ne livre pas à domicile, Colissimo oui
+  await expect(options.getByLabel(/À domicile/)).toHaveCount(0);
+  await dialog.getByLabel('Envoi par Colissimo').check();
+  await expect(options.getByLabel(/À domicile/)).toBeVisible();
+  await expect(options.getByLabel(/En bureau de poste ou consigne automatique \(locker\) \(2 à proximité\)/)).toBeVisible();
+  await dialog.getByLabel('Envoi par Mondial Relay').check();
+  await expect(options.getByLabel(/En point relais \(2 à proximité\)/)).toBeVisible();
+  await options.getByLabel(/En consigne automatique \(locker\) \(1 à proximité\)/).check();
+  await expect(pay).toBeDisabled(); // point à choisir
+  await expect(options.getByTestId('pickup-point')).toHaveCount(1);
+  await options.getByLabel(/En point relais/).check();
+  await expect(options.getByTestId('pickup-point')).toHaveCount(2);
+  await options.getByTestId('pickup-point').filter({ hasText: 'Point Relais Boulangerie Martin' }).getByRole('radio').check();
   await expect(pay).toBeEnabled();
   await pay.click();
   await expect(page).toHaveURL(/\/compte\/transactions\/[0-9a-f-]{36}/);
@@ -56,8 +74,11 @@ test("achat avec envoi : l'acheteur saisit son adresse, le vendeur obtient un ta
   const rates = panel.getByTestId('rates');
   await expect(rates).toContainText('Mondial Relay en point relais');
   await expect(rates).toContainText('5,49');
-  await expect(rates.getByLabel('Point relais', { exact: true })).toBeVisible();
-  await expect(rates.getByLabel('Point relais', { exact: true }).locator('option')).toHaveCount(3);
+  // Le mode et le point choisis par l'acheteur sont repris tels quels : ni autre mode, ni liste de points à l'étiquette
+  await expect(panel.getByTestId('ship-mode-fixed')).toContainText('point relais « Point Relais Boulangerie Martin »');
+  await expect(rates).not.toContainText('à domicile');
+  await expect(rates.getByLabel('Point relais', { exact: true })).toHaveCount(0);
+  await expect(seller.getByTestId('buyer-delivery-choice')).toContainText('Point Relais Boulangerie Martin');
   await panel.getByTestId('buy-label').click();
   const ready = seller.getByTestId('shipment-ready');
   await expect(ready).toBeVisible();

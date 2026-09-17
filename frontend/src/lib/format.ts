@@ -140,9 +140,25 @@ export const TX_STATUS_LABELS: Record<TransactionStatus, { label: string; pill: 
 
 export const DELIVERY_LABELS = {
   main_propre: "Remise en main propre",
-  colissimo: "Colissimo (domicile)",
-  mondial_relay: "Mondial Relay (point relais)",
+  colissimo: "Colissimo",
+  mondial_relay: "Mondial Relay",
 };
+
+export const PICKUP_TYPE_LABELS = {
+  relais: "Point relais",
+  bureau_poste: "Bureau de poste",
+  consigne: "Consigne automatique",
+} as const;
+
+/** Libellé complet du mode de remise d'une vente : transporteur et, si l'acheteur l'a choisi, domicile ou point de retrait. */
+export function deliveryLabel(tx: { deliveryMethod: keyof typeof DELIVERY_LABELS; deliveryMode?: "domicile" | "point_relais" | null; pickupPoint?: { name: string; city: string; type: keyof typeof PICKUP_TYPE_LABELS } | null }): string {
+  if (tx.deliveryMethod === "main_propre") return DELIVERY_LABELS.main_propre;
+  const carrier = DELIVERY_LABELS[tx.deliveryMethod];
+  if (tx.deliveryMode === "domicile") return `${carrier} à domicile`;
+  if (tx.deliveryMode === "point_relais") return tx.pickupPoint ? `${carrier} · ${PICKUP_TYPE_LABELS[tx.pickupPoint.type].toLowerCase()} ${tx.pickupPoint.name} (${tx.pickupPoint.city})` : `${carrier} en point de retrait`;
+  // Ventes antérieures au choix par l'acheteur : libellés d'origine
+  return tx.deliveryMethod === "colissimo" ? "Colissimo (domicile)" : "Mondial Relay (point relais)";
+}
 
 export const REPORT_REASON_LABELS: Record<string, string> = {
   arnaque: "Arnaque ou fraude",

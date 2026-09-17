@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { DELIVERY_LABELS, formatDate, formatEuros, TX_STATUS_LABELS } from "@/lib/format";
+import { deliveryLabel, formatDate, formatEuros, TX_STATUS_LABELS } from "@/lib/format";
 import type { Transaction } from "@/lib/types";
 import { EmptyState } from "@/components/ui/EmptyState";
 
@@ -64,7 +64,7 @@ export default function TransactionsPage() {
                       <td><Link href={`/compte/transactions/${t.id}`}><strong>{t.listing?.title ?? (t.listingTitle ? `${t.listingTitle} (annonce supprimée)` : "Annonce supprimée")}</strong></Link><br /><span className="small muted">avec {t.other?.displayName}</span></td>
                       <td>{t.role === "acheteur" ? "Achat" : "Vente"}</td>
                       <td>{formatEuros(t.role === "acheteur" ? t.amount + t.buyerFee : t.amount - t.commission)}</td>
-                      <td className="small">{DELIVERY_LABELS[t.deliveryMethod]}</td>
+                      <td className="small">{deliveryLabel(t)}</td>
                       <td><span className={st.pill}>{st.label}</span></td>
                       <td className="small muted">{formatDate(t.createdAt)}</td>
                       <td><Link href={`/compte/transactions/${t.id}`} className="btn btn-outline btn-sm">Détail</Link></td>
@@ -85,7 +85,7 @@ export default function TransactionsPage() {
                     <span className="small muted">{formatDate(t.createdAt)}</span>
                   </div>
                   <strong style={{ display: "block", margin: "8px 0 2px" }}>{t.listing?.title ?? (t.listingTitle ? `${t.listingTitle} (annonce supprimée)` : "Annonce supprimée")}</strong>
-                  <span className="small muted">{t.role === "acheteur" ? "Achat" : "Vente"} · avec {t.other?.displayName} · {DELIVERY_LABELS[t.deliveryMethod]}</span>
+                  <span className="small muted">{t.role === "acheteur" ? "Achat" : "Vente"} · avec {t.other?.displayName} · {deliveryLabel(t)}</span>
                   <div style={{ fontFamily: "var(--font-display)", fontSize: "1.15rem", fontWeight: 700, color: "var(--accent)", marginTop: 6 }}>{formatEuros(t.role === "acheteur" ? t.amount + t.buyerFee : t.amount - t.commission)}</div>
                 </Link>
               );

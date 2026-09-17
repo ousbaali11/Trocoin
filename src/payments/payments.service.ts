@@ -15,13 +15,18 @@ import { In, IsNull, LessThan, MoreThan, Not, Repository } from 'typeorm';
 import { resolveSiteUrl } from '../config/env.validation';
 import { Listing } from '../listings/listing.entity';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ConversationsService } from '../conversations/conversations.service';
+import { SystemEvent } from '../conversations/message.entity';
 import { DEFAULT_FEE_RATES, FeeRates, SettingsService } from '../settings/settings.service';
 import { Shipment } from '../shipping/shipment.entity';
+import { ShippingCarrier } from '../shipping/shipping-provider.interface';
+import { ShippingService } from '../shipping/shipping.service';
+import { carrierTrackingUrl } from '../shipping/tracking-url';
 import { StripeConnectService } from '../users/stripe-connect.service';
 import { UsersService } from '../users/users.service';
 import { CheckoutSync, IPaymentProvider } from './payment-provider.interface';
 import { CHECKOUT_TTL_MINUTES, PAYMENT_PROVIDER } from './payments.constants';
-import { DeliveryAddress, DeliveryMethod, Transaction } from './transaction.entity';
+import { ChosenPickupPoint, DeliveryAddress, DeliveryMethod, DeliveryMode, Transaction } from './transaction.entity';
 
 /**
  * Barème (cahier des charges §3.6 : "commission transparente affichée avant validation"). Modèle : le vendeur
@@ -95,6 +100,8 @@ export class PaymentsService {
     private stripeConnect: StripeConnectService,
     private notifications: NotificationsService,
     private settings: SettingsService,
+    private conversations: ConversationsService,
+    private shipping: ShippingService,
   ) {}
 
   /** Devis affiché avant validation : prix, frais acheteur, total, commission vendeur. */
@@ -143,7 +150,7 @@ export class PaymentsService {
     return this.rootSlugCache.get(rootCategoryId)!;
   }
 
-  async createTransaction(buyerId: string, listingId: string, deliveryMethod: DeliveryMethod = 'main_propre', shippingAddress?: DeliveryAddress, expectedTotal?: number) {
+  async createTransaction(buyerId: string, listingId: string, deliveryMethod: DeliveryMethod = 'main_propre', shippingAddress?: DeliveryAddress, expectedTotal?: number, deliveryMode?: DeliveryMode, pickupPoint?: ChosenPickupPoint) {
     const listing = await this.listingsRepo.findOne({ where: { id: listingId } });
     if (!listing || listing.status !== 'en_ligne') throw new NotFoundException('Annonce introuvable ou plus disponible.');
     if (listing.userId === buyerId) {
@@ -183,6 +190,17 @@ export class PaymentsService {
         quote: { ...q, rates: fees },
       });
     }
+    // Mode d'envoi choisi par l'acheteur (AUDIT §57) : domicile, ou retrait dans un point réel du transporteur
+    // (relais, bureau de poste, consigne), relu chez le prestataire avant tout paiement.
+    let mode: DeliveryMode | null = null;
+    let point: ChosenPickupPoint | null = null;
+    if (deliveryMethod !== 'main_propre') {
+      mode = deliveryMode ?? (pickupPoint ? 'point_relais' : null);
+      if (mode === 'point_relais' && pickupPoint) {
+        const found = await this.shipping.resolvePickupPoint(deliveryMethod as ShippingCarrier, pickupPoint.id, shippingAddress?.postalCode ?? pickupPoint.postalCode, shippingAddress?.city, { ...pickupPoint });
+        point = { id: found.id, name: found.name, line1: found.line1, postalCode: found.postalCode, city: found.city, type: found.type };
+      }
+    }
     // Modèle platform : la charge reste sur le solde de Trocoin, le compte du vendeur ne sert qu'au
     // transfert à la confirmation. On vérifie dès l'achat qu'il est prêt (onboarding terminé) pour ne pas
     // bloquer un versement plus tard ; un vendeur sans compte est payé dès qu'il en crée un.
@@ -200,6 +218,8 @@ export class PaymentsService {
       deliveryMethod,
       // Adresse de livraison (envoi) : gardée telle que saisie, jamais exposée en dehors des deux parties
       shippingAddress: deliveryMethod !== 'main_propre' && shippingAddress ? shippingAddress : null,
+      deliveryMode: mode,
+      pickupPoint: point,
       handoverCode: deliveryMethod === 'main_propre' ? randomInt(0, 1_000_000).toString().padStart(6, '0') : undefined,
     };
     const metadata = { listingId, buyerId, sellerId: listing.userId };
@@ -221,7 +241,9 @@ export class PaymentsService {
           feeEuros: q.buyerFee,
           buyerEmail: buyer?.email || undefined,
           successUrl: `${site}/compte/transactions/${pending.id}?paiement=retour`,
-          cancelUrl: `${site}/annonces/${listingId}?paiement=annule`,
+          // Retour de la page de paiement sans payer (« ← », carte refusée puis abandon) : une page Trocoin qui dit
+          // clairement que rien n'a été débité et comment reprendre (AUDIT §57), pas l'annonce avec un message fugitif
+          cancelUrl: `${site}/compte/transactions/${pending.id}?paiement=annule`,
           metadata: { ...metadata, transactionId: pending.id },
         });
         pending.providerPaymentId = checkout.providerSessionId;
@@ -418,6 +440,7 @@ export class PaymentsService {
             result.confirmed += 1;
             await this.notifications.notify(tx.buyerId, { type: 'transaction', title: 'Réception considérée acquise', body: `Sans nouvelle de votre part, la réception de « ${title} » est considérée acquise et le vendeur est payé. Un problème ? Vous pouvez encore ouvrir un litige jusqu'au ${frDate(tx.disputeAllowedUntil!)}.`, link });
             await this.notifications.notify(tx.sellerId, { type: 'transaction', title: 'Vente confirmée', body: `Réception présumée de « ${title} » : les fonds vous sont versés.`, link });
+            await this.track(tx, 'reception_presumee', tx.sellerId, 'Réception considérée acquise : le vendeur est payé', { payout: this.sellerPayout(tx) });
             continue;
           }
           if (tx.escrowStage < 2 && now >= new Date(autoAt.getTime() - 24 * HOUR_MS)) {
@@ -462,6 +485,7 @@ export class PaymentsService {
             result.cancelled += 1;
             await this.notifications.notify(tx.buyerId, { type: 'transaction', title: 'Achat annulé, remboursement intégral', body: `« ${title} » n'a pas été ${tx.deliveryMethod === 'main_propre' ? 'remis' : 'expédié'} dans le délai : votre paiement est libéré. L'annonce reste disponible si vous souhaitez racheter.`, link });
             await this.notifications.notify(tx.sellerId, { type: 'transaction', title: 'Vente annulée (délai dépassé)', body: `« ${title} » n'a pas été ${tx.deliveryMethod === 'main_propre' ? 'remis (code non saisi)' : 'expédié'} avant l'échéance du paiement : l'acheteur est remboursé, votre annonce reste en ligne.`, link });
+            await this.track(tx, 'vente_annulee', tx.sellerId, 'Vente annulée (délai dépassé) : acheteur remboursé', { by: 'delai' });
           }
           continue;
         }
@@ -531,6 +555,21 @@ export class PaymentsService {
       body: `Un acheteur a payé « ${t} ». Confirmez la disponibilité et organisez la remise.`,
       link: `/compte/transactions/${tx.id}`,
     });
+    await this.track(tx, 'achat_confirme', tx.buyerId, 'Achat confirmé : paiement sécurisé, conservé par Trocoin', {
+      amount: round2(tx.amount + tx.buyerFee),
+      price: tx.amount,
+      deliveryMethod: tx.deliveryMethod,
+      deliveryMode: tx.deliveryMode ?? null,
+      pickupPoint: tx.pickupPoint ? `${tx.pickupPoint.name}, ${tx.pickupPoint.city}` : null,
+    });
+  }
+
+  /**
+   * Étape de la vente inscrite dans la conversation acheteur–vendeur (AUDIT §57). Les actions restent celles de
+   * cette classe : la messagerie ne fait que les raconter, elle ne porte aucune logique de paiement.
+   */
+  private track(tx: Transaction, event: SystemEvent, actorId: string, content: string, meta?: Record<string, string | number | null>) {
+    return this.conversations.postSystemEvent({ listingId: tx.listingId, buyerId: tx.buyerId, sellerId: tx.sellerId, actorId, transactionId: tx.id, event, content, meta });
   }
 
   /**
@@ -662,6 +701,7 @@ export class PaymentsService {
       // Montants figés de CETTE vente (jamais recalculés avec le barème du jour) et barème appliqué à sa création
       quote: quoteOfTransaction(tx),
       rates: tx.feeRates ?? null,
+      conversationId: await this.conversations.findIdFor(tx.listingId, tx.buyerId),
     };
   }
 
@@ -696,7 +736,58 @@ export class PaymentsService {
         : 'Convenez d\'un rendez-vous et confirmez la réception une fois l\'objet en main.',
       link: `/compte/transactions/${tx.id}`,
     });
+    if (tx.deliveryMethod === 'main_propre') {
+      await this.track(saved, 'pret_pour_remise', tx.sellerId, 'Le vendeur est prêt pour la remise en main propre');
+    } else {
+      const shipment = await this.shipments.findOne({ where: { transactionId: tx.id } });
+      await this.track(saved, 'expedie', tx.sellerId, `Colis expédié — suivi ${tracking}`, {
+        trackingNumber: tracking ?? null,
+        trackingUrl: shipment?.trackingUrl || carrierTrackingUrl(tx.deliveryMethod, tracking ?? '') || null,
+        carrier: tx.deliveryMethod,
+        autoConfirmAt: saved.autoConfirmAt ? new Date(saved.autoConfirmAt).toISOString() : null,
+      });
+    }
     return saved;
+  }
+
+  /**
+   * Le vendeur confirme que l'article existe et est prêt à partir (AUDIT §57). Étape d'information : elle rassure
+   * l'acheteur et ne bloque rien (expédier sans avoir cliqué vaut confirmation). Une seule fois par vente.
+   */
+  async confirmAvailability(transactionId: string, userId: string): Promise<Transaction> {
+    const tx = await this.getOwned(transactionId, userId);
+    if (tx.sellerId !== userId) throw new ForbiddenException("Seul le vendeur confirme la disponibilité de l'article.");
+    if (tx.status !== 'sequestre') throw new BadRequestException(`Impossible depuis le statut "${tx.status}".`);
+    if (tx.sellerConfirmedAt) return tx;
+    tx.sellerConfirmedAt = new Date();
+    const saved = await this.transactionsRepo.save(tx);
+    await this.notifications.notify(tx.buyerId, {
+      type: 'transaction',
+      title: 'Article disponible',
+      body: tx.deliveryMethod === 'main_propre' ? "Le vendeur a confirmé que l'article est disponible : convenez du rendez-vous par messagerie." : "Le vendeur a confirmé que l'article est disponible et prépare l'envoi.",
+      link: `/compte/transactions/${tx.id}`,
+    });
+    await this.track(saved, 'disponibilite_confirmee', tx.sellerId, "Le vendeur a confirmé la disponibilité de l'article");
+    return saved;
+  }
+
+  /**
+   * L'acheteur renonce à un paiement hébergé non finalisé (carte refusée, changement d'avis) : la page de paiement
+   * est fermée chez le fournisseur et l'annonce redevient achetable tout de suite. Si le paiement a en réalité
+   * abouti entre-temps, la vente suit son cours normal (rien n'est annulé).
+   */
+  async abandonPending(transactionId: string, userId: string) {
+    let tx = await this.getOwned(transactionId, userId);
+    if (tx.buyerId !== userId) throw new ForbiddenException("Seul l'acheteur peut abandonner son paiement.");
+    if (tx.status === 'en_attente') ({ tx } = await this.syncPending(tx));
+    if (tx.status !== 'en_attente') return this.viewFor(tx, userId);
+    if (this.paymentProvider.expireCheckout && tx.providerPaymentId) {
+      await this.paymentProvider.expireCheckout(tx.providerPaymentId).catch((e) => this.logger.warn(`Fermeture de la page de paiement ${tx.id} impossible : ${(e as Error).message}`));
+    }
+    tx.status = 'annulee';
+    tx.resolvedAt = new Date();
+    tx.resolutionNote = "Paiement abandonné par l'acheteur";
+    return this.viewFor(await this.transactionsRepo.save(tx), userId);
   }
 
   /** L'acheteur confirme la réception -> capture des fonds. */
@@ -719,6 +810,7 @@ export class PaymentsService {
         : 'L\'acheteur a confirmé la réception : les fonds vous sont versés. Pensez à laisser un avis.',
       link: `/compte/transactions/${tx.id}`,
     });
+    await this.track(saved, 'reception_confirmee', tx.buyerId, "Réception confirmée par l'acheteur", { payout: this.sellerPayout(saved), transferred: this.isPlatform(saved) && !saved.transferId ? 0 : 1 });
     return saved;
   }
 
@@ -740,6 +832,7 @@ export class PaymentsService {
       body: 'Le vendeur a validé la remise en main propre. Merci de laisser un avis.',
       link: `/compte/transactions/${tx.id}`,
     });
+    await this.track(saved, 'remise_validee', tx.sellerId, 'Remise en main propre validée', { payout: this.sellerPayout(saved), transferred: this.isPlatform(saved) && !saved.transferId ? 0 : 1 });
     return saved;
   }
 
@@ -759,6 +852,7 @@ export class PaymentsService {
       body: 'La transaction a été annulée avant envoi. L\'acheteur est intégralement remboursé.',
       link: `/compte/transactions/${tx.id}`,
     });
+    await this.track(saved, 'vente_annulee', userId, 'Vente annulée : acheteur remboursé', { by: userId === tx.sellerId ? 'vendeur' : 'acheteur' });
     return saved;
   }
 
@@ -783,6 +877,7 @@ export class PaymentsService {
       body: 'Un litige a été ouvert sur votre transaction. Un médiateur Trocoin va l\'examiner.',
       link: `/compte/transactions/${tx.id}`,
     });
+    await this.track(saved, 'litige_ouvert', userId, 'Litige ouvert : un médiateur Trocoin examine le dossier', { by: userId === tx.sellerId ? 'vendeur' : 'acheteur' });
     return saved;
   }
 
@@ -837,6 +932,7 @@ export class PaymentsService {
         link: `/compte/transactions/${tx.id}`,
       });
     }
+    await this.track(saved, 'litige_resolu', tx.sellerId, decision === 'rembourser' ? "Litige clos : l'acheteur est remboursé" : 'Litige clos : les fonds sont versés au vendeur', { decision });
     return saved;
   }
 

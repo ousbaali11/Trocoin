@@ -98,7 +98,8 @@ describe('Phase 13 : paiement hébergé (Checkout, capture différée) et webhoo
     expect(params.amountEuros).toBe(40.4); // 38 € + 5 % + 0,50 €
     expect(params.applicationFeeEuros).toBe(5.44); // commission 3,04 € + frais 2,40 €
     expect(params.successUrl).toMatch(new RegExp(`/compte/transactions/${created.body.transaction.id}\\?paiement=retour$`));
-    expect(params.cancelUrl).toMatch(new RegExp(`/annonces/${listing.id}\\?paiement=annule$`));
+    // Retour sans payer : une page Trocoin qui explique que rien n'a été débité (AUDIT §57), plus l'annonce avec un message fugitif
+    expect(params.cancelUrl).toMatch(new RegExp(`/compte/transactions/${created.body.transaction.id}\\?paiement=annule$`));
     expect(params.transactionId).toBe(created.body.transaction.id);
     expect(await notifsOf(seller.id)).toHaveLength(0);
 

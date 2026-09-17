@@ -11,6 +11,20 @@ export interface DeliveryAddress {
   phone?: string;
 }
 
+/** Envoi à domicile ou retrait dans un point choisi par l'acheteur (AUDIT §57). */
+export type DeliveryMode = 'domicile' | 'point_relais';
+/** Nature d'un point de retrait, telle que le réseau du transporteur la donne (relais commerçant, bureau de poste, consigne automatique). */
+export type PickupPointType = 'relais' | 'bureau_poste' | 'consigne';
+/** Point de retrait choisi par l'acheteur parmi les points réels renvoyés par le prestataire d'étiquettes. */
+export interface ChosenPickupPoint {
+  id: string;
+  name: string;
+  line1: string;
+  postalCode: string;
+  city: string;
+  type: PickupPointType;
+}
+
 /**
  * Cycle de vie :
  *  sequestre  : fonds bloqués (autorisation), vendeur doit expédier / remettre
@@ -97,6 +111,21 @@ export class Transaction {
    */
   @Column({ type: JSON_TYPE, nullable: true })
   shippingAddress?: DeliveryAddress | null;
+
+  /**
+   * Mode d'envoi choisi par l'acheteur au paiement (AUDIT §57) : domicile ou point de retrait. Nul sur les ventes
+   * antérieures (le vendeur choisissait le mode à l'achat de l'étiquette) et pour une remise en main propre.
+   */
+  @Column({ type: 'varchar', nullable: true })
+  deliveryMode?: DeliveryMode | null;
+
+  /** Point de retrait choisi par l'acheteur (relais, bureau de poste ou consigne) : repris tel quel pour l'étiquette. */
+  @Column({ type: JSON_TYPE, nullable: true })
+  pickupPoint?: ChosenPickupPoint | null;
+
+  /** Le vendeur a confirmé que l'article existe et est prêt à partir (AUDIT §57) ; l'expédition vaut confirmation. */
+  @Column({ type: DATE_TYPE, nullable: true })
+  sellerConfirmedAt?: Date | null;
 
   /**
    * Barème appliqué à CETTE vente, figé à sa création (AUDIT §51) : un changement de commission ou de frais par

@@ -7,6 +7,7 @@ import {
   LabelResult,
   QuoteInput,
   RelayPoint,
+  classifyPickupPoint,
   ShippingCarrier,
   ShippingMode,
   ShippingProviderError,
@@ -54,10 +55,13 @@ export class MockShippingProvider implements IShippingProvider {
   }
 
   async searchRelayPoints(carrier: ShippingCarrier, postalCode: string): Promise<RelayPoint[]> {
-    const names = carrier === 'colissimo' ? ['Bureau de poste', 'Tabac-presse du centre', 'Pickup Épicerie des Halles'] : ['Point Relais Boulangerie Martin', 'Locker Mondial Relay Gare', 'Pressing des Lices'];
+    // Code postal 00000 (tests) : le transporteur ne dessert aucun point de retrait autour de cette adresse
+    if (postalCode === '00000') return [];
+    const names = carrier === 'colissimo' ? ['Bureau de poste', 'Tabac-presse du centre', 'Pickup Station Consigne des Halles'] : ['Point Relais Boulangerie Martin', 'Locker Mondial Relay Gare', 'Pressing des Lices'];
     return names.map((name, i) => ({
       id: `${carrier === 'colissimo' ? 'CP' : 'MR'}${postalCode}${i + 1}`,
       name,
+      type: classifyPickupPoint(name),
       line1: `${(i + 1) * 7} rue de la République`,
       postalCode,
       city: 'Commune simulée',

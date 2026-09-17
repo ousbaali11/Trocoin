@@ -10,6 +10,19 @@ import { normalizeFrenchPhone } from './phone';
 import { IShippingProvider, RelayPoint, ShippingCarrier, ShippingProviderError, ShippingRate, TrackingInfo } from './shipping-provider.interface';
 import { SHIPPING_PROVIDER } from './shipping.constants';
 
+/** Ce qu'un transporteur propose réellement pour une adresse : domicile, et points de retrait réels (relais, bureaux de poste, consignes). */
+export interface CarrierPickupOptions {
+  carrier: ShippingCarrier;
+  label: string;
+  domicile: boolean;
+  pointRelais: boolean;
+  points: RelayPoint[];
+  /** Les points n'ont pas pu être lus (prestataire absent ou en panne) : le vendeur choisira le point à l'étiquette, comme avant. */
+  pointsUnavailable?: boolean;
+}
+const CARRIER_LABELS: Record<ShippingCarrier, string> = { colissimo: 'Colissimo', mondial_relay: 'Mondial Relay' };
+const DEFAULT_PARCEL_GRAMS = 1000;
+
 /** Ce que voient le vendeur et l'acheteur : jamais le PDF lui-même (route dédiée, vendeur seul). */
 export type ShipmentView = Omit<Shipment, 'labelPdfBase64'> & { labelAvailable: boolean };
 
@@ -41,6 +54,52 @@ export class ShippingService {
     return { carrier, rates };
   }
 
+  /**
+   * Avant le paiement (AUDIT §57) : pour l'adresse de l'acheteur, ce que chaque transporteur propose vraiment — envoi à
+   * domicile et/ou retrait — et les points de retrait réels renvoyés par le prestataire (jamais une liste inventée).
+   * Un prestataire absent ou en panne ne bloque pas l'achat : les deux modes restent proposés, sans liste de points.
+   */
+  async pickupOptions(listingId: string, postalCode: string, city?: string): Promise<{ postalCode: string; carriers: CarrierPickupOptions[] }> {
+    if (!/^\d{5}$/.test(postalCode)) throw new BadRequestException('Code postal à 5 chiffres requis.');
+    const listing = await this.listings.findOne({ where: { id: listingId } });
+    if (!listing || !listing.deliveryAvailable) throw new NotFoundException("Cette annonce ne propose pas l'envoi.");
+    const parcel = { weightGrams: listing.weightGrams || DEFAULT_PARCEL_GRAMS, lengthCm: listing.lengthCm ?? undefined, widthCm: listing.widthCm ?? undefined, heightCm: listing.heightCm ?? undefined };
+    const carriers: CarrierPickupOptions[] = [];
+    for (const carrier of ['colissimo', 'mondial_relay'] as ShippingCarrier[]) {
+      const base = { carrier, label: CARRIER_LABELS[carrier] };
+      try {
+        const rates = listing.postalCode ? await this.provider.quote({ carrier, parcel, fromPostalCode: listing.postalCode, toPostalCode: postalCode, fromCity: listing.city ?? undefined, toCity: city }) : [];
+        // Sans cotation possible (annonce sans code postal), on ne retire aucun mode : le vendeur tranchera à l'étiquette
+        const domicile = rates.length === 0 ? true : rates.some((r) => r.mode === 'domicile');
+        const relais = rates.length === 0 ? true : rates.some((r) => r.mode === 'point_relais');
+        const points = relais ? await this.provider.searchRelayPoints(carrier, postalCode, city) : [];
+        carriers.push({ ...base, domicile, pointRelais: relais && points.length > 0, points });
+      } catch (err) {
+        this.logger.warn(`Options de retrait ${carrier} indisponibles pour ${postalCode} : ${(err as Error).message}`);
+        carriers.push({ ...base, domicile: true, pointRelais: true, points: [], pointsUnavailable: true });
+      }
+    }
+    return { postalCode, carriers };
+  }
+
+  /**
+   * Le point de retrait envoyé par l'acheteur doit exister chez le transporteur autour de son adresse : on le relit
+   * chez le prestataire et on garde SA fiche (nom, adresse, nature), pas celle du navigateur. Prestataire injoignable :
+   * la fiche transmise est gardée telle quelle plutôt que de bloquer le paiement.
+   */
+  async resolvePickupPoint(carrier: ShippingCarrier, pointId: string, postalCode: string, city: string | undefined, fallback: RelayPoint): Promise<RelayPoint> {
+    let points: RelayPoint[];
+    try {
+      points = await this.provider.searchRelayPoints(carrier, postalCode, city);
+    } catch (err) {
+      this.logger.warn(`Point de retrait ${pointId} non vérifié (${(err as Error).message})`);
+      return fallback;
+    }
+    const found = points.find((p) => p.id === pointId);
+    if (!found) throw new BadRequestException("Ce point de retrait n'est plus proposé par le transporteur pour votre adresse. Choisissez-en un autre.");
+    return found;
+  }
+
   async relayPoints(transactionId: string, sellerId: string, postalCode: string, city?: string): Promise<RelayPoint[]> {
     const tx = await this.sellerTransaction(transactionId, sellerId);
     if (!/^\d{5}$/.test(postalCode)) throw new BadRequestException('Code postal à 5 chiffres requis.');
@@ -55,6 +114,9 @@ export class ShippingService {
   async createLabel(transactionId: string, sellerId: string, dto: CreateShipmentDto): Promise<ShipmentView> {
     const tx = await this.sellerTransaction(transactionId, sellerId);
     const carrier = tx.deliveryMethod as ShippingCarrier;
+    // Choix de l'acheteur au paiement (AUDIT §57) : le mode et le point de retrait ne se changent pas à l'étiquette
+    if (tx.deliveryMode) dto.mode = tx.deliveryMode;
+    if (tx.deliveryMode === 'point_relais' && tx.pickupPoint?.id) dto.relayPointId = tx.pickupPoint.id;
     if (dto.mode === 'point_relais' && !dto.relayPointId) throw new BadRequestException('Choisissez un point relais.');
     const existing = await this.shipments.findOne({ where: { transactionId } });
     if (existing && existing.status !== 'echec') throw new ConflictException('Une étiquette existe déjà pour cette vente.');

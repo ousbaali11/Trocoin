@@ -11,6 +11,7 @@ import type { ListingDetail, Quote } from "@/lib/types";
 import { FavoriteButton } from "@/components/ui/FavoriteButton";
 import { Modal } from "@/components/ui/Modal";
 import { ShareMenu } from "@/components/ui/ShareMenu";
+import { DeliveryChooser, type DeliveryChoice } from "./DeliveryChooser";
 import { ReportListingButton } from "./ReportListingButton";
 
 export function ListingActions({ listing }: { listing: ListingDetail }) {
@@ -29,7 +30,9 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
     if (user?.phoneNumber) setAddress((a) => (a.phone ? a : { ...a, phone: formatPhone(user.phoneNumber!) }));
   }, [user?.phoneNumber]);
   const setAddr = (k: keyof typeof address, v: string) => setAddress((a) => ({ ...a, [k]: v }));
-  const addressOk = delivery === "main_propre" || (address.name.trim().length >= 2 && address.line1.trim().length >= 3 && /^\d{5}$/.test(address.postalCode) && address.city.trim().length >= 1);
+  // Lieu de réception (AUDIT §57) : domicile, point relais, bureau de poste ou consigne — selon ce que le transporteur propose pour l'adresse
+  const [choice, setChoice] = useState<DeliveryChoice>({ receiveAt: null, point: null, complete: false, pointsUnavailable: false });
+  const addressOk = delivery === "main_propre" || (choice.complete && address.name.trim().length >= 2 && address.line1.trim().length >= 3 && /^\d{5}$/.test(address.postalCode) && address.city.trim().length >= 1);
   const [busy, setBusy] = useState(false);
   // Numéro du vendeur : jamais dans la page, délivré au clic à un membre connecté (et compté pour le vendeur)
   const [phone, setPhone] = useState<string | null>(null);
@@ -79,7 +82,7 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
     if (!requireAuth(`/annonces/${listing.id}`)) return;
     setBusy(true);
     try {
-      const res = await api<{ transaction: { id: string }; checkoutUrl?: string }>("/transactions", { method: "POST", body: { listingId: listing.id, deliveryMethod: delivery, expectedTotal: quote?.buyerTotal, ...(delivery !== "main_propre" ? { shippingAddress: { name: address.name.trim(), line1: address.line1.trim(), line2: address.line2.trim() || undefined, postalCode: address.postalCode, city: address.city.trim(), phone: address.phone.trim() || undefined } } : {}) } });
+      const res = await api<{ transaction: { id: string }; checkoutUrl?: string }>("/transactions", { method: "POST", body: { listingId: listing.id, deliveryMethod: delivery, expectedTotal: quote?.buyerTotal, ...(delivery !== "main_propre" ? { deliveryMode: choice.receiveAt === "domicile" ? "domicile" : "point_relais", ...(choice.point ? { pickupPoint: { id: choice.point.id, name: choice.point.name, line1: choice.point.line1, postalCode: choice.point.postalCode, city: choice.point.city, type: choice.point.type } } : {}), shippingAddress: { name: address.name.trim(), line1: address.line1.trim(), line2: address.line2.trim() || undefined, postalCode: address.postalCode, city: address.city.trim(), phone: address.phone.trim() || undefined } } : {}) } });
       if (res.checkoutUrl) {
         // Paiement hébergé : la carte est saisie sur la page sécurisée Stripe, puis retour sur la transaction
         window.location.assign(res.checkoutUrl);
@@ -171,15 +174,15 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
               <label className="checkbox"><input type="radio" name="delivery" checked={delivery === "main_propre"} onChange={() => setDelivery("main_propre")} /> Remise en main propre (code de validation au rendez-vous)</label>
               {listing.deliveryAvailable && (
                 <>
-                  <label className="checkbox"><input type="radio" name="delivery" checked={delivery === "colissimo"} onChange={() => setDelivery("colissimo")} /> Colissimo à domicile</label>
-                  <label className="checkbox"><input type="radio" name="delivery" checked={delivery === "mondial_relay"} onChange={() => setDelivery("mondial_relay")} /> Mondial Relay en point relais</label>
+                  <label className="checkbox"><input type="radio" name="delivery" checked={delivery === "colissimo"} onChange={() => setDelivery("colissimo")} /> Envoi par Colissimo</label>
+                  <label className="checkbox"><input type="radio" name="delivery" checked={delivery === "mondial_relay"} onChange={() => setDelivery("mondial_relay")} /> Envoi par Mondial Relay</label>
                 </>
               )}
             </div>
             {delivery !== "main_propre" && (
               <fieldset className="field" style={{ border: 0, padding: 0, margin: "0 0 12px" }} data-testid="delivery-address">
-                <legend className="label">Adresse de livraison</legend>
-                <p className="small muted" style={{ margin: "0 0 8px" }}>Vue par le vendeur seul pour préparer l&apos;envoi et l&apos;étiquette ; jamais affichée publiquement.</p>
+                <legend className="label">Votre adresse</legend>
+                <p className="small muted" style={{ margin: "0 0 8px" }}>Vue par le vendeur seul pour préparer l&apos;envoi et l&apos;étiquette ; jamais affichée publiquement. Elle sert aussi à trouver les points de retrait proches de chez vous.</p>
                 <div className="grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                   <div className="field" style={{ gridColumn: "1 / -1", marginBottom: 0 }}><label htmlFor="addr-name">Nom et prénom</label><input id="addr-name" className="input" autoComplete="name" value={address.name} onChange={(e) => setAddr("name", e.target.value)} /></div>
                   <div className="field" style={{ gridColumn: "1 / -1", marginBottom: 0 }}><label htmlFor="addr-line1">Adresse</label><input id="addr-line1" className="input" autoComplete="address-line1" placeholder="N° et rue" value={address.line1} onChange={(e) => setAddr("line1", e.target.value)} /></div>
@@ -190,6 +193,7 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
                 </div>
               </fieldset>
             )}
+            {delivery !== "main_propre" && <DeliveryChooser listingId={listing.id} carrier={delivery} postalCode={address.postalCode} city={address.city} onChange={setChoice} />}
             <table className="table" style={{ marginBottom: 16 }}>
               <tbody>
                 <tr data-testid="quote-price"><td>Prix de l&apos;article</td><td style={{ textAlign: "right" }}>{formatEuros(quote.price)}</td></tr>

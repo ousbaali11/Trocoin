@@ -37,7 +37,7 @@ export class PaymentsController {
   @Post()
   @Throttle({ default: { limit: 10, ttl: 600_000 } })
   create(@Req() req: any, @Body() dto: CreateTransactionDto) {
-    return this.paymentsService.createTransaction(req.user.userId, dto.listingId, dto.deliveryMethod, dto.shippingAddress, dto.expectedTotal);
+    return this.paymentsService.createTransaction(req.user.userId, dto.listingId, dto.deliveryMethod, dto.shippingAddress, dto.expectedTotal, dto.deliveryMode, dto.pickupPoint);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -56,6 +56,22 @@ export class PaymentsController {
   @Post(':id/ship')
   ship(@Req() req: any, @Param('id', ParseUUIDPipe) id: string, @Body() dto: ShipTransactionDto) {
     return this.paymentsService.markShipped(id, req.user.userId, dto.trackingNumber);
+  }
+
+  /** Le vendeur confirme que l'article est disponible et prêt à partir (bouton de la conversation et de la page de la vente). */
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/confirm-availability')
+  @HttpCode(200)
+  confirmAvailability(@Req() req: any, @Param('id', ParseUUIDPipe) id: string) {
+    return this.paymentsService.confirmAvailability(id, req.user.userId);
+  }
+
+  /** L'acheteur renonce à un paiement non finalisé : la page de paiement est fermée, l'annonce redevient achetable. */
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/abandon')
+  @HttpCode(200)
+  abandon(@Req() req: any, @Param('id', ParseUUIDPipe) id: string) {
+    return this.paymentsService.abandonPending(id, req.user.userId);
   }
 
   @UseGuards(JwtAuthGuard)

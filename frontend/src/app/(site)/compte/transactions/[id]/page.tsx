@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useToast } from "@/lib/toast-context";
 import { useConfirm } from "@/lib/confirm-context";
-import { DELIVERY_LABELS, formatDateTime, formatEuros, formatPercent, TX_STATUS_LABELS } from "@/lib/format";
+import { deliveryLabel, formatDateTime, formatEuros, formatPercent, PICKUP_TYPE_LABELS, TX_STATUS_LABELS } from "@/lib/format";
 import type { Review, Transaction } from "@/lib/types";
 import { Modal } from "@/components/ui/Modal";
 import { ShipmentPanel } from "@/components/transactions/ShipmentPanel";
@@ -27,6 +27,16 @@ export default function TransactionPage() {
   const [comment, setComment] = useState("");
   const [myReview, setMyReview] = useState<Review | null>(null);
   const [busy, setBusy] = useState(false);
+  // Retour de la page de paiement (AUDIT §57) : « retour » après un paiement, « annule » après un abandon ou un refus.
+  // Lu une fois dans l'adresse, puis retiré pour qu'un rechargement ne rejoue pas le bandeau.
+  const [paymentReturn, setPaymentReturn] = useState<"retour" | "annule" | null>(null);
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search).get("paiement");
+    if (p === "retour" || p === "annule") {
+      setPaymentReturn(p);
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -69,18 +79,58 @@ export default function TransactionPage() {
   const st = TX_STATUS_LABELS[tx.status];
   const buyer = tx.role === "acheteur";
   const q = tx.quote;
+  // Résultat affiché à l'acheteur qui revient du paiement : réussi, en cours de vérification, ou non abouti
+  const unpaidClosed = ["rembourse", "annulee"].includes(tx.status) && !tx.paidAt;
+  const paymentResult: "succes" | "verification" | "echec" | null = !buyer || !paymentReturn ? null : tx.status === "en_attente" ? (paymentReturn === "retour" ? "verification" : "echec") : unpaidClosed ? "echec" : "succes";
 
   return (
     <div className="stack" style={{ gap: 16 }}>
       <Link href="/compte/transactions" className="small">← Achats et ventes</Link>
       <div className="page-head" style={{ marginBottom: 0 }}>
         <div>
-          <p className="eyebrow">{buyer ? "Achat" : "Vente"} · {DELIVERY_LABELS[tx.deliveryMethod]}</p>
+          <p className="eyebrow">{buyer ? "Achat" : "Vente"} · {deliveryLabel(tx)}</p>
           <h1 style={{ fontSize: "1.6rem" }}>{tx.listing?.title ?? (tx.listingTitle ? `${tx.listingTitle} (annonce supprimée)` : "Annonce supprimée")}</h1>
           <span className={st.pill}>{st.label}</span> <span className="small muted">{st.help}</span>
         </div>
-        {tx.listing && <Link href={`/annonces/${tx.listing.id}`} className="btn btn-outline btn-sm">Voir l&apos;annonce</Link>}
+        <div className="row" style={{ gap: 8 }}>
+          {tx.conversationId && <Link href={`/compte/messages/${tx.conversationId}`} className="btn btn-outline btn-sm" data-testid="open-conversation">Conversation et suivi</Link>}
+          {tx.listing && <Link href={`/annonces/${tx.listing.id}`} className="btn btn-outline btn-sm">Voir l&apos;annonce</Link>}
+        </div>
       </div>
+
+      {paymentResult === "succes" && (
+        <div className="alert alert-success" role="status" data-testid="payment-result" data-result="succes">
+          <strong>Paiement réussi.</strong> {formatEuros(tx.amount + tx.buyerFee)} payés : Trocoin conserve votre paiement et ne le verse au vendeur qu&apos;une fois la réception confirmée.
+          <br />Et maintenant ? Le vendeur confirme que l&apos;article est disponible, puis {tx.deliveryMethod === "main_propre" ? "vous convenez du rendez-vous" : "expédie le colis"}. Chaque étape vous est annoncée dans la conversation.
+          {tx.conversationId && (
+            <div style={{ marginTop: 10 }}><Link className="btn btn-primary btn-sm" href={`/compte/messages/${tx.conversationId}`}>Ouvrir la conversation</Link></div>
+          )}
+        </div>
+      )}
+      {paymentResult === "verification" && (
+        <div className="alert alert-info" role="status" data-testid="payment-result" data-result="verification">
+          <strong>Paiement en cours de vérification…</strong> Votre banque confirme l&apos;opération ; cette page se met à jour toute seule, inutile de payer une seconde fois.
+        </div>
+      )}
+      {paymentResult === "echec" && (
+        <div className="alert alert-error" role="alert" data-testid="payment-result" data-result="echec">
+          <strong>Paiement non abouti : rien n&apos;a été débité.</strong>
+          {tx.status === "en_attente" ? (
+            <>
+              {" "}L&apos;article vous reste réservé quelques minutes. Si votre carte a été refusée : vérifiez son plafond et la validation demandée par votre banque (application ou SMS), ou essayez un autre moyen de paiement.
+              <div className="row" style={{ marginTop: 10, gap: 8 }}>
+                {tx.checkoutUrl && <a className="btn btn-primary btn-sm" href={tx.checkoutUrl} data-testid="resume-payment">Reprendre le paiement</a>}
+                <button className="btn btn-outline btn-sm" disabled={busy} data-testid="abandon-payment" onClick={() => run(() => api(`/transactions/${tx.id}/abandon`, { method: "POST" }), "Achat abandonné : rien n'a été débité.")}>Abandonner cet achat</button>
+              </div>
+            </>
+          ) : (
+            <>
+              {" "}Cet achat est clos. L&apos;annonce reste disponible si vous souhaitez réessayer.
+              {tx.listing && <div style={{ marginTop: 10 }}><Link className="btn btn-primary btn-sm" href={`/annonces/${tx.listing.id}`}>Retour à l&apos;annonce</Link></div>}
+            </>
+          )}
+        </div>
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }} className="tx-cols">
         <section className="panel">
@@ -111,6 +161,7 @@ export default function TransactionPage() {
           <h2 className="h3">Chronologie</h2>
           <ul className="small" style={{ paddingLeft: 18, margin: 0 }}>
             <li>Paiement sécurisé{tx.paymentMethod === "paypal" ? " via PayPal" : tx.paymentMethod === "card" ? " par carte" : ""} : {formatDateTime(tx.createdAt)}</li>
+            {tx.sellerConfirmedAt && <li data-testid="seller-confirmed-at">Disponibilité confirmée par le vendeur : {formatDateTime(tx.sellerConfirmedAt)}</li>}
             {tx.shippedAt && <li>{tx.deliveryMethod === "main_propre" ? "Vendeur prêt pour la remise" : `Expédié${tx.deliveryTrackingNumber ? ` (suivi ${tx.deliveryTrackingNumber})` : ""}`} : {formatDateTime(tx.shippedAt)}</li>}
             {tx.confirmedAt && <li>Réception confirmée : {formatDateTime(tx.confirmedAt)}</li>}
             {tx.disputeReason && <li>Litige : « {tx.disputeReason} »</li>}
@@ -150,6 +201,7 @@ export default function TransactionPage() {
             {buyer && tx.checkoutUrl && (
               <div style={{ marginTop: 10 }}>
                 <a className="btn btn-primary" href={tx.checkoutUrl}>Reprendre le paiement</a>
+                {!paymentResult && <button className="btn btn-ghost" style={{ marginLeft: 8 }} disabled={busy} onClick={() => run(() => api(`/transactions/${tx.id}/abandon`, { method: "POST" }), "Achat abandonné : rien n'a été débité.")}>Abandonner cet achat</button>}
               </div>
             )}
           </div>
@@ -157,6 +209,19 @@ export default function TransactionPage() {
         {tx.status === "sequestre" && !buyer && (
           <div className="stack">
             <p className="small muted" style={{ margin: 0 }}>Les fonds de l&apos;acheteur sont bloqués. {tx.deliveryMethod === "main_propre" ? "Convenez d'un rendez-vous par messagerie, puis confirmez que vous êtes prêt." : "Expédiez l'article et renseignez le numéro de suivi."}</p>
+            {tx.sellerConfirmedAt ? (
+              <p className="small" style={{ margin: 0, color: "var(--accent-dark)" }} data-testid="availability-confirmed">✓ Vous avez confirmé la disponibilité de l&apos;article le {formatDateTime(tx.sellerConfirmedAt)}.</p>
+            ) : (
+              <div className="row" style={{ gap: 8 }}>
+                <button className="btn btn-outline" disabled={busy} data-testid="confirm-availability" onClick={() => run(() => api(`/transactions/${tx.id}/confirm-availability`, { method: "POST" }), "Disponibilité confirmée : l'acheteur est prévenu.")}>Confirmer que l&apos;article est disponible</button>
+                <span className="small muted">Rassure l&apos;acheteur en attendant {tx.deliveryMethod === "main_propre" ? "le rendez-vous" : "l'envoi"}.</span>
+              </div>
+            )}
+            {tx.deliveryMethod !== "main_propre" && tx.deliveryMode && (
+              <p className="small" style={{ margin: 0 }} data-testid="buyer-delivery-choice">
+                Réception choisie par l&apos;acheteur : <strong>{tx.deliveryMode === "domicile" ? "à domicile" : tx.pickupPoint ? `${PICKUP_TYPE_LABELS[tx.pickupPoint.type].toLowerCase()} « ${tx.pickupPoint.name} », ${tx.pickupPoint.line1}, ${tx.pickupPoint.postalCode} ${tx.pickupPoint.city}` : "en point de retrait (à choisir près de son adresse)"}</strong>
+              </p>
+            )}
             {tx.deliveryMethod !== "main_propre" && <ShipmentPanel tx={tx} onChanged={load} />}
             {tx.deliveryMethod !== "main_propre" && (
               <div className="field" style={{ maxWidth: 360 }}>
@@ -174,6 +239,7 @@ export default function TransactionPage() {
         )}
         {tx.status === "sequestre" && buyer && (
           <div className="stack">
+            {tx.sellerConfirmedAt && <p className="small" style={{ margin: 0, color: "var(--accent-dark)" }} data-testid="availability-confirmed">✓ Le vendeur a confirmé que l&apos;article est disponible.</p>}
             <p className="small muted" style={{ margin: 0 }}>Le vendeur doit maintenant {tx.deliveryMethod === "main_propre" ? "organiser la remise avec vous" : "expédier l'article"}. Vous pouvez annuler tant qu&apos;il n&apos;a pas expédié.</p>
             <button className="btn btn-ghost" style={{ alignSelf: "flex-start" }} disabled={busy} onClick={async () => (await confirm({ title: "Annuler mon achat ?", text: "Vous serez intégralement remboursé, frais compris.", confirmLabel: "Annuler l'achat", danger: true })) && run(() => api(`/transactions/${tx.id}/cancel`, { method: "POST" }), "Achat annulé, remboursement en cours.")}>Annuler mon achat</button>
           </div>

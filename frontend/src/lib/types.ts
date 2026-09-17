@@ -248,14 +248,18 @@ export interface ConversationSummary {
   role: "acheteur" | "vendeur";
   other: SellerSummary | null;
   listing: { id: string; title: string; price?: number | null; priceType: PriceType; status: ListingStatus; coverUrl: string | null; userId?: string } | null;
-  lastMessage: { content?: string; senderId: string; createdAt: string } | null;
+  lastMessage: { content?: string; senderId: string; createdAt: string; type?: Message["type"] } | null;
   unreadCount: number;
 }
 export interface Message {
   id: string;
   conversationId: string;
   senderId: string;
-  type: "text" | "image" | "offer";
+  type: "text" | "image" | "offer" | "system";
+  /** Message automatique de suivi de vente (type « system ») : étape, vente concernée, données d'affichage. */
+  systemEvent?: SystemEvent | null;
+  transactionId?: string | null;
+  meta?: Record<string, string | number | null> | null;
   content?: string;
   attachmentUrl?: string | null;
   offerAmount?: number | null;
@@ -263,10 +267,63 @@ export interface Message {
   readAt?: string | null;
   createdAt: string;
 }
+export type SystemEvent =
+  | "achat_confirme"
+  | "disponibilite_confirmee"
+  | "expedie"
+  | "pret_pour_remise"
+  | "reception_confirmee"
+  | "remise_validee"
+  | "reception_presumee"
+  | "vente_annulee"
+  | "litige_ouvert"
+  | "litige_resolu";
+
+export type PickupPointType = "relais" | "bureau_poste" | "consigne";
+/** Point de retrait réel renvoyé par le prestataire d'étiquettes. */
+export interface PickupPoint {
+  id: string;
+  name: string;
+  type: PickupPointType;
+  line1: string;
+  postalCode: string;
+  city: string;
+  hours?: string;
+  distanceMeters?: number;
+}
+/** Ce qu'un transporteur propose réellement pour l'adresse de l'acheteur. */
+export interface CarrierPickupOptions {
+  carrier: "colissimo" | "mondial_relay";
+  label: string;
+  domicile: boolean;
+  pointRelais: boolean;
+  points: PickupPoint[];
+  pointsUnavailable?: boolean;
+}
+
+/** Vente liée à la conversation : même état que la page « Achats et ventes » (mêmes routes). */
+export interface ConversationSale {
+  id: string;
+  role: "acheteur" | "vendeur";
+  status: TransactionStatus;
+  amount: number;
+  deliveryMethod: "main_propre" | "colissimo" | "mondial_relay";
+  deliveryMode?: "domicile" | "point_relais" | null;
+  pickupPoint?: { name: string; city: string; type: PickupPointType } | null;
+  sellerConfirmedAt?: string | null;
+  shippedAt?: string | null;
+  confirmedAt?: string | null;
+  autoConfirmAt?: string | null;
+  trackingNumber?: string | null;
+  trackingUrl?: string | null;
+  labelReady?: boolean;
+}
+
 export interface ConversationDetail extends Omit<ConversationSummary, "lastMessage" | "unreadCount"> {
   messages: Message[];
   blocked: boolean;
   quickReplies: string[];
+  transaction?: ConversationSale | null;
 }
 
 export interface Quote {
@@ -298,6 +355,13 @@ export interface Transaction {
   deliveryTrackingNumber?: string | null;
   /** Adresse de livraison saisie par l'acheteur au paiement (envoi) ; visible des deux parties seulement. */
   shippingAddress?: DeliveryAddress | null;
+  /** Choix de l'acheteur au paiement (AUDIT §57) : domicile ou point de retrait, et le point choisi. */
+  deliveryMode?: "domicile" | "point_relais" | null;
+  pickupPoint?: { id: string; name: string; line1: string; postalCode: string; city: string; type: PickupPointType } | null;
+  /** Le vendeur a confirmé que l'article est disponible et prêt à partir. */
+  sellerConfirmedAt?: string | null;
+  /** Conversation de l'annonce entre l'acheteur et le vendeur (suivi de la vente). */
+  conversationId?: string | null;
   handoverCode?: string;
   disputeReason?: string | null;
   resolutionNote?: string | null;

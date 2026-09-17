@@ -263,3 +263,30 @@ lui-même est couvert par `e2e/17-expedition.spec.ts` (fournisseur simulé, mêm
 Passage en production, plus tard : garder les applications actuelles (elles fonctionnent sur
 `api.boxtal.com`), mettre `BOXTAL_ENV=production`, et décider qui paie l'étiquette (prélevée sur le
 versement du vendeur ou facturée à part).
+
+## 9. Lieu de réception choisi par l'acheteur : domicile, point relais, bureau de poste, consigne (AUDIT §57)
+
+Avant, le mode se déduisait du transporteur (« Colissimo à domicile », « Mondial Relay en point relais ») et le point
+relais était choisi par le **vendeur** à l'achat de l'étiquette. Désormais l'**acheteur** choisit, au paiement, parmi
+ce que le transporteur propose réellement autour de son adresse.
+
+- `GET /shipping/pickup-options?listingId=…&postalCode=…&city=…` (membre connecté, 40 appels / 10 min) : pour Colissimo
+  et Mondial Relay, `domicile` et `pointRelais` viennent de la **cotation réelle** du colis de l'annonce (offres Boxtal
+  `HOME` / `PICKUP_POINT`), et `points` de la recherche de points du prestataire — jamais une liste écrite à la main.
+- Points : d'abord `GET /shipping/v3.2/parcel-point-by-shipping-offer` (points valables pour l'offre de retrait du
+  transporteur — `MONR-CpourToi`, `POFR-ColissimoPickupStation`, ou `BOXTAL_OFFER_*` s'ils sont renseignés), à défaut
+  `GET /shipping/v3.1/parcel-point` filtré par réseau.
+- Nature de chaque point (`relais`, `bureau_poste`, `consigne`) : `classifyPickupPoint` lit le type fourni par le
+  prestataire s'il existe, sinon le nom commercial publié par le transporteur (« LOCKER … », « CONSIGNE … », « PICKUP
+  STATION … », « BUREAU DE POSTE … », « LA POSTE … ») ; sans indice, c'est un relais commerçant. Chez Boxtal, il n'y a
+  pas d'offre « bureau de poste » ou « consigne » distincte : ce sont des **points de l'offre de retrait**, d'où le
+  choix présenté à l'acheteur — « À domicile », « En point relais », « En bureau de poste / consigne automatique » —
+  chacun affiché seulement s'il existe autour de son adresse.
+- Le point envoyé par le navigateur est **relu chez le prestataire** avant tout paiement (`resolvePickupPoint`) : point
+  inconnu → 400, aucun débit ; la fiche gardée sur la vente (`transactions.pickupPoint`) est celle du prestataire.
+- À l'étiquette, le mode et le point de l'acheteur sont **imposés** (`createLabel`), le vendeur ne les change pas ; le
+  panneau du vendeur les affiche. Ventes antérieures (sans `deliveryMode`) : parcours d'origine, le vendeur choisit.
+- Prestataire absent ou en panne : l'achat n'est pas bloqué — les deux modes restent proposés sans liste de points, et
+  le vendeur choisit le point à l'étiquette comme avant.
+- `GET /shipping/diagnostic` (sandbox) gagne `nature_des_points` : noms des champs d'un point, réseaux, répartition par
+  nature et exemples, pour vérifier le classement sur des données réelles.

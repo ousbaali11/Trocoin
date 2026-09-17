@@ -142,6 +142,12 @@ export class StripePaymentProvider implements IPaymentProvider {
     return { status: 'en_attente', checkoutUrl: session.url ?? undefined };
   }
 
+  /** L'acheteur abandonne : la session Checkout est expirée chez Stripe (sans effet si elle l'est déjà ou si elle est payée). */
+  async expireCheckout(providerSessionId: string): Promise<void> {
+    const session = await this.stripe.checkout.sessions.retrieve(providerSessionId);
+    if (session.status === 'open') await this.stripe.checkout.sessions.expire(providerSessionId);
+  }
+
   parseWebhook(rawBody: Buffer, signature: string | undefined): PaymentWebhookEvent {
     if (!this.webhookSecret) throw new BadRequestException('Webhook Stripe non configuré (STRIPE_WEBHOOK_SECRET).');
     if (!signature) throw new BadRequestException('En-tête stripe-signature absent.');

@@ -150,7 +150,7 @@ export default function MessagesPage() {
                   </div>
                   <div className="small" style={{ color: c.unreadCount > 0 ? "var(--ink)" : "var(--ink-muted)", fontWeight: c.unreadCount > 0 ? 600 : 400 }}>{c.listing?.title ?? "Cette annonce n'existe plus"} · {c.listing ? formatPrice(c.listing.price, c.listing.priceType) : ""}</div>
                   <div className="small" style={{ marginTop: 4, fontWeight: c.unreadCount > 0 ? 700 : 400, color: c.unreadCount > 0 ? "var(--ink)" : "var(--ink-soft)" }}>
-                    {c.lastMessage ? `${c.lastMessage.senderId !== c.other?.id ? "Vous : " : ""}${truncate(c.lastMessage.content ?? "", 90)}` : "Aucun message"}
+                    {c.lastMessage ? `${c.lastMessage.type !== "system" && c.lastMessage.senderId !== c.other?.id ? "Vous : " : ""}${truncate(c.lastMessage.content ?? "", 90)}` : "Aucun message"}
                   </div>
                 </div>
                 <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>

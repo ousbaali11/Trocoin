@@ -183,7 +183,7 @@ export default async function ListingPage({ params }: { params: Promise<{ id: st
               <ul className="small" style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 6 }}>
                 {listing.delivery?.available ? (
                   <>
-                    <li>Livraison possible en France (Colissimo à domicile ou Mondial Relay en point relais), ou remise en main propre.</li>
+                    <li>Livraison possible en France par Colissimo ou Mondial Relay — à domicile, en point relais, en bureau de poste ou en consigne selon votre adresse —, ou remise en main propre.</li>
                     <li>Le vendeur expédie sous {listing.delivery.shipWithinDays} jours après le paiement, puis comptez {listing.delivery.transitDaysMin} à {listing.delivery.transitDaysMax} jours de transport.</li>
                     <li>
                       {listing.delivery.estimate

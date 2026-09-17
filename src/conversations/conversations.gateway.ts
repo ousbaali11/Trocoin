@@ -53,6 +53,12 @@ export class ConversationsGateway implements OnGatewayInit, OnGatewayConnection,
     this.conversationsService.onMessagesRead((e) => {
       server.to(roomName(e.conversationId)).emit('read', { conversationId: e.conversationId, readerId: e.readerId, readAt: e.readAt.toISOString() });
     });
+    // Messages automatiques de suivi de vente (AUDIT §57) : écrits par le service des paiements, hors WebSocket. La
+    // conversation ouverte les reçoit aussitôt ; « inbox » réveille les deux boîtes (badge, état de la vente relu).
+    this.conversationsService.onSystemMessage((e) => {
+      server.to(roomName(e.message.conversationId)).emit('message', e.message);
+      for (const uid of [e.buyerId, e.sellerId]) server.to(userRoom(uid)).emit('inbox', { conversationId: e.message.conversationId });
+    });
     server.use(async (socket, next) => {
       try {
         const token =

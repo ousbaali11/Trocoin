@@ -2922,3 +2922,82 @@ déclencheur absent, formulaire visible, catégories en grille. Dépôt (compte 
 « Fiche complète » ni lien « Faire » sur bureau et mobile ; 12 photos ajoutées dans le formulaire puis « Enregistrer
 en brouillon » → **12 photos enregistrées** côté API (deux lots). Brouillon (jamais publié) et compte temporaire
 supprimés (204, 204).
+
+## 57. Saisie qui saute vers « Remise en main propre », retour de paiement, points de retrait, suivi de la vente dans la messagerie — 17 septembre 2026
+
+### 1. Bug : le curseur quitte le champ et « Remise en main propre » se coche
+
+**Reproduit** avant toute correction (`e2e/24-remise-saisie.spec.ts`, frappe touche par touche) : dans « Paiement
+sécurisé », en tapant « Nora Acheteur » dans « Nom et prénom », le focus partait sur le bouton radio « Remise en main
+propre » ; l'espace du nom le **cochait**, et le bloc d'adresse disparaissait.
+
+**Cause exacte** — ce n'est pas un raccourci clavier. La boîte de dialogue (`components/ui/Modal.tsx`) rejouait son
+« focus initial » à chaque frappe : son effet dépendait de `onClose`, que les appelants passent comme fonction fléchée
+**recréée à chaque rendu** — donc à chaque caractère tapé dans un champ contrôlé. L'effet se relançait : focus rendu au
+bouton d'ouverture, puis focus posé sur le premier champ de la boîte, ici le radio « Remise en main propre ». Les
+boîtes dont le premier champ est celui où l'on tape (message au vendeur, litige) masquaient le défaut.
+
+**Correction** : `onClose` est lu par référence, l'effet ne dépend plus que de l'ouverture. Échap, tabulation confinée
+et retour du focus au bouton d'ouverture sont inchangés (vérifiés par le même test). Toutes les boîtes en profitent.
+
+### 2. Retour automatique après paiement, réussi ou non
+
+- Succès : `success_url` → `/compte/transactions/:id?paiement=retour` (inchangé) ; la page affiche maintenant un bandeau
+  **« Paiement réussi »** (montant, ce qui se passe ensuite, lien vers la conversation), ou « Paiement en cours de
+  vérification… » si la banque n'a pas encore répondu.
+- Abandon / refus : `cancel_url` pointait vers l'annonce avec un message fugitif ; il pointe désormais vers
+  `/compte/transactions/:id?paiement=annule` → bandeau **« Paiement non abouti : rien n'a été débité »**, quoi vérifier,
+  **Reprendre le paiement**, **Abandonner cet achat** (`POST /transactions/:id/abandon` : session fermée chez le
+  fournisseur — `expireCheckout`, Stripe `checkout.sessions.expire` —, annonce rachetable aussitôt ; un paiement en
+  réalité abouti n'est jamais annulé).
+- Limite de Stripe Checkout, dite clairement : une carte **refusée** laisse l'acheteur sur la page Stripe avec le motif
+  (pour réessayer) — Stripe n'a pas d'adresse de retour « en cas d'échec ». Le retour se fait par « ← » (notre
+  `cancel_url`) ou à l'expiration ; dans les deux cas il arrive sur la page ci-dessus. Idem pour PayPal via Stripe.
+- Pour le tester de bout en bout sans Stripe : le fournisseur simulé sait jouer une page de paiement hors du site
+  (`/dev/mock-checkout/:id`, 404 en production) avec les mêmes adresses de retour.
+
+### 3. Domicile, point relais, bureau de poste, consigne — pour Colissimo et Mondial Relay
+
+Constat : le mode était déduit du transporteur (« Colissimo à domicile », « Mondial Relay en point relais »), le point
+relais choisi par le vendeur, et le panneau du vendeur ne proposait le domicile que pour Colissimo alors que Boxtal
+cote `MONR-DomicileFrance`. Relevé réel (diagnostic sandbox) : deux offres par transporteur, domicile et retrait
+(`POFR-ColissimoAccess` / `POFR-ColissimoPickupStation`, `MONR-DomicileFrance` / `MONR-CpourToi`) ; bureaux de poste
+et consignes ne sont pas des offres à part mais des **points de l'offre de retrait** (« LOCKER … » autour de 75017).
+
+- `GET /shipping/pickup-options` : par transporteur, domicile et retrait **selon la cotation réelle** du colis, et les
+  points réels du prestataire, classés relais / bureau de poste / consigne (`classifyPickupPoint`).
+- Fenêtre d'achat : « Envoi par Colissimo / Mondial Relay », adresse, puis « Où souhaitez-vous recevoir le colis ? » —
+  **À domicile**, **En point relais (n)**, **En bureau de poste / consigne automatique (n)** —, chaque option seulement
+  si elle existe autour de l'adresse ; liste des points (nature, adresse, distance, horaires). Paiement impossible
+  sans choix complet.
+- Le point est relu chez le prestataire avant tout paiement (point inconnu → 400, fiche du prestataire conservée) ;
+  à l'étiquette, mode et point de l'acheteur sont imposés. Prestataire en panne : achat non bloqué, parcours d'origine.
+- Détail : `docs/etiquettes-transporteur.md` §9.
+
+### 4. Suivi de la vente dans la messagerie
+
+Existant réutilisé tel quel : séquestre, `ship`, `confirm-delivery`, `handover`, virement Stripe Connect, suivi
+d'expédition. Ajouté : messages automatiques (`messages.type = 'system'`, `systemEvent`, `transactionId`, `meta`) écrits
+par `PaymentsService.track()` après chaque action réussie ; conversation créée d'office à l'achat ; étape
+« disponibilité confirmée » (`POST /transactions/:id/confirm-availability`, information, jamais bloquante) ; panneau
+de la vente épinglé dans la conversation avec le bouton de l'étape en cours ; diffusion en direct.
+
+**Articulation retenue** (compromis détaillé dans `docs/suivi-vente-messagerie.md`) : la conversation sert à **suivre
+et agir en un geste** ; la page « Achats et ventes » reste le **dossier complet** (montants, étiquette, code de remise,
+litige, avis, annulation). Mêmes routes des deux côtés, chaque côté renvoie à l'autre : une action faite dans l'un se
+voit aussitôt dans l'autre. Tout déplacer dans le fil a été écarté (formulaires et documents introuvables dans des
+messages, trace comptable à garder quand la conversation disparaît), tout dupliquer aussi (double maintenance).
+
+Corrigé au passage : deux messages créés dans la même seconde sortaient dans un ordre arbitraire sous SQLite
+(horodatage à la milliseconde posé par le service) ; « Acheter », « Proposer un prix » et les questions d'avant-vente
+ne s'affichent plus dans une conversation dont la vente est en cours.
+
+### Vérification
+
+- API : `test/phase34` (6 tests : classement des points, suivi complet par les routes existantes, main propre et
+  litige sans doublon ni code de remise, options de réception, point relu / imposé à l'étiquette / inconnu refusé,
+  abandon et retour de paiement hébergé) ; `phase13` adaptée (nouvelle adresse d'annulation) → **194 tests**, 1 ignoré.
+- Navigateur : `24-remise-saisie` (échoue avant correction, réussit après, **bureau et mobile**), `25-retour-paiement`
+  (réussi / refusé, bureau et mobile), `26-suivi-messagerie` (deux navigateurs, temps réel, bureau et mobile),
+  `17-expedition` adaptée (options réelles par transporteur, choix imposé au vendeur).
+- Migration `1789550000000-SuiviDansLaMessagerie` (colonnes nullables, aucune donnée réécrite).

@@ -14,12 +14,21 @@ export function Modal({ open, onClose, title, children, width = 520 }: { open: b
   const titleId = useId();
   const box = useRef<HTMLDivElement>(null);
   const opener = useRef<Element | null>(null);
+  // La fonction de fermeture est lue par référence : les appelants passent une fonction fléchée recréée à chaque
+  // rendu, donc à chaque frappe dans un champ de la boîte. En dépendance de l'effet ci-dessous, elle le relançait
+  // à chaque frappe : focus rendu au bouton d'ouverture puis « focus initial » rejoué sur le premier champ de la
+  // boîte. Dans « Paiement sécurisé », ce premier champ est le bouton radio « Remise en main propre » : le curseur
+  // quittait le champ d'adresse et l'espace suivant cochait ce mode de remise (AUDIT §57).
+  const close = useRef(onClose);
+  useEffect(() => {
+    close.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!open) return;
     opener.current = document.activeElement;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") return onClose();
+      if (e.key === "Escape") return close.current();
       if (e.key !== "Tab" || !box.current) return;
       const items = Array.from(box.current.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => el.offsetParent !== null);
       if (items.length === 0) return;
@@ -42,7 +51,7 @@ export function Modal({ open, onClose, title, children, width = 520 }: { open: b
       document.body.style.overflow = "";
       (opener.current as HTMLElement | null)?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]); // l'ouverture seule : jamais relancé par un simple rendu de l'appelant
   if (!open || typeof document === "undefined") return null;
   // Rendue dans <body> (portail) : une boîte « fixed » placée dans une carte survolée (transform)
   // resterait sinon confinée à cette carte.

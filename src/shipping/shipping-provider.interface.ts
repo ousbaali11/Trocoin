@@ -54,9 +54,26 @@ export interface ShippingRate {
   label: string;
 }
 
+/** Nature d'un point de retrait : relais commerçant, bureau de poste, consigne automatique (locker). */
+export type PickupPointType = 'relais' | 'bureau_poste' | 'consigne';
+
+/**
+ * Classe un point de retrait d'après ce que le réseau du transporteur en dit : le type fourni par le prestataire
+ * quand il existe, sinon le nom commercial du point (« LOCKER … », « CONSIGNE … », « BUREAU DE POSTE … », « LA POSTE … »),
+ * tel que les transporteurs le publient. Sans indice, c'est un relais commerçant.
+ */
+export function classifyPickupPoint(name: string, providerType?: string): PickupPointType {
+  const s = `${providerType || ''} ${name || ''}`.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (/locker|consigne|pickup[ _-]?station|automate|casier|\bapm\b|parcel[ _-]?station/.test(s)) return 'consigne';
+  if (/bureau de poste|la poste|\bbp\b|post[ _-]?office|\bposte\b|agence postale|\bbdp\b/.test(s)) return 'bureau_poste';
+  return 'relais';
+}
+
 export interface RelayPoint {
   id: string;
   name: string;
+  /** Relais commerçant, bureau de poste ou consigne automatique. */
+  type: PickupPointType;
   line1: string;
   postalCode: string;
   city: string;

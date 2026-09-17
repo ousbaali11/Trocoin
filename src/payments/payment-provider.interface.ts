@@ -93,6 +93,8 @@ export interface IPaymentProvider {
    */
   createCheckout?(params: CreateCheckoutParams): Promise<CheckoutResult>;
   syncCheckout?(providerSessionId: string): Promise<CheckoutSync>;
+  /** Ferme une page de paiement encore ouverte (l'acheteur abandonne) : plus aucun paiement possible dessus. */
+  expireCheckout?(providerSessionId: string): Promise<void>;
   /** Vérifie la signature du webhook et normalise l'évènement ; lève une erreur si la signature est invalide. */
   parseWebhook?(rawBody: Buffer, signature: string | undefined): PaymentWebhookEvent;
 }

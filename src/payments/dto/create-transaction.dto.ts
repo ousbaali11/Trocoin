@@ -1,6 +1,6 @@
 import { Type } from 'class-transformer';
 import { IsIn, IsNumber, IsOptional, IsString, IsUUID, Matches, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
-import { DeliveryMethod } from '../transaction.entity';
+import { DeliveryMethod, DeliveryMode, PickupPointType } from '../transaction.entity';
 
 export const DELIVERY_METHODS: DeliveryMethod[] = ['main_propre', 'colissimo', 'mondial_relay'];
 
@@ -35,6 +35,33 @@ export class DeliveryAddressDto {
   phone?: string;
 }
 
+/** Point de retrait choisi par l'acheteur ; le serveur le relit chez le prestataire avant de l'enregistrer (AUDIT §57). */
+export class PickupPointDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(40)
+  id: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  name: string;
+
+  @IsString()
+  @MaxLength(120)
+  line1: string;
+
+  @Matches(/^[0-9]{5}$/, { message: 'Le code postal doit comporter 5 chiffres.' })
+  postalCode: string;
+
+  @IsString()
+  @MaxLength(80)
+  city: string;
+
+  @IsIn(['relais', 'bureau_poste', 'consigne'])
+  type: PickupPointType;
+}
+
 export class CreateTransactionDto {
   @IsUUID()
   listingId: string;
@@ -51,6 +78,16 @@ export class CreateTransactionDto {
   @ValidateNested()
   @Type(() => DeliveryAddressDto)
   shippingAddress?: DeliveryAddressDto;
+
+  /** Envoi à domicile ou retrait dans un point (relais, bureau de poste, consigne). Absent : anciens clients, le vendeur choisit à l'étiquette. */
+  @IsOptional()
+  @IsIn(['domicile', 'point_relais'])
+  deliveryMode?: DeliveryMode;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => PickupPointDto)
+  pickupPoint?: PickupPointDto;
 
   /**
    * Total affiché à l'acheteur au moment où il clique sur « Payer » (AUDIT §51). Ce n'est PAS le montant débité

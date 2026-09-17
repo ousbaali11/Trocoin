@@ -10,6 +10,8 @@ import { useToast } from "@/lib/toast-context";
 import { formatDateTime, formatEuros, formatPrice, REPORT_REASON_LABELS } from "@/lib/format";
 import type { ConversationDetail, Message } from "@/lib/types";
 import { Modal } from "@/components/ui/Modal";
+import { SalePanel } from "@/components/messages/SalePanel";
+import { saleEventText } from "@/lib/sale-events";
 
 export default function ConversationPage() {
   const { id } = useParams<{ id: string }>();
@@ -68,6 +70,7 @@ export default function ConversationPage() {
     socket.on("message", (m: Message) => {
       if (m.conversationId !== id) return;
       setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
+      if (m.type === "system") load();
       if (m.senderId !== user?.id) {
         setOtherTyping(false);
         // Affiché → lu : le serveur prévient l'expéditeur (« Vu ») et le compteur de non-lus se met à jour
@@ -215,12 +218,14 @@ export default function ConversationPage() {
   if (error) return <div className="alert alert-error">{error} <Link href="/compte/messages">Retour aux messages</Link></div>;
   if (!conv || !user) return <div className="skeleton" style={{ height: 400 }} />;
   const isBuyer = conv.role === "acheteur";
+  // Vente en cours ou conclue entre les deux : plus d'« Acheter », de proposition de prix ni de questions d'avant-vente
+  const saleOpen = !!conv.transaction && ["sequestre", "livree", "litige", "confirme"].includes(conv.transaction.status);
   // « Vu à … » uniquement sous mon dernier message (comme les messageries grand public)
   let lastMineIndex = -1;
-  messages.forEach((m, i) => { if (m.senderId === user.id) lastMineIndex = i; });
+  messages.forEach((m, i) => { if (m.senderId === user.id && m.type !== "system") lastMineIndex = i; });
 
   return (
-    <div className="panel" style={{ display: "flex", flexDirection: "column", height: "calc(100vh - var(--header-h) - 100px)", minHeight: 520, padding: 0, overflow: "hidden" }}>
+    <div className="panel" style={{ display: "flex", flexDirection: "column", height: "calc(100vh - var(--header-h) - 100px)", minHeight: conv.transaction ? 660 : 520, padding: 0, overflow: "hidden" }}>
       <h1 className="sr-only">Conversation avec {conv.other?.displayName ?? "un membre"}{conv.listing ? ` à propos de ${conv.listing.title}` : ""}</h1>
       <header className="conv-header" style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", padding: "12px 16px", borderBottom: "1px solid var(--line-soft)" }}>
         <Link href="/compte/messages" className="btn btn-ghost btn-sm" aria-label="Retour">←</Link>
@@ -247,15 +252,32 @@ export default function ConversationPage() {
           )}
         </div>
         <div className="row conv-actions" style={{ gap: 4, marginLeft: "auto" }}>
-          {isBuyer && conv.listing?.status === "en_ligne" && <Link href={`/annonces/${conv.listing.id}`} className="btn btn-dark btn-sm">Acheter</Link>}
+          {isBuyer && !saleOpen && conv.listing?.status === "en_ligne" && <Link href={`/annonces/${conv.listing.id}`} className="btn btn-dark btn-sm">Acheter</Link>}
           <button className="btn btn-ghost btn-sm" onClick={() => setReportOpen(true)} style={{ color: "var(--brick)" }}>Signaler</button>
           <button className="btn btn-ghost btn-sm" onClick={toggleBlock}>{conv.blocked ? "Débloquer" : "Bloquer"}</button>
         </div>
       </header>
 
-      <div ref={listRef} role="log" aria-live="polite" aria-label="Messages de la conversation" style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 8, background: "var(--bg)" }}>
+      {conv.transaction && <SalePanel sale={conv.transaction} onChanged={load} />}
+
+      <div ref={listRef} role="log" aria-live="polite" aria-label="Messages de la conversation" style={{ flex: 1, minHeight: 200, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 8, background: "var(--bg)" }}>
         {messages.length === 0 && <p className="muted small" style={{ textAlign: "center" }}>Début de la conversation. Restez courtois et ne partagez pas vos coordonnées bancaires.</p>}
         {messages.map((m, index) => {
+          if (m.type === "system") {
+            // Message automatique : centré, encadré en pointillés, étiqueté — jamais confondu avec un message écrit par une personne
+            const t = saleEventText(m, isBuyer ? "acheteur" : "vendeur", conv.other?.displayName ?? "L'acheteur");
+            return (
+              <div key={m.id} data-testid="system-message" data-event={m.systemEvent ?? ""} style={{ alignSelf: "center", width: "100%", maxWidth: 520, margin: "6px 0", padding: "10px 14px", border: "1px dashed var(--accent)", borderRadius: 12, background: "var(--accent-tint)", color: "var(--ink)", textAlign: "center" }}>
+                <div className="small" style={{ textTransform: "uppercase", letterSpacing: ".08em", fontSize: ".66rem", fontWeight: 700, color: "var(--accent-dark)" }}>Message automatique · Trocoin</div>
+                <div style={{ fontWeight: 700, margin: "2px 0" }}><span aria-hidden="true">{t.icon} </span>{t.title}</div>
+                <div className="small" style={{ whiteSpace: "pre-wrap" }}>{t.body}</div>
+                {t.trackingUrl && (
+                  <a className="btn btn-outline btn-sm" style={{ marginTop: 8 }} href={t.trackingUrl} target="_blank" rel="noopener noreferrer" data-testid="system-track">Suivre le colis</a>
+                )}
+                <div className="small muted" style={{ marginTop: 4, fontSize: ".72rem" }}><span suppressHydrationWarning>{formatDateTime(m.createdAt)}</span></div>
+              </div>
+            );
+          }
           const mine = m.senderId === user.id;
           const bubble: React.CSSProperties = { background: mine ? "var(--accent)" : "var(--white)", color: mine ? "#fff" : "var(--ink)", padding: "9px 13px", borderRadius: 14, borderBottomRightRadius: mine ? 4 : 14, borderBottomLeftRadius: mine ? 14 : 4, whiteSpace: "pre-wrap", wordBreak: "break-word", border: mine ? 0 : "1px solid var(--line-soft)" };
           return (
@@ -313,7 +335,7 @@ export default function ConversationPage() {
           <p className="muted small" style={{ margin: 0, textAlign: "center" }}>Vous ne pouvez plus échanger avec cet utilisateur.</p>
         ) : (
           <>
-            <div className="row" style={{ marginBottom: 8, gap: 6 }}>
+            <div className="row" style={{ marginBottom: 8, gap: 6, display: saleOpen ? "none" : undefined }}>
               {conv.quickReplies.map((q) => (
                 <button key={q} type="button" className="pill" style={{ cursor: "pointer", border: 0, whiteSpace: "normal", textAlign: "left" }} onClick={() => send(q)}>{q}</button>
               ))}
@@ -323,7 +345,7 @@ export default function ConversationPage() {
                 <span aria-hidden="true">📷</span><span className="sr-only">Envoyer une photo</span>
                 <input type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(e) => { if (e.target.files?.[0]) sendImage(e.target.files[0]); e.target.value = ""; }} />
               </label>
-              {isBuyer && conv.listing?.status === "en_ligne" && (
+              {isBuyer && !saleOpen && conv.listing?.status === "en_ligne" && (
                 <button type="button" className="btn btn-outline btn-sm" style={{ flexShrink: 0 }} onClick={() => setOfferOpen(true)} title="Proposer un prix" aria-label="Proposer un prix"><span aria-hidden="true">💶</span><span className="conv-offer-label"> Proposer un prix</span></button>
               )}
               <input className="input" style={{ flex: 1, minWidth: 0 }} value={text} onChange={(e) => { setText(e.target.value); signalTyping(e.target.value.length > 0); }} placeholder="Votre message…" maxLength={2000} aria-label="Message" />
