@@ -27,7 +27,9 @@ export const PRICE_TYPES: PriceType[] = ['fixe', 'negociable', 'gratuit', 'echan
 export type ListingCondition = 'neuf' | 'tres_bon_etat' | 'bon_etat' | 'etat_satisfaisant' | 'pour_pieces';
 export const CONDITIONS: ListingCondition[] = ['neuf', 'tres_bon_etat', 'bon_etat', 'etat_satisfaisant', 'pour_pieces'];
 
-export const LISTING_LIFETIME_DAYS = 60;
+// AUDIT §54 : plus de durée de vie. Une annonce reste en ligne jusqu'à ce que le vendeur la retire ou la marque
+// vendue, ou qu'un admin la retire. Le statut « expiree » et la colonne `expiresAt` ne subsistent que pour
+// l'historique (anciennes lignes) : plus rien ne les alimente.
 
 @Entity('listings')
 @Index(['userId', 'externalRef'], { unique: true, where: '"externalRef" IS NOT NULL' })

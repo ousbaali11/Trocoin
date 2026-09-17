@@ -149,6 +149,12 @@ export class AdminResolveTransactionDto {
   note: string;
 }
 
+/** Action ciblée avec motif (retrait d'une photo). */
+export class AdminReasonDto {
+  @IsString() @MinLength(5) @MaxLength(500)
+  reason: string;
+}
+
 /** Suppressions définitives : motif obligatoire et confirmation explicite (le mot SUPPRIMER saisi dans l'interface). */
 export class AdminHardDeleteDto {
   @IsString() @MinLength(5) @MaxLength(500)

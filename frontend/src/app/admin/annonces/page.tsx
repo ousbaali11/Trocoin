@@ -37,7 +37,7 @@ function AdminListingsInner() {
         <input className="a-input" placeholder="Titre, description ou identifiant" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />
         <select className="a-select" aria-label="Statut de l'annonce" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
           <option value="">Tous statuts</option>
-          {["en_attente", "en_ligne", "brouillon", "vendue", "refusee", "expiree", "desactivee"].map((s) => <option key={s} value={s}>{statusPill(s).label}</option>)}
+          {["en_attente", "en_ligne", "brouillon", "vendue", "refusee", "desactivee"].map((s) => <option key={s} value={s}>{statusPill(s).label}</option>)}
         </select>
         <select className="a-select" aria-label="Catégorie" value={category} onChange={(e) => { setCategory(e.target.value); setPage(1); }}>
           <option value="">Toutes catégories</option>

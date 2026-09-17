@@ -43,6 +43,19 @@ export default function AdminListingPage() {
   const [description, setDescription] = useState("");
   const [reason, setReason] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const removePhoto = async (photoId: string, position: number) => {
+    if (!(await confirm({ title: `Retirer la photo ${position} ?`, text: `Le fichier est effacé et le vendeur est prévenu avec ce motif : « ${reason.trim()} ». L'action est inscrite au journal d'audit.`, confirmLabel: "Retirer la photo", danger: true }))) return;
+    setBusy(true);
+    try {
+      await api(`/admin/listings/${id}/photos/${photoId}`, { method: "DELETE", body: { reason: reason.trim() } });
+      toast("Photo retirée.", "success");
+      await load();
+    } catch (e) {
+      toast((e as Error).message, "error");
+    } finally {
+      setBusy(false);
+    }
+  };
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -147,9 +160,14 @@ export default function AdminListingPage() {
       <section className="a-panel" style={{ marginTop: 16 }}>
         <h2 className="h3" style={{ marginTop: 0 }}>Photos ({l.photos.length})</h2>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {l.photos.map((p) => (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img key={p.id} src={mediaUrl(p.url)} alt="" style={{ width: 140, height: 105, objectFit: "cover", borderRadius: 6, border: "1px solid var(--a-line)" }} />
+          {l.photos.map((p, i) => (
+            <figure key={p.id} style={{ margin: 0, display: "grid", gap: 4, justifyItems: "start" }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={mediaUrl(p.url)} alt={`Photo ${i + 1}`} style={{ width: 140, height: 105, objectFit: "cover", borderRadius: 6, border: "1px solid var(--a-line)" }} />
+              <figcaption className="mono">{p.lockedAt ? "🔒 verrouillée pour le vendeur" : "ajoutée après publication"}</figcaption>
+              {/* Le verrou anti-fraude (AUDIT §54) ne concerne que le vendeur : l'admin retire une photo avec un motif, action journalisée */}
+              <button className="a-btn danger" disabled={busy || reason.trim().length < 5} title={reason.trim().length < 5 ? "Saisissez d'abord un motif (champ « Motif » ci-dessus)" : undefined} onClick={() => removePhoto(p.id, i + 1)}>Retirer la photo {i + 1}</button>
+            </figure>
           ))}
           {l.photos.length === 0 && <span className="mono">Aucune photo.</span>}
         </div>

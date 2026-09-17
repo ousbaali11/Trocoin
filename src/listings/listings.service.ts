@@ -5,9 +5,8 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, In, LessThan, Repository } from 'typeorm';
+import { Brackets, In, IsNull, Repository } from 'typeorm';
 import { CategoriesService } from '../categories/categories.service';
 import { computeCompleteness } from './listing-completeness';
 import { FieldSchema, getSchemaForSlugs, validateAttributes } from '../categories/category-schemas';
@@ -32,7 +31,7 @@ import { UpdateListingDto } from './dto/update-listing.dto';
 import { detectFormat, ImportRow, parseCsv, parseXml } from './import/listing-import';
 import { ListingPhoto } from './listing-photo.entity';
 import { ListingView } from './listing-view.entity';
-import { Listing, LISTING_LIFETIME_DAYS, ListingStatus } from './listing.entity';
+import { Listing, ListingStatus } from './listing.entity';
 import { moderateText } from './moderation';
 import { RetentionService } from '../retention/retention.service';
 
@@ -40,6 +39,8 @@ export const MAX_PHOTOS_PER_LISTING = 10;
 export const BOOST_DAYS = 7;
 export const URGENT_DAYS = 7;
 const NO_DELIVERY_ROOTS = ['immobilier', 'vehicules', 'emploi', 'services', 'vacances', 'animaux'];
+/** Fenêtre de dépôt : les photos envoyées dans ces minutes après la publication font partie de l'annonce publiée (AUDIT §54). */
+const PUBLICATION_PHOTO_WINDOW_MS = Number(process.env.PUBLICATION_PHOTO_WINDOW_MINUTES || 10) * 60_000;
 
 /** Carte publique : l'annonce sans ses compteurs privés (les clics « Voir le numéro » ne sortent que dans `stats` de GET /listings/mine). */
 export interface ListingCard extends Omit<Listing, 'phoneClicksCount'> {
@@ -226,7 +227,6 @@ export class ListingsService {
       status,
       moderationReason: reason,
       publishedAt: status === 'en_ligne' ? now : undefined,
-      expiresAt: status === 'en_ligne' ? new Date(now.getTime() + LISTING_LIFETIME_DAYS * 86_400_000) : undefined,
     });
 
     return this.listingsRepo.save(listing);
@@ -310,8 +310,16 @@ export class ListingsService {
     const patch: Partial<Listing> = {};
     let category: Category | null = null;
     let root: Category | null = null;
+    // Verrou anti-fraude (AUDIT §54) : une annonce qui a été publiée garde sa catégorie, sa marque et ses photos de
+    // publication. Sans cela, un vendeur pourrait publier une annonce crédible, accumuler vues, favoris et confiance,
+    // puis la transformer discrètement en autre chose (autre catégorie, autre marque, autres photos). Le verrou
+    // vise le vendeur : un admin garde tous ses pouvoirs (modifier, retirer une photo, supprimer l'annonce).
+    const locked = this.isPublishedOnce(listing);
     if (dto.categorySlug) {
       const r = await this.resolveCategory(dto.categorySlug);
+      if (locked && r.category.id !== listing.categoryId) {
+        throw new BadRequestException("La catégorie d'une annonce publiée ne peut plus être modifiée (protection contre la tromperie). Pour vendre autre chose, déposez une nouvelle annonce.");
+      }
       category = r.category;
       root = r.root;
       patch.categoryId = category.id;
@@ -322,6 +330,10 @@ export class ListingsService {
     }
 
     const willPublish = dto.status === 'en_ligne' || (dto.status === undefined && listing.status === 'en_ligne');
+    const lockedBrand = locked ? this.brandOf(listing.attributes) : null;
+    if (lockedBrand && dto.attributes !== undefined && this.brandOf(dto.attributes) !== lockedBrand) {
+      throw new BadRequestException("La marque d'une annonce publiée ne peut plus être modifiée (protection contre la tromperie). Pour vendre autre chose, déposez une nouvelle annonce.");
+    }
     if (dto.attributes !== undefined || dto.categorySlug) {
       patch.attributes = this.validateAttributesFor(category!, root!, dto.attributes ?? listing.attributes, willPublish);
     }
@@ -371,12 +383,30 @@ export class ListingsService {
     if (patch.status === 'en_ligne' && listing.status !== 'en_ligne') {
       const now = new Date();
       patch.publishedAt = now;
-      patch.expiresAt = new Date(now.getTime() + LISTING_LIFETIME_DAYS * 86_400_000);
     }
     if (listing.userId !== userId) patch.createdBy = userId;
 
     await this.listingsRepo.update(listingId, patch);
+    // Publication (ou soumission à la vérification) : les photos présentes à cet instant sont verrouillées
+    if ((patch.status === 'en_ligne' || patch.status === 'en_attente') && listing.status !== patch.status) await this.lockPhotos(listingId);
     return this.listingsRepo.findOne({ where: { id: listingId } }) as Promise<Listing>;
+  }
+
+  /** Une annonce « déjà publiée » : elle a été en ligne au moins une fois, ou attend la vérification d'un admin. */
+  private isPublishedOnce(listing: Pick<Listing, 'publishedAt' | 'status'>): boolean {
+    return !!listing.publishedAt || listing.status === 'en_attente';
+  }
+
+  /** Marque déclarée (attribut `marque` des catégories qui en ont un), comparée sans casse ni espaces superflus. */
+  private brandOf(attributes?: Record<string, unknown> | null): string | null {
+    const raw = attributes?.marque;
+    const value = typeof raw === 'string' ? raw.trim().toLowerCase() : raw === undefined || raw === null ? '' : String(raw).toLowerCase();
+    return value || null;
+  }
+
+  /** Verrouille toutes les photos encore libres d'une annonce (appelé à chaque publication). */
+  private async lockPhotos(listingId: string): Promise<void> {
+    await this.photosRepo.update({ listingId, lockedAt: IsNull() }, { lockedAt: new Date() });
   }
 
   /**
@@ -411,9 +441,10 @@ export class ListingsService {
     await this.listingsRepo.update(listingId, {
       status: 'en_ligne',
       publishedAt: now,
-      expiresAt: new Date(now.getTime() + LISTING_LIFETIME_DAYS * 86_400_000),
       moderationReason: null as any,
     });
+    // Remise en ligne : les photos ajoutées entre-temps rejoignent les photos verrouillées
+    if (listing.status !== 'en_ligne') await this.lockPhotos(listingId);
     return this.listingsRepo.findOne({ where: { id: listingId } }) as Promise<Listing>;
   }
 
@@ -511,7 +542,13 @@ export class ListingsService {
       await Promise.all(urls.flatMap((u) => [deleteUploadedFile(u.url), deleteUploadedFile(u.thumbUrl)]));
       throw new BadRequestException(`Maximum ${MAX_PHOTOS_PER_LISTING} photos par annonce.`);
     }
-    const photos = urls.map((u, i) => this.photosRepo.create({ listingId: listing.id, url: u.url, thumbUrl: u.thumbUrl, sortOrder: existingCount + i }));
+    // Ajouter des photos à une annonce publiée reste permis (AUDIT §54) : elles viennent APRÈS les photos de
+    // publication, qui restent visibles et en tête. Le dépôt crée l'annonce puis envoie ses photos : celles qui
+    // arrivent dans les minutes qui suivent la publication en font partie et sont verrouillées d'emblée ; les photos
+    // ajoutées plus tard restent retirables par le vendeur.
+    const partOfPublication = this.isPublishedOnce(listing) && (!listing.publishedAt || Date.now() - new Date(listing.publishedAt).getTime() <= PUBLICATION_PHOTO_WINDOW_MS);
+    const lockedAt = partOfPublication ? new Date() : null;
+    const photos = urls.map((u, i) => this.photosRepo.create({ listingId: listing.id, url: u.url, thumbUrl: u.thumbUrl, sortOrder: existingCount + i, lockedAt }));
     return this.photosRepo.save(photos);
   }
 
@@ -519,17 +556,37 @@ export class ListingsService {
     await this.getManaged(listingId, userId);
     const photo = await this.photosRepo.findOne({ where: { id: photoId, listingId } });
     if (!photo) throw new NotFoundException('Photo introuvable.');
-    await this.photosRepo.delete({ id: photoId, listingId });
+    if (photo.lockedAt) {
+      throw new BadRequestException("Cette photo fait partie de l'annonce publiée : elle ne peut plus être retirée ni remplacée (protection contre la tromperie). Vous pouvez ajouter d'autres photos.");
+    }
+    await this.deletePhoto(photo);
+  }
+
+  /** Retrait par un admin (signalement, donnée personnelle visible, litige) : aucun verrou, action journalisée par l'appelant. */
+  async removePhotoAsAdmin(listingId: string, photoId: string): Promise<ListingPhoto> {
+    const photo = await this.photosRepo.findOne({ where: { id: photoId, listingId } });
+    if (!photo) throw new NotFoundException('Photo introuvable.');
+    await this.deletePhoto(photo);
+    return photo;
+  }
+
+  private async deletePhoto(photo: ListingPhoto): Promise<void> {
+    await this.photosRepo.delete({ id: photo.id, listingId: photo.listingId });
     await deleteUploadedFile(photo.url);
     await deleteUploadedFile(photo.thumbUrl);
   }
 
   async reorderPhotos(listingId: string, userId: string, photoIds: string[]): Promise<ListingPhoto[]> {
     await this.getManaged(listingId, userId);
-    const photos = await this.photosRepo.find({ where: { listingId } });
+    const photos = await this.photosRepo.find({ where: { listingId }, order: { sortOrder: 'ASC' } });
     const known = new Set(photos.map((p) => p.id));
     if (photoIds.length !== photos.length || photoIds.some((id) => !known.has(id))) {
       throw new BadRequestException('La liste doit contenir exactement toutes les photos de l\'annonce.');
+    }
+    // Photos verrouillées : même ordre entre elles et toujours en tête (la couverture d'une annonce publiée ne change pas)
+    const lockedIds = photos.filter((p) => p.lockedAt).map((p) => p.id);
+    if (lockedIds.length > 0 && lockedIds.some((id, i) => photoIds[i] !== id)) {
+      throw new BadRequestException("Les photos de l'annonce publiée gardent leur place (protection contre la tromperie) : seules les photos ajoutées ensuite peuvent être déplacées, après elles.");
     }
     await Promise.all(photoIds.map((id, i) => this.photosRepo.update({ id, listingId }, { sortOrder: i })));
     return this.photosRepo.find({ where: { listingId }, order: { sortOrder: 'ASC' } });
@@ -567,6 +624,8 @@ export class ListingsService {
     void _privateClicks;
     return {
       ...publicListing,
+      // Verrous du vendeur après publication (AUDIT §54) : le formulaire de modification grise ces champs
+      locks: { category: this.isPublishedOnce(listing), brand: this.isPublishedOnce(listing) && !!this.brandOf(listing.attributes), photos: this.isPublishedOnce(listing) },
       latitude: isOwner ? listing.latitude : listing.latitude != null ? Math.round(listing.latitude * 100) / 100 : listing.latitude,
       longitude: isOwner ? listing.longitude : listing.longitude != null ? Math.round(listing.longitude * 100) / 100 : listing.longitude,
       photos,
@@ -1087,13 +1146,8 @@ export class ListingsService {
     return { breadcrumb, suggestions: suggestions.slice(0, NB_SUGGESTIONS), cities };
   }
 
-  @Cron(CronExpression.EVERY_HOUR)
-  async expireListings(): Promise<number> {
-    const result = await this.listingsRepo.update({ status: 'en_ligne', expiresAt: LessThan(new Date()) }, { status: 'expiree' });
-    const n = result.affected || 0;
-    if (n > 0) this.logger.log(`${n} annonce(s) expirée(s).`);
-    return n;
-  }
+  // AUDIT §54 : l'ancienne tâche horaire `expireListings` (annonces passées « expiree » après 60 jours) est retirée.
+  // Aucune tâche planifiée ne change plus le statut d'une annonce en fonction du temps.
 
   async sellerStats(userId: string) {
     const listings = await this.listingsRepo.find({ where: { userId } });

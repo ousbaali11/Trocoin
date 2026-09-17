@@ -18,6 +18,8 @@ import { titleExample } from "@/lib/title-examples";
 const NO_DELIVERY_ROOTS = ["immobilier", "vehicules", "emploi", "services", "vacances", "animaux"];
 const NO_CONDITION_ROOTS = ["emploi", "services", "immobilier", "vacances"];
 const MAX_PHOTOS = 10;
+/** Champ verrouillé après publication (AUDIT §54) : visiblement grisé, jamais simplement bloqué en silence. */
+const LOCKED_STYLE = { background: "var(--ivory-warm)", color: "var(--ink-muted)", cursor: "not-allowed" } as const;
 
 interface FormState {
   categorySlug: string;
@@ -224,14 +226,18 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
       let id = listingId;
       if (existing) {
         await api(`/listings/${existing.id}`, { method: "PATCH", body: payload(false) });
-      } else if (!id) {
-        const created = await api<{ id: string; status: string }>("/listings", { method: "POST", body: payload(draft) });
-        id = created.id;
-        setListingId(id);
-      } else if (!draft) {
-        await api(`/listings/${id}`, { method: "PATCH", body: { ...payload(false), status: "en_ligne" } });
+        await uploadPending(existing.id);
+      } else {
+        // Dépôt en trois temps (AUDIT §54) : brouillon, photos, puis publication. Les photos sont ainsi présentes au
+        // moment où l'annonce passe en ligne, et c'est cet ensemble que le verrou anti-fraude fige.
+        if (!id) {
+          const created = await api<{ id: string; status: string }>("/listings", { method: "POST", body: payload(true) });
+          id = created.id;
+          setListingId(id);
+        }
+        await uploadPending(id);
+        if (!draft) await api(`/listings/${id}`, { method: "PATCH", body: { ...payload(false), status: "en_ligne" } });
       }
-      await uploadPending(id!);
       if (draft && !existing) {
         toast("Brouillon enregistré.", "success");
         router.push("/compte/annonces");
@@ -275,8 +281,14 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
     next.splice(to, 0, item);
     return next;
   };
+  // Verrous du vendeur après publication (AUDIT §54) : catégorie, marque, photos de publication
+  const catLocked = !!existing?.locks?.category;
+  const brandLocked = !!existing?.locks?.brand;
+  const lockedCount = photos.filter((p) => p.lockedAt).length;
   const dropOn = (list: "photos" | "pending", index: number) => {
     if (!dragIndex || dragIndex.list !== list || dragIndex.index === index) return setDragIndex(null);
+    // Une photo libre ne passe jamais devant une photo verrouillée
+    if (list === "photos" && (index < lockedCount || dragIndex.index < lockedCount)) return setDragIndex(null);
     if (list === "photos") reorderPhotos(moveInList(photos, dragIndex.index, index));
     else setPending((p) => moveInList(p, dragIndex.index, index));
     setDragIndex(null);
@@ -293,7 +305,7 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
 
   const moveTile = (list: "photos" | "pending", index: number, delta: -1 | 1) => {
     const to = index + delta;
-    if (list === "photos") { if (to < 0 || to >= photos.length) return; reorderPhotos(moveInList(photos, index, to)); }
+    if (list === "photos") { if (to < lockedCount || to >= photos.length || index < lockedCount) return; reorderPhotos(moveInList(photos, index, to)); }
     else { if (to < 0 || to >= pending.length) return; setPending((p) => moveInList(p, index, to)); }
   };
 
@@ -336,7 +348,7 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
             <input id="title" className="input" value={form.title} onChange={(e) => set("title", e.target.value)} maxLength={150} placeholder={titleExample(form.categorySlug, root?.slug)} autoFocus={!existing} />
             <span className="hint">{form.title.length}/150 — précis et sans coordonnées.</span>
           </div>
-          {catSuggestions.length > 0 && (
+          {catSuggestions.length > 0 && !catLocked && (
             <div className="alert alert-info" role="status" data-testid="category-suggestions" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
               <span>D&apos;après votre titre :</span>
               {catSuggestions.map((c) => (
@@ -347,7 +359,16 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
             </div>
           )}
           <h3 className="h3" style={{ marginTop: 8 }}>Catégorie</h3>
+          {catLocked ? (
+            // Annonce déjà publiée : catégorie figée (anti-fraude, AUDIT §54), montrée grisée avec la raison
+            <div className="field" style={{ maxWidth: 520 }} data-testid="locked-category">
+              <label htmlFor="locked-category">Catégorie de l&apos;annonce</label>
+              <input id="locked-category" className="input" value={`🔒 ${categoryName}`} disabled readOnly aria-describedby="locked-category-hint" style={LOCKED_STYLE} />
+              <span className="hint" id="locked-category-hint">Non modifiable après publication : une annonce garde sa catégorie pour que personne ne puisse la transformer en autre chose une fois qu&apos;elle a gagné des vues et des favoris. Pour vendre autre chose, déposez une nouvelle annonce.</span>
+            </div>
+          ) : (
           <p className="muted small">Choisissez la catégorie la plus précise : elle détermine les critères demandés et les filtres de recherche.</p>
+          )}
           {!existing && shops.length > 0 && (
             <div className="field" style={{ maxWidth: 420 }}>
               <label htmlFor="obo">Publier au nom de</label>
@@ -357,7 +378,7 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
               </select>
             </div>
           )}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10 }}>
+          <div style={{ display: catLocked ? "none" : "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10 }}>
             {tree.map((r) => (
               <fieldset key={r.slug} className="card" style={{ padding: 12, margin: 0 }}>
                 <legend style={{ fontWeight: 700, padding: "0 6px" }}>{r.name}</legend>
@@ -416,7 +437,9 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
                         id={`a-${f.key}`}
                         className="select"
                         value={String(form.attributes[f.key] ?? "")}
-                        disabled={!!f.dependsOn && !form.attributes[f.dependsOn]}
+                        disabled={(!!f.dependsOn && !form.attributes[f.dependsOn]) || (brandLocked && f.key === "marque")}
+                        style={brandLocked && f.key === "marque" ? LOCKED_STYLE : undefined}
+                        aria-describedby={brandLocked && f.key === "marque" ? "locked-brand-hint" : undefined}
                         onChange={(e) => {
                           setAttr(f.key, e.target.value);
                           // Changer la marque remet le modèle à zéro : les listes sont dépendantes
@@ -431,8 +454,9 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
                     ) : f.type === "boolean" ? (
                       <label className="checkbox"><input id={`a-${f.key}`} type="checkbox" checked={form.attributes[f.key] === true} onChange={(e) => setAttr(f.key, e.target.checked ? true : undefined)} /> Oui</label>
                     ) : (
-                      <input id={`a-${f.key}`} className="input" maxLength={f.maxLength} value={String(form.attributes[f.key] ?? "")} onChange={(e) => setAttr(f.key, e.target.value)} />
+                      <input id={`a-${f.key}`} className="input" maxLength={f.maxLength} value={String(form.attributes[f.key] ?? "")} onChange={(e) => setAttr(f.key, e.target.value)} disabled={brandLocked && f.key === "marque"} style={brandLocked && f.key === "marque" ? LOCKED_STYLE : undefined} aria-describedby={brandLocked && f.key === "marque" ? "locked-brand-hint" : undefined} />
                     )}
+                    {brandLocked && f.key === "marque" && <span className="hint" id="locked-brand-hint" data-testid="locked-brand">🔒 Non modifiable après publication (protection contre la tromperie).</span>}
                   </div>
                 ))}
               </div>
@@ -451,6 +475,11 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
           <h2>Ajoutez des photos</h2>
           <CompletenessHint photosCount={photos.length + pending.length} description={form.description} price={form.price} priceType={form.priceType} attributes={form.attributes} schema={schema} onAction={completenessAction} />
           <p className="muted">Jusqu&apos;à {MAX_PHOTOS} photos (JPEG, PNG, WEBP, 8 Mo max). Un recadrage vous est proposé à l&apos;ajout. La première est la photo de couverture : <strong>glissez-déposez</strong> pour réorganiser.</p>
+          {lockedCount > 0 && (
+            <p className="alert alert-info" data-testid="locked-photos-note" style={{ marginBottom: 12 }}>
+              🔒 Les {lockedCount > 1 ? `${lockedCount} photos` : "photo"} de l&apos;annonce publiée {lockedCount > 1 ? "restent" : "reste"} en place : {lockedCount > 1 ? "elles ne peuvent" : "elle ne peut"} plus être retirée{lockedCount > 1 ? "s" : ""}, remplacée{lockedCount > 1 ? "s" : ""} ni déplacée{lockedCount > 1 ? "s" : ""} (protection contre la tromperie). Vous pouvez toujours <strong>ajouter</strong> des photos : elles viennent à la suite et restent retirables.
+            </p>
+          )}
           <label className="card" style={{ display: "grid", placeItems: "center", padding: 32, borderStyle: "dashed", cursor: "pointer", marginBottom: 16 }}
             onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); addFiles(e.dataTransfer.files); }}>
             {/* Le champ fichier reste accessible au clavier (rendu hors écran, pas masqué) */}
@@ -459,7 +488,7 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
           </label>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10 }} role="list" aria-label="Photos de l'annonce">
             {photos.map((p, i) => (
-              <PhotoTile key={p.id} src={mediaUrl(p.url)!} cover={i === 0} position={i + 1} onRemove={() => removePhoto(p)} onMove={(d) => moveTile("photos", i, d)} {...tileProps("photos", i)} />
+              <PhotoTile key={p.id} src={mediaUrl(p.url)!} cover={i === 0} position={i + 1} locked={!!p.lockedAt} onRemove={() => removePhoto(p)} onMove={(d) => moveTile("photos", i, d)} {...tileProps("photos", i)} draggable={!p.lockedAt} />
             ))}
             {pending.map((f, i) => (
               <PhotoTile key={f.name + i + f.size} src={URL.createObjectURL(f)} cover={photos.length === 0 && i === 0} position={photos.length + i + 1} pendingLabel="À envoyer" onCrop={() => setCropping({ file: f, index: i })} onRemove={() => setPending((p) => p.filter((_, j) => j !== i))} onMove={(d) => moveTile("pending", i, d)} {...tileProps("pending", i)} />
@@ -582,8 +611,8 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
   );
 }
 
-function PhotoTile({ src, cover, pendingLabel, dragging, position, onCrop, onRemove, onMove, ...drag }: {
-  src: string; cover: boolean; pendingLabel?: string; dragging?: boolean; position: number; onCrop?: () => void; onRemove: () => void; onMove: (delta: -1 | 1) => void;
+function PhotoTile({ src, cover, pendingLabel, dragging, position, locked, onCrop, onRemove, onMove, ...drag }: {
+  src: string; cover: boolean; pendingLabel?: string; dragging?: boolean; position: number; locked?: boolean; onCrop?: () => void; onRemove: () => void; onMove: (delta: -1 | 1) => void;
   draggable: boolean; onDragStart: () => void; onDragOver: (e: React.DragEvent) => void; onDrop: () => void; onDragEnd: () => void;
 }) {
   return (
@@ -592,6 +621,10 @@ function PhotoTile({ src, cover, pendingLabel, dragging, position, onCrop, onRem
       <img src={src} alt={`Photo ${position}${cover ? " (couverture)" : ""}`} style={{ width: "100%", aspectRatio: "4/3", objectFit: "cover", pointerEvents: "none" }} />
       {cover && <span className="pill pill-accent" style={{ position: "absolute", top: 6, left: 6 }}>Couverture</span>}
       {pendingLabel && <span className="pill" style={{ position: "absolute", top: 6, right: 6 }}>{pendingLabel}</span>}
+      {locked && <span className="pill" style={{ position: "absolute", top: 6, right: 6 }} title="Photo de l'annonce publiée : ni retirable, ni remplaçable, ni déplaçable">🔒 Verrouillée</span>}
+      {locked ? (
+        <div className="small muted" style={{ padding: "8px 6px", background: "var(--ivory-warm)" }} data-testid="locked-photo">Photo de publication</div>
+      ) : (
       <div className="row" style={{ justifyContent: "space-between", padding: 4, background: "var(--white)" }}>
         <span>
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => onMove(-1)} aria-label={`Avancer la photo ${position}`} title="Avancer" style={{ padding: "4px 6px" }}>◀</button>
@@ -602,6 +635,7 @@ function PhotoTile({ src, cover, pendingLabel, dragging, position, onCrop, onRem
           <button type="button" className="btn btn-ghost btn-sm" onClick={onRemove} aria-label={`Supprimer la photo ${position}`} style={{ color: "var(--brick)" }}>✕</button>
         </span>
       </div>
+      )}
     </div>
   );
 }

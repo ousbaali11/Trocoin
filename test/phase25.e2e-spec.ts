@@ -76,7 +76,7 @@ describe('Phase 25 : suppression bloquée, réactivation, pré-modération, PayP
     expect((await txRepo.findOne({ where: { id: pending.tx.id } }))!.status).toBe('rembourse');
   });
 
-  it('réactivation : les annonces mises en pause par la suspension reviennent en ligne, une annonce expirée entre-temps passe « expirée », une annonce mise en pause par le membre reste en pause', async () => {
+  it('réactivation : les annonces mises en pause par la suspension reviennent en ligne, une annonce avec une ancienne date limite dépassée revient en ligne elle aussi (plus de durée de vie, AUDIT §54), une annonce mise en pause par le membre reste en pause', async () => {
     const user = await login(app);
     const live = await createListing(app, user, { title: 'Table basse en chêne massif' });
     const old = await createListing(app, user, { title: 'Lampe articulée de bureau' });
@@ -94,11 +94,11 @@ describe('Phase 25 : suppression bloquée, réactivation, pré-modération, PayP
     expect((await listingRepo.findOne({ where: { id: live.id } }))!.status).toBe('en_ligne');
     expect((await listingRepo.findOne({ where: { id: live.id } }))!.moderationReason).toBeNull();
     await request(server).get(`/listings/${live.id}`).expect(200);
-    expect((await listingRepo.findOne({ where: { id: old.id } }))!.status).toBe('expiree');
+    expect((await listingRepo.findOne({ where: { id: old.id } }))!.status).toBe('en_ligne');
     expect((await listingRepo.findOne({ where: { id: paused.id } }))!.status).toBe('desactivee'); // pause voulue par le membre
     const entries = await auditRepo.find({ where: { targetId: user.id, action: 'user.update' } });
     const reactivation = entries.find((e) => (e.details as any)?.suspended?.to === false);
-    expect(reactivation!.details).toMatchObject({ suspended: { to: false }, listingsRestored: { republished: 1, expired: 1 } });
+    expect(reactivation!.details).toMatchObject({ suspended: { to: false }, listingsRestored: { republished: 2, expired: 0 } });
   });
 
   it('pré-modération : « urgent » et « whatsapp » (titre ou description) envoient l\'annonce en vérification ; une annonce ordinaire reste publiée directement', async () => {

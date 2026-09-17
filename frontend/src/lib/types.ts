@@ -107,9 +107,13 @@ export interface ListingPhoto {
   /** Vignette 480 px (listes, miniatures) ; absente pour les photos antérieures */
   thumbUrl?: string | null;
   sortOrder: number;
+  /** Photo de l'annonce publiée (AUDIT §54) : le vendeur ne peut plus la retirer, la remplacer ni la déplacer. */
+  lockedAt?: string | null;
 }
 
 export interface ListingDetail extends Omit<ListingCard, "coverUrl" | "photosCount" | "seller" | "isBoosted" | "isUrgent"> {
+  /** Verrous du vendeur après publication (AUDIT §54, anti-fraude) : champs grisés dans le formulaire. */
+  locks?: { category: boolean; brand: boolean; photos: boolean };
   /** Livraison telle que déclarée (AUDIT §52) : délais réels de la plateforme, coût estimé seulement si le poids est déclaré. */
   delivery?: { available: boolean; shipWithinDays: number; transitDaysMin: number; transitDaysMax: number; estimate: { minCents: number; maxCents: number; weightGrams: number } | null };
   photos: ListingPhoto[];

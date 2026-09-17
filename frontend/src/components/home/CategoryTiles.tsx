@@ -46,7 +46,22 @@ export function CategoryTiles({ tree }: { tree: CategoryNode[] }) {
     };
   }, [open]);
 
+  // Tactile (AUDIT §54) : pas de survol, donc un tap sur une famille déplie ses sous-catégories sous la grille
+  // (accordéon) au lieu de partir directement vers la recherche ; « Tout <famille> » en tête du panneau y mène.
+  const [touchOpen, setTouchOpen] = useState<string | null>(null);
+  const touchPanelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => setTouchOpen(null), [pathname]);
+  useEffect(() => {
+    if (touchOpen) touchPanelRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [touchOpen]);
+
   const hoverable = () => typeof window !== "undefined" && window.matchMedia("(hover: hover) and (pointer: fine) and (min-width: 1024px)").matches;
+  const onTileClick = (e: React.MouseEvent, c: CategoryNode) => {
+    if (hoverable() || c.children.length === 0) return; // bureau : le lien navigue ; famille sans sous-catégorie : aussi
+    e.preventDefault();
+    setTouchOpen((prev) => (prev === c.slug ? null : c.slug));
+  };
+  const touchCurrent = touchOpen ? tree.find((r) => r.slug === touchOpen) || null : null;
   const enter = (slug: string) => {
     if (!hoverable()) return;
     if (closeTimer.current) window.clearTimeout(closeTimer.current);
@@ -85,15 +100,33 @@ export function CategoryTiles({ tree }: { tree: CategoryNode[] }) {
             href={`/recherche?category=${c.slug}`}
             className={styles.category}
             data-family={c.slug}
-            aria-expanded={open === c.slug ? true : undefined}
-            aria-controls={open === c.slug ? `family-panel-${c.slug}` : undefined}
+            aria-expanded={open === c.slug || touchOpen === c.slug ? true : undefined}
+            aria-controls={open === c.slug ? `family-panel-${c.slug}` : touchOpen === c.slug ? `family-touch-${c.slug}` : undefined}
             onMouseEnter={() => enter(c.slug)}
+            onClick={(e) => onTileClick(e, c)}
           >
             <span className={styles.categoryIcon}><CategoryIcon name={c.icon} /></span>
             <span>{c.name}</span>
           </Link>
         ))}
       </nav>
+      {touchCurrent && (
+        <div className="container">
+          <div ref={touchPanelRef} className={`${styles.touchPanel} menu-enter`} id={`family-touch-${touchCurrent.slug}`} role="region" aria-label={`Sous-catégories de ${touchCurrent.name}`} data-testid="category-touch-panel">
+            <div className={styles.touchHead}>
+              <Link href={`/recherche?category=${touchCurrent.slug}`} className={styles.panelTitle}>
+                <CategoryIcon name={touchCurrent.icon} size={20} /> Tout {touchCurrent.name}
+              </Link>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setTouchOpen(null)} aria-label={`Fermer les sous-catégories de ${touchCurrent.name}`}>Fermer</button>
+            </div>
+            <ul className={styles.touchList}>
+              {touchCurrent.children.map((c) => (
+                <li key={c.slug}><Link href={`/recherche?category=${c.slug}`}>{c.name}</Link></li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
       {current && (
         <div ref={panelRef} style={{ left: panelLeft }} className={`${styles.panel} ${presence.leaving ? "menu-leave" : "menu-enter"}`} id={`family-panel-${current.slug}`} role="region" aria-label={`Sous-catégories de ${current.name}`} onMouseEnter={() => enter(current.slug)}>
           <div className={styles.panelInner}>

@@ -49,6 +49,50 @@
 .panelInner {
   padding: 16px 22px 20px;
 }
+/* Tactile (AUDIT §54) : sous-catégories dépliées sous la grille au tap, mêmes couleurs que le panneau du survol,
+   liens de 44 px de haut, deux colonnes (une seule sous 340 px) */
+.touchPanel {
+  margin-top: 8px;
+  padding: 12px 14px 14px;
+  background: linear-gradient(180deg, var(--accent-tint) 0%, var(--white) 100%);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  transform-origin: top;
+}
+.touchHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.touchHead a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+}
+.touchList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 14px;
+}
+.touchList a {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: 0.92rem;
+  color: var(--ink-soft);
+  border-top: 1px solid var(--line-soft);
+}
+@media (max-width: 340px) {
+  .touchList {
+    grid-template-columns: 1fr;
+  }
+}
 .panelHead {
   display: flex;
   align-items: center;

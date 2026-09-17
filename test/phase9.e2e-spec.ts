@@ -69,7 +69,7 @@ describe('Phase 9 : stockage S3, SIRET vérifié au registre, Redis pour le rate
 
     it('une photo est ré-encodée puis envoyée dans le bucket ; son URL publique pointe vers le CDN ; la suppression retire l\'objet', async () => {
       const user = await login(app);
-      const listing = await createListing(app, user);
+      const listing = await createListing(app, user, { draft: true }); // brouillon : photo retirable (AUDIT §54)
       const res = await request(server).post(`/listings/${listing.id}/photos`).set(user.auth).attach('files', PNG_1x1, { filename: 'p.png', contentType: 'image/png' }).expect(201);
       const url: string = res.body[0].url;
       expect(url).toMatch(/^https:\/\/cdn\.example\.test\/uploads\/[0-9a-f-]{36}\.png$/);
@@ -79,7 +79,7 @@ describe('Phase 9 : stockage S3, SIRET vérifié au registre, Redis pour le rate
       expect(stored.contentType).toBe('image/png');
       expect((await sharp(stored.body).metadata()).format).toBe('png');
       // L'annonce publique expose l'URL absolue, le détail aussi
-      const detail = await request(server).get(`/listings/${listing.id}`).expect(200);
+      const detail = await request(server).get(`/listings/${listing.id}`).set(user.auth).expect(200);
       expect(detail.body.photos[0].url).toBe(url);
       // Suppression → DELETE sur le bucket
       await request(server).delete(`/listings/${listing.id}/photos/${res.body[0].id}`).set(user.auth).expect(204);
@@ -105,7 +105,7 @@ describe('Phase 9 : stockage S3, SIRET vérifié au registre, Redis pour le rate
       setStorageForTests(new S3Storage({ endpoint, region: 'auto', bucket: 'trocoin-test', accessKeyId: 'k', secretAccessKey: 's', forcePathStyle: true }));
       try {
         const user = await login(app);
-        const listing = await createListing(app, user);
+        const listing = await createListing(app, user, { draft: true }); // brouillon : photo retirable (AUDIT §54)
         const res = await request(server).post(`/listings/${listing.id}/photos`).set(user.auth).attach('files', PNG_1x1, { filename: 'p.png', contentType: 'image/png' }).expect(201);
         const url: string = res.body[0].url;
         expect(url).toMatch(/^\/uploads\/[0-9a-f-]{36}\.png$/);

@@ -163,6 +163,33 @@ test("accueil : grille d'icônes des catégories directement sous l'en-tête, pl
   await expect(tile.locator('svg')).toBeVisible();
   const tileBox = (await tile.boundingBox())!;
   expect(tileBox.width).toBeLessThanOrEqual(isMobile ? 100 : 110);
+  if (isMobile) {
+    // Tactile (AUDIT §54) : un tap déplie les sous-catégories sous la grille au lieu de partir vers la recherche
+    await tile.tap();
+    await expect(page).toHaveURL(/\/$/);
+    const panel = page.getByTestId('category-touch-panel');
+    await expect(panel).toBeVisible();
+    await expect(tile).toHaveAttribute('aria-expanded', 'true');
+    for (const c of ['Voitures', 'Motos', 'Utilitaires', 'Caravaning', 'Nautisme']) await expect(panel.getByRole('link', { name: c, exact: true })).toBeVisible();
+    // Cibles tactiles de 44 px, panneau contenu dans l'écran
+    await panel.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished))); // mesure après l'animation d'ouverture
+    const link = (await panel.getByRole('link', { name: 'Motos', exact: true }).boundingBox())!;
+    expect(Math.round(link.height)).toBeGreaterThanOrEqual(44);
+    const box2 = (await panel.boundingBox())!;
+    expect(box2.x).toBeGreaterThanOrEqual(0);
+    expect(box2.x + box2.width).toBeLessThanOrEqual(375);
+    // Un second tap referme ; une autre famille remplace le panneau ; « Tout … » et une sous-catégorie naviguent
+    await tile.tap();
+    await expect(panel).toHaveCount(0);
+    await tiles.getByRole('link', { name: 'Mode', exact: true }).tap();
+    await expect(page.getByRole('region', { name: 'Sous-catégories de Mode' })).toBeVisible();
+    await tile.tap();
+    await expect(page.getByRole('region', { name: 'Sous-catégories de Mode' })).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'Sous-catégories de Véhicules' }).getByRole('link', { name: 'Tout Véhicules' })).toHaveAttribute('href', '/recherche?category=vehicules');
+    await page.getByRole('region', { name: 'Sous-catégories de Véhicules' }).getByRole('link', { name: 'Motos', exact: true }).tap();
+    await expect(page).toHaveURL(/category=motos/);
+    return;
+  }
   await tile.click();
   await expect(page).toHaveURL(/category=vehicules/);
 });

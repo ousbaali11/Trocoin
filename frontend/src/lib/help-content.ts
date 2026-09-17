@@ -128,17 +128,19 @@ Une annonce contenant des termes sensibles passe en **vérification manuelle** a
       {
         slug: "gerer-mes-annonces",
         title: "Gérer mes annonces : statuts, pause, renouvellement",
-        summary: "Durée de vie de 60 jours, mise en pause, marquer vendue, dupliquer, supprimer.",
-        keywords: ["statut", "pause", "vendue", "expirée", "renouveler", "dupliquer"],
-        body: `Une annonce reste en ligne **60 jours**. Depuis **Mes annonces**, pour chaque annonce :
-- **Modifier** le contenu et les photos ;
+        summary: "Sans limite de durée : mise en pause, marquer vendue, dupliquer, supprimer ; ce qui ne se modifie plus après publication.",
+        keywords: ["statut", "pause", "vendue", "durée", "expiration", "renouveler", "dupliquer", "catégorie", "marque", "photos", "verrouillé"],
+        body: `Une annonce reste en ligne **sans limite de durée**, jusqu'à ce que vous la mettiez en pause, la marquiez vendue ou la supprimiez. Depuis **Mes annonces**, pour chaque annonce :
+- **Modifier** le titre, la description, le prix, les critères, la localisation, et **ajouter** des photos ;
 - **Mettre en pause** (invisible, réactivable) ou **marquer vendue** ;
-- **Remettre en ligne** une annonce en pause ou expirée (nouvelle période de 60 jours) ;
+- **Remettre en ligne** une annonce en pause, ou la **renouveler** pour la faire remonter dans les résultats ;
 - **Dupliquer** pour repartir d'un brouillon identique ;
 - **Mettre en avant** (tête des résultats pendant 7 jours) ou activer le macaron **Urgent** ;
 - **Supprimer** définitivement.
 
-Les onglets filtrent par statut : en ligne, en vérification, brouillons, en pause ou expirées, vendues ou refusées. Le nombre de vues et de mises en favori est affiché sur chaque annonce.`,
+**Ce qui ne se modifie plus une fois l'annonce publiée** : sa catégorie, sa marque (quand la catégorie en a une) et les photos présentes à la publication (ni retrait, ni remplacement, ni déplacement). C'est une protection contre la tromperie : personne ne doit pouvoir publier une annonce crédible, gagner des vues et des favoris, puis la transformer en autre chose. Vous pouvez toujours ajouter des photos à la suite ; pour vendre autre chose, déposez une nouvelle annonce. Une photo publiée par erreur (plaque, visage, adresse) ? Écrivez-nous : l'équipe peut la retirer.
+
+Les onglets filtrent par statut : en ligne, en vérification, brouillons, en pause, vendues ou refusées. Le nombre de vues et de mises en favori est affiché sur chaque annonce.`,
       },
       {
         slug: "photos",

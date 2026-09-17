@@ -25,6 +25,7 @@ import {
   AdminResolveReportDto,
   AdminResolveTransactionDto,
   AdminHardDeleteDto,
+  AdminReasonDto,
   AdminTransactionsQueryDto,
   AdminUpdateListingDto,
   AdminUpdateUserDto,
@@ -87,6 +88,12 @@ export class AdminController {
   @Patch('listings/:id')
   updateListing(@Req() req: any, @Param('id', ParseUUIDPipe) id: string, @Body() dto: AdminUpdateListingDto) {
     return this.admin.updateListing(this.ctx(req), id, dto);
+  }
+
+  /** Retrait d'une photo par l'admin, y compris une photo verrouillée pour le vendeur (AUDIT §54) : motif obligatoire, journalisé. */
+  @Delete('listings/:id/photos/:photoId')
+  deleteListingPhoto(@Req() req: any, @Param('id', ParseUUIDPipe) id: string, @Param('photoId', ParseUUIDPipe) photoId: string, @Body() dto: AdminReasonDto) {
+    return this.admin.deleteListingPhoto(this.ctx(req), id, photoId, dto.reason);
   }
 
   /** Suppression définitive d'une annonce : motif + confirmation explicite (corps), journalisée. */

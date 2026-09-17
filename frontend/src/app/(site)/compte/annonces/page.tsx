@@ -52,7 +52,8 @@ const TABS: Array<{ key: string; label: string; statuses: ListingStatus[] }> = [
   { key: "online", label: "En ligne", statuses: ["en_ligne"] },
   { key: "pending", label: "En vérification", statuses: ["en_attente"] },
   { key: "draft", label: "Brouillons", statuses: ["brouillon"] },
-  { key: "paused", label: "En pause / expirées", statuses: ["desactivee", "expiree"] },
+  // AUDIT §54 : plus d'expiration ; « expiree » ne reste que pour d'anciennes lignes éventuelles
+  { key: "paused", label: "En pause", statuses: ["desactivee", "expiree"] },
   { key: "done", label: "Vendues / refusées", statuses: ["vendue", "refusee"] },
 ];
 
@@ -228,7 +229,6 @@ export default function MesAnnoncesPage() {
                   <Link href={`/annonces/${l.id}`} style={{ fontWeight: 600, display: "block", margin: "4px 0" }}>{l.title}</Link>
                   <div className="small muted">
                     {formatPrice(l.price, l.priceType)} · {l.photosCount} photo{l.photosCount > 1 ? "s" : ""}
-                    {l.expiresAt && l.status === "en_ligne" && ` · expire le ${formatDate(l.expiresAt)}`}
                     {l.externalRef && ` · réf. ${l.externalRef}`}
                   </div>
                   {l.stats && l.status !== "brouillon" && <ListingStatsRow stats={l.stats} />}

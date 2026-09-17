@@ -75,6 +75,36 @@ test('voiture : critères obligatoires, deux photos, localisation par code posta
   // Ligne de repères sous le titre : année · kilométrage · carburant (comme sur leboncoin pour une voiture)
   await expect(page.getByTestId('listing-summary')).toContainText(/2019.*58[\s ]000 km.*Essence/);
   await expect(page.getByText("C'est votre annonce")).toBeVisible();
+
+  // --- Après publication (AUDIT §54) : catégorie, marque et photos de publication visiblement verrouillées
+  const id = page.url().split('/').pop()!;
+  await page.goto(`/compte/annonces/${id}/modifier`);
+  const lockedCategory = page.getByTestId('locked-category');
+  await expect(lockedCategory.getByLabel("Catégorie de l'annonce")).toBeDisabled();
+  await expect(lockedCategory.getByLabel("Catégorie de l'annonce")).toHaveValue(/Véhicules › Voitures/);
+  await expect(lockedCategory).toContainText('Non modifiable après publication');
+  await expect(page.getByRole('radio', { name: 'Motos' })).toBeHidden();
+  await page.getByLabel('Titre').fill(`${title} révisée`);
+  await page.getByRole('button', { name: 'Continuer' }).click();
+  await expect(page.getByLabel('Marque *')).toBeDisabled();
+  await expect(page.getByLabel('Marque *')).toHaveValue('Peugeot');
+  await expect(page.getByTestId('locked-brand')).toContainText('Non modifiable après publication');
+  await expect(page.getByLabel('Modèle *')).toBeEnabled();
+  await page.getByRole('button', { name: 'Continuer' }).click();
+  await expect(page.getByTestId('locked-photos-note')).toContainText('ne peuvent plus être retirées, remplacées ni déplacées');
+  await expect(page.getByTestId('locked-photo')).toHaveCount(2);
+  await expect(page.getByRole('button', { name: /^Supprimer la photo/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Avancer la photo/ })).toHaveCount(0);
+  // Ajouter une photo reste possible : elle vient à la suite et reste retirable
+  await page.locator('input[type=file]').setInputFiles([seed.photos[0]]);
+  await page.getByRole('button', { name: "Garder l'original" }).click();
+  await expect(page.getByRole('button', { name: 'Supprimer la photo 3' })).toBeVisible();
+  await page.getByRole('button', { name: 'Continuer' }).click();
+  await page.getByRole('button', { name: 'Continuer' }).click();
+  await page.getByRole('button', { name: 'Enregistrer les modifications' }).click();
+  await expect(page).toHaveURL(new RegExp(`/annonces/${id}$`));
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(`${title} révisée`);
+  await expect(page.getByText('1 / 3')).toBeVisible();
 });
 
 test('location de vacances : champs propres à la famille, prix par semaine, une photo, commune choisie', async ({ page }) => {

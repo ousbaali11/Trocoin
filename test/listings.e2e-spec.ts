@@ -49,7 +49,7 @@ describe('Annonces : dépôt, validation, recherche, photos, contrôle d\'accès
     expect(good.status).toBe('en_ligne');
     expect(good.attributes.inconnu).toBeUndefined();
     expect(good.deliveryAvailable).toBe(false); // véhicules : pas de livraison
-    expect(good.expiresAt).toBeDefined();
+    expect(good.expiresAt ?? null).toBeNull(); // AUDIT §54 : plus de durée de vie, aucune date d'expiration
     expect(good.latitude).toBeCloseTo(45.87, 0); // centroïde du 69
   });
 
@@ -172,7 +172,7 @@ describe('Annonces : dépôt, validation, recherche, photos, contrôle d\'accès
   it('photos : signature réelle vérifiée, extension dérivée du contenu, non-propriétaire bloqué avant écriture', async () => {
     const owner = await login(app);
     const other = await login(app);
-    const listing = await createListing(app, owner);
+    const listing = await createListing(app, owner, { draft: true }); // brouillon : photos libres (publiée, elles seraient verrouillées, AUDIT §54)
     const before = (await fs.readdir(UPLOAD_DIR)).length;
 
     // HTML déguisé en image/png avec extension .png -> rejeté, aucun fichier conservé
@@ -217,7 +217,7 @@ describe('Annonces : dépôt, validation, recherche, photos, contrôle d\'accès
     await request(server).delete(`/listings/${listing.id}/photos/${ok.body[0].id}`).set(owner.auth).expect(204);
     await expect(fs.access(stored)).rejects.toBeDefined();
     await expect(fs.access(storedThumb)).rejects.toBeDefined();
-    const detail = await request(server).get(`/listings/${listing.id}`).expect(200);
+    const detail = await request(server).get(`/listings/${listing.id}`).set(owner.auth).expect(200);
     expect(detail.body.photos.length).toBe(1);
     // nettoyage
     await request(server).delete(`/listings/${listing.id}`).set(owner.auth).expect(204);

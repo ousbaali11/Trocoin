@@ -331,7 +331,6 @@ export class AdminService {
       if (dto.status === 'en_ligne') {
         const now = new Date();
         patch.publishedAt = listing.publishedAt || now;
-        patch.expiresAt = listing.expiresAt || new Date(now.getTime() + 60 * 86_400_000);
         if (dto.moderationReason === undefined) patch.moderationReason = null as any;
       }
     }
@@ -350,6 +349,16 @@ export class AdminService {
       });
     }
     return this.listingsRepo.findOne({ where: { id } });
+  }
+
+  /** Retrait d'une photo (signalement, donnée personnelle visible, litige) : le verrou du vendeur ne s'applique pas à l'admin. */
+  async deleteListingPhoto(ctx: AdminContext, id: string, photoId: string, reason: string) {
+    const listing = await this.listingsRepo.findOne({ where: { id } });
+    if (!listing) throw new NotFoundException('Annonce introuvable.');
+    const photo = await this.listingsService.removePhotoAsAdmin(id, photoId);
+    await this.audit(ctx, 'listing.photo.delete', 'listing', id, { photoId, wasLocked: !!photo.lockedAt, reason });
+    await this.notifications.notify(listing.userId, { type: 'moderation', title: 'Une photo de votre annonce a été retirée', body: `Motif : ${reason}`, link: `/annonces/${id}` });
+    return { deleted: true };
   }
 
   async deleteListing(ctx: AdminContext, id: string, reason: string) {
@@ -528,7 +537,7 @@ export class AdminService {
    */
   /**
    * Réactivation : les annonces mises en pause par la suspension (et seulement elles) reviennent en ligne ;
-   * celles dont la durée de vie s'est écoulée entre-temps passent « expirée » (le membre les renouvelle).
+   * depuis AUDIT §54 il n'y a plus de durée de vie : toutes reviennent en ligne (`expired` reste à 0, gardé pour le journal).
    */
   private async restoreListingsAfterSuspension(userId: string): Promise<{ republished: number; expired: number }> {
     const paused = await this.listingsRepo.find({ where: { userId, status: 'desactivee', moderationReason: 'Compte suspendu' } });
@@ -536,9 +545,9 @@ export class AdminService {
     let republished = 0;
     let expired = 0;
     for (const l of paused) {
-      const isExpired = !!l.expiresAt && new Date(l.expiresAt).getTime() < now;
-      await this.listingsRepo.update(l.id, { status: isExpired ? 'expiree' : 'en_ligne', moderationReason: null as any });
-      if (isExpired) expired += 1; else republished += 1;
+      // AUDIT §54 : plus d'expiration dans le temps, toute annonce mise en pause par la suspension revient en ligne
+      await this.listingsRepo.update(l.id, { status: 'en_ligne', moderationReason: null as any });
+      republished += 1;
     }
     return { republished, expired };
   }

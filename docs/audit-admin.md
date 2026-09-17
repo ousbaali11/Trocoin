@@ -115,3 +115,48 @@ garde-fous et remboursements, suppression d'annonce avec corps obligatoire, déc
 fiche détaillée) et `e2e/21-admin-droits.spec.ts` (3 scénarios navigateur : menu regroupé, dialogue
 de suppression d'annonce, fiche transaction + suppression de compte + journal). Captures « après »
 dans le dossier de preuves du tour (AUDIT §38).
+
+## Verrous anti-fraude après publication et pouvoirs de l'admin (17 septembre 2026, AUDIT §54)
+
+**Pourquoi.** Sans verrou, un vendeur peut publier une annonce crédible, accumuler vues, favoris et
+confiance, puis la transformer discrètement en autre chose : changer de catégorie, de marque, ou remplacer
+les photos. L'acheteur qui avait mis l'annonce en favori, ou qui arrive par un lien partagé, est trompé.
+
+**Ce qui est verrouillé pour le vendeur**, dès que l'annonce a été publiée (ou soumise à la vérification) :
+
+| Élément | Règle | Réponse de l'API |
+|---|---|---|
+| Catégorie et sous-catégorie | non modifiables | `PATCH /listings/:id` avec une autre `categorySlug` → 400 (la même valeur est acceptée) |
+| Marque (attribut `marque`, quand la catégorie en a un et qu'il est renseigné) | non modifiable, ni retirable | `PATCH` avec une autre marque ou sans marque → 400 ; les autres critères restent modifiables |
+| Photos présentes à la publication | ni retirables, ni remplaçables, ni déplaçables ; elles restent en tête, la couverture ne change pas | `DELETE /listings/:id/photos/:photoId` → 400 ; `PATCH …/photos/order` qui les déplace → 400 |
+| Photos ajoutées ensuite | permises (dans la limite de 10), toujours après les photos verrouillées, retirables et déplaçables entre elles ; elles sont verrouillées à leur tour à la prochaine remise en ligne | `POST /listings/:id/photos` → 201, `lockedAt: null` |
+
+Le dépôt crée un brouillon, envoie les photos, puis publie : les photos présentes à la publication sont
+verrouillées à cet instant (`listing_photos.lockedAt`). Pour les clients qui publient d'abord puis envoient
+les photos, celles reçues dans les 10 minutes suivant la publication (`PUBLICATION_PHOTO_WINDOW_MINUTES`)
+font partie de la publication. Un brouillon reste entièrement modifiable. Dupliquer une annonce repart d'un
+brouillon sans vues ni favoris : sa catégorie est libre, ce qui ne pose pas le même risque.
+
+Le formulaire de modification montre ces champs **grisés avec leur explication** (catégorie, marque, tuiles
+« 🔒 Verrouillée » sans boutons) ; la fiche expose `locks` et chaque photo son `lockedAt`.
+
+**Ce que l'admin garde.** Le verrou ne vise que le vendeur. L'admin peut toujours modifier le titre, la
+description, la ville et le statut, mettre en pause, refuser, **supprimer l'annonce** (`DELETE
+/admin/listings/:id`), et il gagne le **retrait d'une photo**, y compris verrouillée :
+`DELETE /admin/listings/:id/photos/:photoId` avec un motif obligatoire (bouton « Retirer la photo n » sur la
+fiche admin de l'annonce). C'est le recours quand une photo publiée montre une plaque, un visage ou une
+adresse, ou qu'elle est signalée. L'action est inscrite au journal (`listing.photo.delete`, avec
+`wasLocked` et le motif) et le vendeur est prévenu.
+
+**Annonces sans expiration.** Il n'y a plus de durée de vie (60 jours auparavant) : la tâche horaire
+`expireListings` est retirée, `expiresAt` n'est plus renseigné, la migration
+`1789540000000-AnnoncesSansExpirationEtVerrous` efface les anciennes dates et remet en ligne les annonces que
+la seule limite de temps avait fait expirer. Le statut `expiree` ne subsiste que dans le type, pour
+d'éventuelles anciennes lignes ; l'option a disparu du filtre des annonces de la console. À la réactivation
+d'un compte suspendu, toutes les annonces mises en pause par la suspension reviennent en ligne.
+
+Tests : `test/phase31.e2e-spec.ts` (4 tests : aucune expiration ; brouillon libre puis verrou à la
+publication ; refus de changement de catégorie, de marque, de retrait et de déplacement d'une photo
+verrouillée, ajout permis ; pouvoirs de l'admin et journal) et `e2e/04-depot.spec.ts` (champs grisés dans le
+formulaire, photo ajoutée retirable).
+
