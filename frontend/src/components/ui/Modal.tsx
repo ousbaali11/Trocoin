@@ -41,6 +41,10 @@ export function Modal({ open, onClose, title, children, width = 520 }: { open: b
     document.body.style.overflow = "hidden";
     // Focus initial : premier champ de saisie, sinon premier bouton d'action (pas la croix de fermeture)
     const t = setTimeout(() => {
+      // Focus déjà dans la boîte (bouton en `autoFocus`, ou personne plus rapide que ce minuteur) : on n'y touche pas.
+      // Sans cette garde, la boîte de confirmation — dont le bouton d'action est en autoFocus — le perdait un instant
+      // plus tard au profit d'« Annuler », et Entrée annulait au lieu de valider (course vue en CI, AUDIT §61).
+      if (box.current?.contains(document.activeElement)) return;
       const items = Array.from(box.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []).filter((el) => el.offsetParent !== null);
       const target = items.find((el) => /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName)) ?? items.find((el) => el.getAttribute("aria-label") !== "Fermer") ?? items[0];
       target?.focus();

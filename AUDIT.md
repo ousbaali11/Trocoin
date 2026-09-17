@@ -3309,3 +3309,7 @@ Cause : quatre appels au prestataire **l'un après l'autre** (cotation puis poin
   arrière-plan. À l'ouverture de la fenêtre, choix, prix et points sont déjà là. La ville est déduite du code postal
   quand il ne correspond qu'à une commune (jamais pendant que la personne est dans le champ Ville).
 - Une fois la réponse du transporteur connue, seul ce qu'il propose réellement reste affiché (règle de la §57).
+- **Boîte de confirmation** (course vue en CI sur `09-admin-accessibilite`, déploiement bloqué comme prévu) : le bouton
+  d'action est en `autoFocus`, mais le « focus initial » de la boîte, posé un instant plus tard, le reprenait au profit
+  d'« Annuler » — selon la vitesse de la machine, Entrée annulait au lieu de valider. La boîte respecte maintenant un
+  focus déjà placé à l'intérieur (`Modal.tsx`).
