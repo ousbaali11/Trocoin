@@ -2682,3 +2682,49 @@ page Versements lisent le barème en vigueur (`/settings/public` → `fees`).
   compte temporaire supprimés (404 / 0 transaction). À noter : la page Stripe affiche le nom du compte
   Stripe (« Stratos consulting ») et non « Trocoin » : à changer dans le Dashboard Stripe (nom public).
 - Pas d'identifiants admin de production : le panneau est prouvé sur la pile locale, même code.
+
+## 52. Alertes Google Search Console sur les données structurées `Product` — 17 septembre 2026
+
+Demande : deux e-mails de Search Console signalent des champs manquants dans le balisage `Product` / `Offer` des
+fiches. Corriger `shippingDetails` et `hasMerchantReturnPolicy` avec de vraies données ; ne jamais fabriquer de
+GTIN, de marque, d'avis ou de note ; documenter pourquoi ces champs restent vides.
+
+### Livré (1.26.1)
+
+- **API** : la fiche expose `delivery` : livrable ou non, 7 jours accordés au vendeur pour expédier (règle du
+  séquestre), 2 à 4 jours de transport (Colissimo, Mondial Relay), et une **fourchette de coût seulement si le
+  vendeur a déclaré le poids** du colis (grille indicative des transporteurs, `src/shipping/indicative-rates.ts`,
+  partagée avec le fournisseur simulé). Sans poids : `estimate: null`, rien n'est inventé.
+- **Balisage** (`frontend/src/lib/listing-jsonld.ts`) :
+  - remise en main propre seule → `shippingDetails: { doesNotShip: true, shippingDestination: FR }` et
+    `availableDeliveryMethod: OnSitePickup` ;
+  - annonce livrable → destination `FR`, `deliveryTime` (`handlingTime` 0–7 j, `transitTime` 2–4 j),
+    `availableDeliveryMethod: [OnSitePickup, ParcelService]`, et `shippingRate` min/max si le poids est déclaré ;
+  - vendeur particulier → `hasMerchantReturnPolicy: MerchantReturnNotPermitted` (`applicableCountry: FR`) ;
+    vendeur professionnel → champ absent (ses conditions et le droit de rétractation légal s'appliquent) ;
+  - familles qui ne sont pas des biens (immobilier, emploi, services, vacances) → aucun des deux champs.
+- **Page** : nouvel encart « Livraison et retours » sur la fiche, qui dit exactement la même chose que le
+  balisage (exigence de Google : les données structurées décrivent le contenu visible).
+- **Volontairement vides** : `gtin*`, `mpn`, `brand` (objets d'occasion uniques, sans code-barres) ; `review`,
+  `aggregateRating` (réputation par vendeur, pas d'avis par article). Motifs et décision dans
+  `docs/seo-checklist.md`, section « Alertes Search Console sur les données structurées ». Un test échoue si
+  l'une de ces clés apparaît dans le `Product`.
+
+### Vérification
+
+- API : `test/phase30` (estimation par poids, trois cas de fiche) → **178 tests** ; navigateur :
+  `e2e/10-seo` (JSON-LD des deux cas de livraison, encart visible, clés interdites absentes) ; suite complète
+  113 réussis, 11 ignorés ; CI verte sur `d8a498c`.
+- Production 1.26.1 (www.trocoin.fr), JSON-LD relu dans la page :
+  - annonce de démonstration en main propre (particulier) : `doesNotShip: true`, `OnSitePickup`,
+    `MerchantReturnNotPermitted` ; encart « Remise en main propre uniquement… » ;
+  - annonce temporaire livrable, 800 g : `handlingTime` 0–7, `transitTime` 2–4, `shippingRate` 5,49–7,95 EUR ;
+    encart « Envoi estimé entre 5,49 € et 7,95 € d'après le poids déclaré (800 g) » ;
+  - annonce temporaire livrable sans poids : mêmes délais, **pas de `shippingRate`** ; encart « Frais d'envoi à
+    convenir avec le vendeur » ;
+  - offre d'emploi : ni `shippingDetails` ni `hasMerchantReturnPolicy`, pas d'encart ;
+  - aucune clé `gtin`, `mpn`, `brand`, `review`, `aggregateRating` dans les trois `Product`.
+  Annonces et compte temporaires supprimés (204).
+- Reste à faire par le propriétaire : dans Search Console, « Valider la correction » sur les deux alertes
+  traitées. Les alertes sur l'identifiant global et les avis resteront en « améliorations facultatives » :
+  c'est attendu et documenté.
