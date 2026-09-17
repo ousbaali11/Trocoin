@@ -38,7 +38,16 @@ export default function AdminUsersPage() {
     if (type) p.set("account_type", type);
     if (status) p.set("status", status);
     setError(null);
-    api<Paged<AdminUser>>(`/admin/users?${p}`).then(setData).catch((e) => setError((e as Error).message));
+    // Une requête par pause de frappe (300 ms) ; une réponse arrivée après une frappe plus récente est ignorée —
+    // sans cela, une requête lente pouvait écraser le résultat de la suivante (AUDIT §60).
+    let stale = false;
+    const timer = setTimeout(() => {
+      api<Paged<AdminUser>>(`/admin/users?${p}`).then((d) => { if (!stale) setData(d); }).catch((e) => { if (!stale) setError((e as Error).message); });
+    }, q ? 300 : 0);
+    return () => {
+      stale = true;
+      clearTimeout(timer);
+    };
   }, [q, type, status, page]);
 
   return (
@@ -47,7 +56,7 @@ export default function AdminUsersPage() {
         <div><h1>Utilisateurs</h1><p>Recherche par téléphone, pseudo, SIRET, boutique ou identifiant.</p></div>
       </div>
       <div className="a-filters">
-        <input className="a-input" placeholder="Rechercher…" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />
+        <input className="a-input" type="search" aria-label="Rechercher un utilisateur" placeholder="Téléphone, pseudo, SIRET…" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />
         <select className="a-select" aria-label="Type de compte" value={type} onChange={(e) => { setType(e.target.value); setPage(1); }}>
           <option value="">Tous types</option><option value="particulier">Particuliers</option><option value="professionnel">Professionnels</option><option value="admin">Administrateurs</option>
         </select>

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
-import { api, API_URL, getToken, mediaUrl } from "@/lib/api";
+import { api, API_URL, getToken, mediaUrl, refreshSession, tokenExpiresSoon } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast-context";
 import { formatDateTime, formatEuros, formatPrice, REPORT_REASON_LABELS } from "@/lib/format";
@@ -12,6 +12,8 @@ import type { ConversationDetail, Message } from "@/lib/types";
 import { Modal } from "@/components/ui/Modal";
 import { SalePanel } from "@/components/messages/SalePanel";
 import { saleEventText } from "@/lib/sale-events";
+import { BackLink } from "@/components/ui/BackLink";
+import { Disclosure } from "@/components/ui/Disclosure";
 
 export default function ConversationPage() {
   const { id } = useParams<{ id: string }>();
@@ -37,14 +39,23 @@ export default function ConversationPage() {
   const listRef = useRef<HTMLDivElement>(null);
   const liveRef = useRef(false);
 
+  const loadedRef = useRef(false);
   const load = useCallback(async () => {
     try {
       const c = await api<ConversationDetail>(`/conversations/${id}`);
+      loadedRef.current = true;
+      setError(null);
       setConv(c);
-      setMessages(c.messages);
+      // Le serveur fait foi (statuts des propositions compris) ; un message reçu par le socket pendant la requête est gardé
+      setMessages((prev) => {
+        const known = new Set(c.messages.map((m) => m.id));
+        const extra = prev.filter((m) => !known.has(m.id) && m.conversationId === id);
+        return extra.length ? [...c.messages, ...extra].sort((a, b) => a.createdAt.localeCompare(b.createdAt)) : c.messages;
+      });
       refreshCounters();
     } catch (e) {
-      setError((e as Error).message);
+      // Coupure passagère pendant une resynchronisation : on garde la conversation affichée, le prochain passage rattrapera
+      if (!loadedRef.current) setError((e as Error).message);
     }
   }, [id, refreshCounters]);
 
@@ -53,29 +64,54 @@ export default function ConversationPage() {
   }, [load]);
 
   useEffect(() => {
-    const token = getToken();
-    if (!token) return;
-    const socket = io(API_URL, { auth: { token }, transports: ["websocket", "polling"] });
+    if (!getToken()) return;
+    // Jeton lu (et rafraîchi s'il expire) à CHAQUE tentative de connexion : un jeton figé à l'ouverture de la page
+    // faisait refuser toute reconnexion après 15 minutes, et la conversation restait « différée » pour de bon
+    const socket = io(API_URL, {
+      transports: ["websocket", "polling"],
+      auth: (cb) => {
+        const current = getToken();
+        if (current && !tokenExpiresSoon(current)) return cb({ token: current });
+        refreshSession().then((fresh) => cb({ token: fresh || current || "" })).catch(() => cb({ token: current || "" }));
+      },
+    });
     socketRef.current = socket;
+    let inboxTimer: ReturnType<typeof setTimeout> | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    const resync = () => {
+      if (inboxTimer) clearTimeout(inboxTimer);
+      inboxTimer = setTimeout(load, 250);
+    };
     socket.on("connect", () => {
       socket.emit("join", { conversationId: id }, (ack: { ok: boolean }) => {
         liveRef.current = !!ack?.ok;
         setLive(liveRef.current);
+        // (Re)connexion : tout ce qui est arrivé pendant la coupure est relu d'un coup
+        load();
       });
     });
     socket.on("disconnect", () => {
       liveRef.current = false;
       setLive(false);
     });
+    // Connexion refusée (jeton expiré…) : socket.io ne réessaie pas seul après un refus du serveur
+    socket.on("connect_error", () => {
+      if (retryTimer) clearTimeout(retryTimer);
+      retryTimer = setTimeout(() => { if (!socket.connected) socket.connect(); }, 4000);
+    });
     socket.on("message", (m: Message) => {
       if (m.conversationId !== id) return;
       setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
-      if (m.type === "system") load();
       if (m.senderId !== user?.id) {
         setOtherTyping(false);
-        // Affiché → lu : le serveur prévient l'expéditeur (« Vu ») et le compteur de non-lus se met à jour
-        socket.emit("read", { conversationId: id }, () => refreshCounters());
+        // Affiché → lu, seulement si l'onglet est réellement à l'écran
+        if (document.visibilityState === "visible") socket.emit("read", { conversationId: id }, () => refreshCounters());
       }
+    });
+    // Proposition acceptée, refusée ou retirée : le ticket change d'état chez les deux, sans recharger
+    socket.on("message:update", (m: Message) => {
+      if (m.conversationId !== id) return;
+      setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, ...m } : x)));
     });
     // Accusé de lecture du destinataire : mes messages passent « Vu »
     socket.on("read", (e: { conversationId: string; readerId: string; readAt: string }) => {
@@ -89,15 +125,33 @@ export default function ConversationPage() {
       setOtherTyping(e.typing);
       if (e.typing) typingHideTimer.current = setTimeout(() => setOtherTyping(false), 4000);
     });
-    // Photos et offres passent par REST : on se resynchronise à chaque réveil "inbox"
+    // Réveil de la boîte : état de la vente, proposition payable, photos… relus (regroupé : plusieurs réveils, une lecture)
     socket.on("inbox", (p: { conversationId: string }) => {
-      if (p.conversationId === id) load();
+      if (p.conversationId === id) resync();
     });
+    // Retour sur l'onglet (mobile : l'onglet en arrière-plan est gelé, la connexion souvent coupée) : on relit et on reconnecte
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      load();
+      if (!socket.connected) socket.connect();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", onVisible);
+    window.addEventListener("pageshow", onVisible);
+    // Filet de sécurité : toutes les 10 s sans temps réel, toutes les 30 s sinon — onglet visible seulement
+    let ticks = 0;
     const poll = setInterval(() => {
-      if (!socket.connected) load();
-    }, 15_000);
+      if (document.visibilityState !== "visible") return;
+      ticks += 1;
+      if (!socket.connected || !liveRef.current || ticks % 3 === 0) load();
+    }, 10_000);
     return () => {
       clearInterval(poll);
+      if (inboxTimer) clearTimeout(inboxTimer);
+      if (retryTimer) clearTimeout(retryTimer);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", onVisible);
+      window.removeEventListener("pageshow", onVisible);
       if (typingHideTimer.current) clearTimeout(typingHideTimer.current);
       if (typingStopTimer.current) clearTimeout(typingStopTimer.current);
       socket.emit("leave", { conversationId: id });
@@ -128,6 +182,9 @@ export default function ConversationPage() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages.length, otherTyping]);
 
+  /** Ajoute ou met à jour un message par identifiant : la réponse d'une requête et la diffusion en direct peuvent se croiser. */
+  const upsert = (m: Message) => setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev.map((x) => (x.id === m.id ? { ...x, ...m } : x)) : [...prev, m]));
+
   const send = async (content?: string) => {
     const body = (content ?? text).trim();
     if (!body) return;
@@ -138,13 +195,12 @@ export default function ConversationPage() {
       socket.emit("message", { conversationId: id, content: body }, (ack: { ok: boolean; message?: string | Message }) => {
         if (!ack?.ok) return toast((typeof ack?.message === "string" && ack.message) || "Envoi impossible.", "error");
         const m = ack.message as Message | undefined;
-        if (m && typeof m === "object") setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
+        if (m && typeof m === "object") upsert(m);
       });
       return;
     }
     try {
-      const m = await api<Message>(`/conversations/${id}/messages`, { method: "POST", body: { content: body } });
-      setMessages((prev) => [...prev, m]);
+      upsert(await api<Message>(`/conversations/${id}/messages`, { method: "POST", body: { content: body } }));
     } catch (e) {
       toast((e as Error).message, "error");
     }
@@ -155,8 +211,7 @@ export default function ConversationPage() {
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const m = await api<Message>(`/conversations/${id}/images`, { method: "POST", formData: fd });
-      setMessages((prev) => [...prev, m]);
+      upsert(await api<Message>(`/conversations/${id}/images`, { method: "POST", formData: fd }));
     } catch (e) {
       toast((e as Error).message, "error");
     } finally {
@@ -170,7 +225,8 @@ export default function ConversationPage() {
     setBusy(true);
     try {
       const m = await api<Message>(`/conversations/${id}/offers`, { method: "POST", body: { amount } });
-      setMessages((prev) => [...prev.map((x) => (x.type === "offer" && x.offerStatus === "en_attente" ? { ...x, offerStatus: "retiree" as const } : x)), m]);
+      setMessages((prev) => prev.map((x) => (x.type === "offer" && x.offerStatus === "en_attente" && x.id !== m.id ? { ...x, offerStatus: "retiree" as const } : x)));
+      upsert(m);
       setOfferOpen(false);
       setOfferAmount("");
       toast("Proposition envoyée au vendeur.", "success");
@@ -215,7 +271,7 @@ export default function ConversationPage() {
     }
   };
 
-  if (error) return <div className="alert alert-error">{error} <Link href="/compte/messages">Retour aux messages</Link></div>;
+  if (error && !conv) return <div className="alert alert-error">{error} <Link href="/compte/messages">Retour aux messages</Link></div>;
   if (!conv || !user) return <div className="skeleton" style={{ height: 400 }} />;
   const isBuyer = conv.role === "acheteur";
   // Vente en cours ou conclue entre les deux : plus d'« Acheter », de proposition de prix ni de questions d'avant-vente
@@ -228,7 +284,7 @@ export default function ConversationPage() {
     <div className="panel" style={{ display: "flex", flexDirection: "column", height: "calc(100vh - var(--header-h) - 100px)", minHeight: conv.transaction ? 660 : 520, padding: 0, overflow: "hidden" }}>
       <h1 className="sr-only">Conversation avec {conv.other?.displayName ?? "un membre"}{conv.listing ? ` à propos de ${conv.listing.title}` : ""}</h1>
       <header className="conv-header" style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", padding: "12px 16px", borderBottom: "1px solid var(--line-soft)" }}>
-        <Link href="/compte/messages" className="btn btn-ghost btn-sm" aria-label="Retour">←</Link>
+        <BackLink href="/compte/messages" label="Retour aux messages" />
         {conv.listing && (
           <Link href={`/annonces/${conv.listing.id}`} aria-label={`Voir l'annonce ${conv.listing.title}`} style={{ width: 44, height: 44, borderRadius: 6, overflow: "hidden", background: "var(--ivory-warm)", flexShrink: 0 }}>
             {conv.listing.coverUrl && (
@@ -252,7 +308,7 @@ export default function ConversationPage() {
           )}
         </div>
         <div className="row conv-actions" style={{ gap: 4, marginLeft: "auto" }}>
-          {isBuyer && !saleOpen && conv.listing?.status === "en_ligne" && <Link href={`/annonces/${conv.listing.id}`} className="btn btn-dark btn-sm">Acheter</Link>}
+          {isBuyer && !saleOpen && conv.listing?.status === "en_ligne" && <Link href={`/annonces/${conv.listing.id}?acheter=1`} className="btn btn-dark btn-sm" data-testid="conv-buy">{conv.acceptedOffer ? `Payer ${formatEuros(conv.acceptedOffer.amount)}` : "Acheter"}</Link>}
           <button className="btn btn-ghost btn-sm" onClick={() => setReportOpen(true)} style={{ color: "var(--brick)" }}>Signaler</button>
           <button className="btn btn-ghost btn-sm" onClick={toggleBlock}>{conv.blocked ? "Débloquer" : "Bloquer"}</button>
         </div>
@@ -267,12 +323,12 @@ export default function ConversationPage() {
             // Message automatique : centré, encadré en pointillés, étiqueté — jamais confondu avec un message écrit par une personne
             const t = saleEventText(m, isBuyer ? "acheteur" : "vendeur", conv.other?.displayName ?? "L'acheteur");
             return (
-              <div key={m.id} data-testid="system-message" data-event={m.systemEvent ?? ""} style={{ alignSelf: "center", width: "100%", maxWidth: 520, margin: "6px 0", padding: "10px 14px", border: "1px dashed var(--accent)", borderRadius: 12, background: "var(--accent-tint)", color: "var(--ink)", textAlign: "center" }}>
+              <div key={m.id} data-testid="system-message" data-event={m.systemEvent ?? ""} style={{ alignSelf: "center", width: "100%", maxWidth: 440, margin: "4px 0", padding: "7px 12px", border: "1px dashed var(--accent)", borderRadius: 12, background: "var(--accent-tint)", color: "var(--ink)", textAlign: "center" }}>
                 <div className="small" style={{ textTransform: "uppercase", letterSpacing: ".08em", fontSize: ".66rem", fontWeight: 700, color: "var(--accent-dark)" }}>Message automatique · Trocoin</div>
-                <div style={{ fontWeight: 700, margin: "2px 0" }}><span aria-hidden="true">{t.icon} </span>{t.title}</div>
-                <div className="small" style={{ whiteSpace: "pre-wrap" }}>{t.body}</div>
+                <div style={{ fontWeight: 700, margin: "1px 0", fontSize: ".9rem" }}><span aria-hidden="true">{t.icon} </span>{t.title}</div>
+                <div className="small" style={{ whiteSpace: "pre-wrap", fontSize: ".8rem", lineHeight: 1.35 }}>{t.body}</div>
                 {t.trackingUrl && (
-                  <a className="btn btn-outline btn-sm" style={{ marginTop: 8 }} href={t.trackingUrl} target="_blank" rel="noopener noreferrer" data-testid="system-track">Suivre le colis</a>
+                  <a className="btn btn-outline btn-sm" style={{ marginTop: 6, padding: "5px 12px", fontSize: ".78rem" }} href={t.trackingUrl} target="_blank" rel="noopener noreferrer" data-testid="system-track">Suivre le colis</a>
                 )}
                 <div className="small muted" style={{ marginTop: 4, fontSize: ".72rem" }}><span suppressHydrationWarning>{formatDateTime(m.createdAt)}</span></div>
               </div>
@@ -286,27 +342,35 @@ export default function ConversationPage() {
                 <div style={{ ...bubble, padding: 4 }}>
                   <button type="button" onClick={() => setLightbox(mediaUrl(m.attachmentUrl) ?? null)} style={{ padding: 0, border: 0, background: "none", cursor: "zoom-in" }} aria-label="Agrandir la photo">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={mediaUrl(m.attachmentUrl)} alt="Photo envoyée" style={{ maxWidth: 260, maxHeight: 220, borderRadius: 10, display: "block" }} />
+                    <img src={mediaUrl(m.attachmentUrl)} alt="Photo envoyée" style={{ maxWidth: "min(260px, 100%)", maxHeight: 220, borderRadius: 10, display: "block" }} />
                   </button>
                   {m.content && <div style={{ padding: "6px 8px 2px" }}>{m.content}</div>}
                 </div>
               ) : m.type === "offer" ? (
-                <div style={{ ...bubble, background: "var(--white)", color: "var(--ink)", border: "2px solid var(--accent)", minWidth: 220 }}>
-                  <div className="small muted">{mine ? "Votre proposition" : "Proposition de prix"}</div>
-                  <div style={{ fontFamily: "var(--font-display)", fontSize: "1.4rem", fontWeight: 700, color: "var(--accent)" }}>{formatEuros(m.offerAmount)}</div>
-                  <div className="row" style={{ marginTop: 6 }}>
+                <div data-testid="offer-card" data-status={m.offerStatus ?? ""} style={{ ...bubble, background: "var(--white)", color: "var(--ink)", border: "2px solid var(--accent)", minWidth: 200, padding: "8px 12px" }}>
+                  <div className="row" style={{ gap: 8, alignItems: "baseline", justifyContent: "space-between", flexWrap: "nowrap" }}>
+                    <span className="small muted" style={{ fontSize: ".74rem" }}>{mine ? "Votre proposition" : "Proposition"}</span>
                     <span className={`pill ${m.offerStatus === "acceptee" ? "pill-green" : m.offerStatus === "refusee" ? "pill-brick" : m.offerStatus === "retiree" ? "" : "pill-ochre"}`}>
                       {m.offerStatus === "acceptee" ? "Acceptée" : m.offerStatus === "refusee" ? "Refusée" : m.offerStatus === "retiree" ? "Retirée" : "En attente"}
                     </span>
-                    {m.offerStatus === "en_attente" && !isBuyer && !mine && (
-                      <>
-                        <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => answerOffer(m, "acceptee")}>Accepter</button>
-                        <button className="btn btn-outline btn-sm" disabled={busy} onClick={() => answerOffer(m, "refusee")}>Refuser</button>
-                      </>
-                    )}
-                    {m.offerStatus === "en_attente" && isBuyer && mine && <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => answerOffer(m, "retiree")}>Retirer</button>}
                   </div>
-                  {m.offerStatus === "acceptee" && isBuyer && conv.listing?.status === "en_ligne" && <p className="small" style={{ margin: "8px 0 0" }}>Le vendeur a accepté : convenez du paiement (sécurisé ou en main propre) par messagerie.</p>}
+                  <div style={{ fontFamily: "var(--font-display)", fontSize: "1.3rem", fontWeight: 700, color: "var(--accent)", lineHeight: 1.2 }}>{formatEuros(m.offerAmount)}</div>
+                  {m.offerStatus === "en_attente" && !isBuyer && !mine && (
+                    <div className="row" style={{ marginTop: 6, gap: 6 }}>
+                      <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => answerOffer(m, "acceptee")}>Accepter</button>
+                      <button className="btn btn-outline btn-sm" disabled={busy} onClick={() => answerOffer(m, "refusee")}>Refuser</button>
+                    </div>
+                  )}
+                  {m.offerStatus === "en_attente" && isBuyer && mine && <button className="btn btn-ghost btn-sm" style={{ marginTop: 4 }} disabled={busy} onClick={() => answerOffer(m, "retiree")}>Retirer</button>}
+                  {/* Proposition acceptée encore valable (AUDIT §60) : l'acheteur paie CE prix, comme sur leboncoin */}
+                  {m.offerStatus === "acceptee" && conv.acceptedOffer?.id === m.id && !saleOpen && (isBuyer ? (
+                    <>
+                      <Link href={`/annonces/${conv.listing?.id}?acheter=1`} className="btn btn-primary btn-sm btn-block" style={{ marginTop: 8 }} data-testid="offer-pay">Payer {formatEuros(m.offerAmount)}</Link>
+                      <div className="small muted" style={{ marginTop: 4, fontSize: ".72rem" }}>Prix valable jusqu&apos;au {formatDateTime(conv.acceptedOffer.expiresAt)}</div>
+                    </>
+                  ) : (
+                    <div className="small muted" style={{ marginTop: 4, fontSize: ".74rem" }} data-testid="offer-waiting">En attente du paiement de l&apos;acheteur</div>
+                  ))}
                 </div>
               ) : (
                 <div style={bubble}>{m.content}</div>
@@ -335,11 +399,17 @@ export default function ConversationPage() {
           <p className="muted small" style={{ margin: 0, textAlign: "center" }}>Vous ne pouvez plus échanger avec cet utilisateur.</p>
         ) : (
           <>
-            <div className="row" style={{ marginBottom: 8, gap: 6, display: saleOpen ? "none" : undefined }}>
-              {conv.quickReplies.map((q) => (
-                <button key={q} type="button" className="pill" style={{ cursor: "pointer", border: 0, whiteSpace: "normal", textAlign: "left" }} onClick={() => send(q)}>{q}</button>
-              ))}
-            </div>
+            {!saleOpen && (
+              <div style={{ marginBottom: 8 }}>
+                <Disclosure testId="quick-replies" icon={<span>💬</span>} label="Réponses rapides" summary={`${conv.quickReplies.length} phrases prêtes à envoyer`}>
+                  <div className="row" style={{ gap: 6 }}>
+                    {conv.quickReplies.map((q) => (
+                      <button key={q} type="button" className="pill pill-phrase" onClick={() => send(q)}>{q.replace(/ ([?!:;])/g, "\u00a0$1")}</button>
+                    ))}
+                  </div>
+                </Disclosure>
+              </div>
+            )}
             <form onSubmit={(e) => { e.preventDefault(); send(); }} className="row conv-composer" style={{ flexWrap: "nowrap" }}>
               <label className="btn btn-outline btn-sm" title="Envoyer une photo" style={{ flexShrink: 0 }}>
                 <span aria-hidden="true">📷</span><span className="sr-only">Envoyer une photo</span>
@@ -349,14 +419,15 @@ export default function ConversationPage() {
                 <button type="button" className="btn btn-outline btn-sm" style={{ flexShrink: 0 }} onClick={() => setOfferOpen(true)} title="Proposer un prix" aria-label="Proposer un prix"><span aria-hidden="true">💶</span><span className="conv-offer-label"> Proposer un prix</span></button>
               )}
               <input className="input" style={{ flex: 1, minWidth: 0 }} value={text} onChange={(e) => { setText(e.target.value); signalTyping(e.target.value.length > 0); }} placeholder="Votre message…" maxLength={2000} aria-label="Message" />
-              <button className="btn btn-primary" type="submit" disabled={!text.trim()}>Envoyer</button>
+              <button className="btn btn-primary conv-send" type="submit" disabled={!text.trim()} aria-label="Envoyer"><span className="conv-send-label">Envoyer</span><svg className="conv-send-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 19V5" /><path d="m5 12 7-7 7 7" /></svg></button>
             </form>
           </>
         )}
       </footer>
 
       {lightbox && (
-        <div role="dialog" aria-label="Photo" onClick={() => setLightbox(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.9)", zIndex: 300, display: "grid", placeItems: "center", cursor: "zoom-out" }}>
+        <div role="dialog" aria-modal="true" aria-label="Photo agrandie" onClick={() => setLightbox(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.9)", zIndex: 300, display: "grid", placeItems: "center", cursor: "zoom-out" }}>
+          <button type="button" autoFocus className="btn btn-outline btn-sm" onClick={() => setLightbox(null)} onKeyDown={(e) => { if (e.key === "Escape") setLightbox(null); }} style={{ position: "fixed", top: 16, right: 16, background: "var(--white)" }}>Fermer ✕</button>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={lightbox} alt="" style={{ maxWidth: "95vw", maxHeight: "92vh", objectFit: "contain" }} />
         </div>

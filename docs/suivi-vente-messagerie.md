@@ -93,3 +93,31 @@ qui n'existe plus. Un clic suffit, et le vendeur est prévenu par notification e
 
 La suppression est celle que ferait le vendeur (`RetentionService.purgeListing`) : photos, favoris et historique
 effacés ; la vente payée garde montants, dates et titre de l'annonce ; les avis restent possibles.
+
+## Proposition de prix acceptée : payer le prix négocié (AUDIT §60)
+
+- Le vendeur accepte une proposition → chez l'acheteur, **sans recharger**, le ticket passe « Acceptée » et porte le
+  bouton **« Payer 15,00 € »** (et « Prix valable jusqu'au … ») ; le bouton d'achat de l'en-tête devient lui aussi
+  « Payer 15,00 € ». Le vendeur lit « En attente du paiement de l'acheteur ».
+- Le bouton ouvre la fiche annonce avec la fenêtre de paiement déjà ouverte (`?acheter=1`) : ligne « Prix négocié »,
+  frais de protection et total recalculés sur ce prix.
+- **Le prix n'est jamais envoyé par le navigateur.** `PaymentsService.negotiatedPrice()` retrouve la dernière
+  proposition acceptée de cet acheteur pour cette annonce : acceptée depuis moins de `OFFER_VALID_HOURS` (72 h par
+  défaut), inférieure au prix affiché, annonce en ligne. Sinon le prix affiché s'applique. Le prix affiché d'origine est
+  gardé sur la vente (`transactions.listPrice`) : le récapitulatif indique « Prix négocié (affiché 20,00 €) ».
+- Une nouvelle proposition retire la précédente ; une proposition refusée ou expirée ne donne droit à rien.
+
+## Tout arrive en direct (AUDIT §60)
+
+Tout ce qui s'écrit dans une conversation — message, photo, proposition, réponse à une proposition, ticket
+automatique, que l'envoi passe par le socket ou par la route REST — sort par **un seul canal**
+(`ConversationsService.onMessageEvent`), que la passerelle relaie : `message` (nouveau), `message:update` (ticket de
+proposition qui change d'état) à la conversation ouverte, `inbox` aux deux membres. Le navigateur fusionne par
+identifiant, se resynchronise à chaque reconnexion, au retour sur l'onglet et au retour du réseau, relit son jeton à
+chaque connexion, et garde une relecture périodique de secours (10 s hors direct, 30 s en direct, onglet visible).
+
+## Blocs repliables
+
+L'en-tête de la vente et les réponses rapides sont **repliés par défaut** (composant `Disclosure` : commande pleine
+largeur, médaillon à chevron animé, `aria-expanded`). Les étapes et les boutons de l'étape en cours restent toujours
+visibles ; le détail (mode de remise, aide, lien « Détails de la vente ») se déplie.

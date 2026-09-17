@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
+import { IsDefined, IsIn, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
 import { MAX_PARCEL_WEIGHT_GRAMS } from '../shipping.constants';
 import { ShippingMode } from '../shipping-provider.interface';
 
@@ -107,6 +107,7 @@ export class CreateShipmentDto {
   @Type(() => ParcelDto)
   parcel: ParcelDto;
 
+  @IsDefined({ message: "L'adresse de l'expéditeur est requise." })
   @ValidateNested()
   @Type(() => ShippingAddressDto)
   sender: ShippingAddressDto;

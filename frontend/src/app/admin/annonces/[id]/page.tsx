@@ -110,7 +110,7 @@ export default function AdminListingPage() {
       <div className="a-head" style={{ marginTop: 8 }}>
         <div>
           <h1>{l.title} <span className={`a-pill ${s.cls}`}>{s.label}</span></h1>
-          <p className="mono">{l.id} · {l.category?.name} · {formatPrice(l.price, l.priceType)} · {l.viewsCount} vues · créée {formatDateTime(l.createdAt)}</p>
+          <p className="mono">{l.id} · {l.category?.name} · {formatPrice(l.price, l.priceType)} · {l.viewsCount} vue{l.viewsCount > 1 ? "s" : ""} · créée {formatDateTime(l.createdAt)}</p>
         </div>
         <Link href={`/annonces/${l.id}`} className="a-btn" target="_blank">Voir sur le site ↗</Link>
       </div>

@@ -177,6 +177,8 @@ export class StripePaymentProvider implements IPaymentProvider {
       }
       case 'charge.refunded': {
         const ch = event.data.object as Stripe.Charge;
+        // Remboursement PARTIEL (geste commercial fait dans le tableau de bord) : la vente ne passe pas « remboursée »
+        if (!ch.refunded) return { ...base, type: 'ignored' };
         return { ...base, type: 'payment_refunded', providerPaymentId: typeof ch.payment_intent === 'string' ? ch.payment_intent : ch.payment_intent?.id };
       }
       default:
@@ -217,7 +219,7 @@ export class StripePaymentProvider implements IPaymentProvider {
       transfer_group: params.transactionId,
       description: params.description,
       metadata: { transactionId: params.transactionId },
-    });
+    }, { idempotencyKey: `payout-${params.transactionId}` });
     return { transferId: transfer.id };
   }
 

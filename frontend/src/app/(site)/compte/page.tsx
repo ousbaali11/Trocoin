@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { LoadError } from "@/components/ui/LoadError";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { formatDate, LISTING_STATUS_LABELS } from "@/lib/format";
@@ -23,14 +24,19 @@ export default function DashboardPage() {
   const [convCount, setConvCount] = useState(0);
   const [txs, setTxs] = useState<Transaction[]>([]);
   const [notifs, setNotifs] = useState<Notification[]>([]);
+  const [failed, setFailed] = useState(false);
 
-  useEffect(() => {
-    api<Stats>("/listings/mine/stats").then(setStats).catch(() => null);
+  const load = useCallback(() => {
+    setFailed(false);
+    api<Stats>("/listings/mine/stats").then(setStats).catch(() => setFailed(true));
     api<ListingCard[]>("/listings/mine").then((l) => setListings(l.slice(0, 4))).catch(() => null);
     api<ConversationSummary[]>("/conversations").then((c) => { setConvCount(c.length); setConvs(c.slice(0, 4)); }).catch(() => null);
     api<Transaction[]>("/transactions/mine").then((t) => setTxs(t.filter((x) => ["sequestre", "livree", "litige"].includes(x.status)))).catch(() => null);
     api<Notification[]>("/notifications").then((n) => setNotifs(n.filter((x) => !x.readAt).slice(0, 4))).catch(() => null);
   }, []);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   if (!user) return null;
   const pendingActions = txs.length + (stats?.byStatus.en_attente ?? 0);
@@ -43,7 +49,7 @@ export default function DashboardPage() {
           <h1>Bonjour {user.displayName}</h1>
           <div className="row small muted">
             <Rating value={user.ratingAvg} count={user.ratingCount} />
-            <span>· Membre depuis le {formatDate(user.createdAt)}</span>
+            <span>Membre depuis le {formatDate(user.createdAt)}</span>
           </div>
         </div>
         <Link href="/deposer" className="btn btn-primary">Déposer une annonce</Link>
@@ -64,6 +70,8 @@ export default function DashboardPage() {
           <Stat label="Mises en favori" value={stats.favorites ?? 0} />
           <Stat label="Conversations" value={convCount} href="/compte/messages" />
         </div>
+      ) : failed ? (
+        <LoadError message="Impossible de charger votre tableau de bord." onRetry={load} />
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }} aria-hidden="true">
           {[0, 1, 2, 3].map((i) => <div key={i} className="skeleton" style={{ height: 96 }} />)}
@@ -84,7 +92,7 @@ export default function DashboardPage() {
                 <Link href={`/annonces/${l.id}`} style={{ flex: "1 1 160px", minWidth: 0, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.title}</Link>
                 <span className="row" style={{ gap: 10, flexWrap: "nowrap" }}>
                   <span className={LISTING_STATUS_LABELS[l.status].pill}>{LISTING_STATUS_LABELS[l.status].label}</span>
-                  <span className="small muted" style={{ whiteSpace: "nowrap" }}>{l.viewsCount} vues</span>
+                  <span className="small muted" style={{ whiteSpace: "nowrap" }}>{l.viewsCount} vue{l.viewsCount > 1 ? "s" : ""}</span>
                   <Link href={`/compte/annonces/${l.id}/modifier`} className="small" style={{ whiteSpace: "nowrap" }}>Modifier</Link>
                 </span>
               </li>

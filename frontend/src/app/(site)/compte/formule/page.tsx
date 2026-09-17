@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { LoadError } from "@/components/ui/LoadError";
 import { useToast } from "@/lib/toast-context";
 import { useConfirm } from "@/lib/confirm-context";
 import { formatDate, formatEuros } from "@/lib/format";
@@ -13,9 +14,11 @@ export default function FormulePage() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [ent, setEnt] = useState<Entitlements | null>(null);
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
   const load = useCallback(() => {
-    api<Plan[]>("/plans").then(setPlans).catch(() => null);
-    api<Entitlements>("/users/me/entitlements").then(setEnt).catch(() => null);
+    setFailed(false);
+    api<Plan[]>("/plans").then(setPlans).catch(() => setFailed(true));
+    api<Entitlements>("/users/me/entitlements").then(setEnt).catch(() => setFailed(true));
   }, []);
   useEffect(() => {
     load();
@@ -44,11 +47,12 @@ export default function FormulePage() {
     }
   };
 
-  const free = ent ? !ent.monetizationEnabled : true;
+  const free = ent ? !ent.monetizationEnabled : false;
   return (
     <div>
       <h1>Formule</h1>
-      {free ? (
+      {failed && <LoadError message="Impossible de charger les formules." onRetry={load} />}
+      {!ent ? null : free ? (
         <div className="alert alert-success">
           <strong>Période de lancement : tout est gratuit.</strong> Annonces illimitées, mises en avant incluses, statistiques et vitrine pour tous les comptes, particuliers comme professionnels. Les formules ci-dessous s&apos;appliqueront uniquement quand la monétisation sera activée ; vous serez prévenu à l&apos;avance.
         </div>
@@ -57,13 +61,13 @@ export default function FormulePage() {
           {ent?.plan ? <>Votre formule actuelle : <strong>{ent.plan.name}</strong>{ent.subscription?.endsAt && ` (jusqu'au ${formatDate(ent.subscription.endsAt)})`}.</> : <>Aucune formule : {ent?.listingsLimit} annonces gratuites par 30 jours, mise en avant à l&apos;unité.</>}
         </div>
       )}
-      {plans.length === 0 && !ent && (
+      {plans.length === 0 && !ent && !failed && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }} aria-hidden="true">
           {[0, 1, 2].map((i) => <div key={i} className="skeleton" style={{ height: 220 }} />)}
         </div>
       )}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
-        {plans.map((p) => {
+        {ent && plans.map((p) => {
           const current = ent?.plan?.id === p.id;
           return (
             <div key={p.id} className="panel" style={{ borderColor: current ? "var(--accent)" : undefined }}>

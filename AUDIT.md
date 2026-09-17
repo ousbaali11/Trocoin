@@ -3132,3 +3132,119 @@ trois lignes, dont « Frais de livraison Mondial Relay (en point de retrait) 5,0
 aucun transporteur proposé, achat avec envoi → 400. Retour par « ← » sans payer puis abandon ; annonces et compte
 temporaires supprimés (204). La génération du bon d'envoi demande une vente payée : prouvée par `phase36`,
 `17-expedition`, `26-suivi-messagerie` et les captures de la pile locale — aucun numéro de carte n'est saisi en production.
+
+## 60. Prix négocié payable, messagerie en direct, blocs de la conversation, audit général (sécurité, paiement, interfaces) — 17 septembre 2026
+
+Retour du propriétaire après un essai à deux comptes : (1) une proposition de prix acceptée ne servait à rien — le
+ticket disait « acceptée » mais l'acheteur payait toujours le prix affiché ; (2) des messages, des tickets de
+proposition et des tickets de suivi n'apparaissaient qu'après avoir actualisé la page ; (3) cinq blocs de la
+conversation à revoir (A réponses rapides, B flèche de retour, F tickets automatiques, K boutons d'action, N en-tête de
+la vente) ; (4) un audit général : bugs, failles, architecture, interfaces (console d'administration comprise),
+couleurs, logo, mécanisme de paiement — sur grand écran et sur téléphone.
+
+### 1. Proposition acceptée → « Payer 15,00 € »
+
+- Le prix négocié est **résolu par le serveur, jamais envoyé par le navigateur** : `negotiatedPrice(listing, buyerId)`
+  cherche la dernière proposition **acceptée** de CET acheteur sur CETTE annonce, acceptée depuis moins de
+  `OFFER_VALID_HOURS` (72 h par défaut), strictement inférieure au prix affiché, annonce toujours en ligne. `quote()`
+  renvoie `offer` et `listPrice` ; `createTransaction` calcule protection, commission et versement sur le prix
+  négocié et garde le prix affiché dans `transactions.listPrice`. Un autre acheteur, une proposition expirée, refusée
+  ou remplacée → prix affiché. Migration `1789580000000` (`messages.offerAnsweredAt`, `transactions.listPrice`).
+- Acheteur : le ticket « Acceptée » porte le bouton **« Payer 15,00 € »** et « Prix valable jusqu'au … » ; le bouton
+  d'achat de l'en-tête de la conversation devient « Payer 15,00 € » ; la fenêtre de paiement s'ouvre directement
+  (`?acheter=1`), ligne « Prix négocié », total recalculé (15,00 € + 1,25 € = 16,25 €) ; la fiche annonce rappelle
+  « Prix négocié avec le vendeur : 15,00 € au lieu de 20,00 € ». Vendeur : « En attente du paiement de l'acheteur ».
+  Récapitulatif de la vente : « Prix négocié (affiché 20,00 €) ». Message automatique : « … (prix négocié) ».
+
+### 2. « Il faut actualiser pour voir les messages » — cause et correction
+
+Cause : seul un message **texte envoyé par le socket** était diffusé. Les propositions, leurs réponses, les photos, les
+messages envoyés par la route REST de secours et une partie des tickets automatiques étaient enregistrés **sans prévenir
+personne**. Côté navigateur : aucune resynchronisation après une reconnexion ou un retour sur l'onglet (téléphone mis
+en veille), jeton figé dans l'authentification du socket (déconnexion silencieuse après son expiration), et `load()`
+écrasait la liste au lieu de la fusionner.
+
+- Serveur : un seul canal d'événements dans `ConversationsService` (`onMessageEvent` → `new` / `update`), alimenté par
+  `persist()`, `postOffer`, `answerOffer`, `postSystemEvent` ; la passerelle le relaie à la salle de la conversation
+  (`message`, `message:update`) et aux deux membres (`inbox`). Plus aucune émission ailleurs.
+- Navigateur : fusion par identifiant (`upsert`), resynchronisation à chaque `connect`, au retour sur l'onglet, au
+  retour en ligne et à la sortie du cache de navigation ; jeton relu (et rafraîchi) à chaque connexion ; filet de
+  sécurité toutes les 10 s hors direct, 30 s en direct, onglet visible seulement ; accusé de lecture seulement si
+  l'onglet est visible ; boîte de réception mise à jour par `inbox`. L'écran d'erreur plein cadre ne s'affiche plus
+  que si rien n'a pu être chargé.
+- Passerelle durcie : identifiants validés (UUID), 30 messages par minute et par socket.
+
+### 3. Blocs de la conversation
+
+- **A — réponses rapides** et **N — en-tête de la vente** : composant `Disclosure`, replié par défaut, commande sur
+  toute la largeur (≥ 44 px) avec médaillon à chevron animé, état `aria-expanded`, contenu `inert` et masqué une fois
+  replié, animation coupée si l'utilisateur la refuse ; texte réduit. Les phrases ne sont plus en capitales
+  interlettrées (`.pill-phrase`) et « ? » ne passe plus seul à la ligne (espace insécable).
+- **B — retour** : `BackLink`, disque de 40 px, flèche dessinée (tige + pointe) qui glisse au survol, nom accessible
+  « Retour aux messages ». Repris sur la page d'une vente.
+- **F — tickets** : une phrase par ticket (`sale-events.ts` réécrit), proposition : montant, état, action.
+- **K — boutons de la vente** : mêmes boutons, compacts, deux lignes au plus (vérifié par test à 375 px).
+
+### 4. Audit de sécurité et du mécanisme de paiement — défauts trouvés et corrigés
+
+| Défaut | Gravité | Correction |
+| --- | --- | --- |
+| Le **code de remise en main propre** revenait dans la réponse des routes d'action (expédier, confirmer, annuler…) — le vendeur pouvait se verser l'argent sans remettre l'article | critique | toutes les routes passent par `viewFor()` ; le code n'est rendu qu'à l'acheteur ; 5 codes faux → vente verrouillée 1 h |
+| Deux confirmations simultanées (ou tâche planifiée + clic) pouvaient déclencher **deux versements** | élevée | transitions par UPDATE conditionnel (`claim`), versement réservé atomiquement (`transferId = en-cours:…`), clé d'idempotence Stripe `payout-<vente>`, réservation périmée reprise après 10 min |
+| Deux acheteurs pouvaient payer la **même annonce** (mode hébergé) | élevée | `isFirstActiveSale` après insertion ; le second paiement est refusé ou remboursé ; webhook : paiement arrivé sur une vente annulée → remboursement |
+| Annonce refusée ou en attente de modération remise en ligne par « désactiver / réactiver » ou « renouveler » | élevée | changement de statut refusé depuis `en_attente` / `refusee` ; le renouvellement repasse la modération |
+| Annonce modifiée, renouvelée ou supprimée **pendant une vente** (ou pendant un paiement en cours) | moyenne | refusé tant qu'une vente est active ou qu'un paiement de moins de 45 min est en attente |
+| L'acheteur voyait l'adresse et le téléphone du vendeur dans l'expédition ; le vendeur voyait l'adresse de l'acheteur **avant** le paiement | moyenne | vues par rôle (`getForViewer`, `viewFor`) |
+| Bon d'envoi téléchargeable après annulation | moyenne | PDF effacé et refusé (400) dès l'annulation ou le remboursement |
+| Remboursement **partiel** Stripe traité comme total | moyenne | `charge.refunded` ignoré si `refunded` est faux |
+| Corps d'expédition sans expéditeur → erreur 500 | faible | `@IsDefined`, 400 |
+
+Reste connu : le code postal d'expéditeur saisi par le vendeur peut différer de celui de la cotation (écart de tarif
+possible, seulement journalisé) ; les onglets de filtre utilisent `role="tab"` sans panneau associé (toléré, à
+reprendre avec une navigation aux flèches).
+
+Mécanisme de paiement, **vérifié et jugé correct** : montants toujours calculés par le serveur (prix, protection,
+livraison, prix négocié), garde `expectedTotal` → 409 sans débit, barème figé sur la vente, séquestre jusqu'à la
+réception, remboursement intégral, signature des webhooks, aucun numéro de carte ne transite par Trocoin (Stripe
+Checkout), versement par Stripe Connect après confirmation ou à l'échéance.
+
+### 5. Audit des interfaces — 84 pages parcourues (42 à 1280 px, 42 à 375 px)
+
+Mesures automatiques sur toutes les pages publiques, du compte et de la console : **aucun défilement horizontal,
+aucune erreur de console, un seul `h1` partout**. Défauts relevés à la lecture des captures et corrigés :
+
+- **Fiche annonce sur téléphone** : « Contacter » et « Acheter » étaient à quatre écrans de défilement → barre fixe en
+  bas (prix, « Message », « Acheter »), qui s'efface quand le vrai bloc d'actions est à l'écran et derrière les fenêtres.
+- **Console d'administration sur téléphone** : bandeau de 120 px (titres de groupe au-dessus des liens) → une ligne de
+  56 px ; quatorze chiffres empilés un par ligne → deux colonnes ; filtres pleine largeur, 44 px, 16 px (pas de zoom iOS).
+- **Recherche de la console** : une requête par caractère, sans ordre garanti → une requête par pause de frappe,
+  réponses périmées ignorées, champ nommé (`type="search"`, `aria-label`).
+- **Squelettes sans fin** quand une requête échoue (tableau de bord, mes annonces, paiements, formule, réglages de la
+  console) → message et bouton « Réessayer » (`LoadError`).
+- **Formule** : « Période de lancement : tout est gratuit » s'affichait avant de connaître les droits — donc aussi en
+  cas d'échec ou brièvement avec la monétisation active → affiché seulement une fois les droits connus.
+- **Paiements** : retour arrière depuis Stripe → bouton figé sur « Redirection… » (page sortie du cache) → réarmé.
+- **Dépôt** : `URL.createObjectURL` appelé à chaque rendu (une adresse par photo et par frappe, jamais libérée) → une
+  adresse par fichier, libérée ; étapes franchies devenues de vrais boutons (clavier) ; aperçu final resserré à 375 px.
+- **Conversation** : photo plus large que la bulle sur petit écran ; visionneuse sans bouton de fermeture ni Échap.
+- **Recherche** : sous-catégories de 24 px de haut → 36 px.
+- **Contrastes** : `--sage-dark` 4,2:1 → 5,5:1 ; contour des champs 1,3:1 → 3,3:1 (`--field-line`, WCAG 1.4.11).
+- **Liens dans le texte courant** : ils héritaient de la couleur du texte et ne se soulignaient qu'au survol — donc
+  invisibles sur un écran tactile (WCAG 1.4.1) → couleur d'accent et soulignement dans les paragraphes et les alertes.
+- **Conversation sur téléphone** : le champ de saisie ne mesurait que ~110 px → « Envoyer » devient une icône ronde
+  sous 480 px (nom accessible conservé).
+- Tableau de bord : « · » orphelin en début de ligne sur téléphone ; « 1 vues » → « 1 vue ».
+
+Couleurs et logo, **jugés cohérents et conservés** : vert bouteille `#0f7b5f` (5,2:1 avec le blanc, au-dessus du
+seuil AA), encre `#1f2937`, fond `#f6f8f7`, brique pour le danger, ocre pour l'attention ; titres Fraunces, texte Public
+Sans ; monogramme « T » carré vert + mot-symbole, lisible à 28 px ; console en ardoise / indigo, volontairement
+distincte du site public.
+
+### Vérification
+
+- API : `test/phase37` (6 tests : prix négocié et expiration, ordre des événements diffusés, code de remise jamais
+  renvoyé et verrouillage, double confirmation, vues par rôle et bon d'envoi après annulation, garde-fous de statut
+  d'annonce) ; `phase13` (remboursement partiel), `phase27` adaptées → **209 tests**, 1 ignoré.
+- Navigateur : `28-prix-negocie-direct` (deux navigateurs, aucun rechargement : message, proposition, acceptation,
+  « Payer 15,00 € », vente à 16,25 €, blocs A / B / K) et `29-audit-interfaces` (barre mobile, console mobile, recherche
+  de la console, « Réessayer », puces) jouées à 375 px et sur grand écran ; `05`, `26`, `27` adaptées.

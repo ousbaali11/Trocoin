@@ -52,7 +52,7 @@ describe('Phase 27 : autorisations sur les ressources (balayage IDOR)', () => {
       ['get', `/transactions/${txId}/shipment`],
       ['post', `/transactions/${txId}/shipment/quote`, { weightGrams: 1000 }],
       ['get', `/transactions/${txId}/shipment/relay-points?postalCode=75017&city=Paris`],
-      ['post', `/transactions/${txId}/shipment`, { mode: 'domicile', weightGrams: 1000 }],
+      ['post', `/transactions/${txId}/shipment`, { mode: 'domicile', sender: { name: 'Un Tiers', line1: '1 rue du Test', postalCode: '75001', city: 'Paris' } }],
       ['get', `/transactions/${txId}/shipment/label.pdf`],
       ['get', `/transactions/${txId}/shipment/tracking`],
     ];

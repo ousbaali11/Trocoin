@@ -71,6 +71,33 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
   const [listingId, setListingId] = useState<string | null>(existing?.id ?? null);
   const [photos, setPhotos] = useState<ListingPhoto[]>(existing?.photos ?? []);
   const [pending, setPending] = useState<File[]>([]);
+  // Aperçus des photos à envoyer : UNE adresse par fichier, libérée quand la photo est retirée ou le formulaire quitté.
+  // Avant (AUDIT §60) : URL.createObjectURL était appelé à chaque rendu — chaque frappe dans un champ créait une
+  // nouvelle adresse par photo, jamais libérée (mémoire qui enfle, images qui clignotent sur téléphone).
+  const previewUrls = useRef(new Map<File, string>());
+  const previewOf = (f: File) => {
+    let url = previewUrls.current.get(f);
+    if (!url) {
+      url = URL.createObjectURL(f);
+      previewUrls.current.set(f, url);
+    }
+    return url;
+  };
+  useEffect(() => {
+    for (const [f, url] of previewUrls.current) {
+      if (!pending.includes(f)) {
+        URL.revokeObjectURL(url);
+        previewUrls.current.delete(f);
+      }
+    }
+  }, [pending]);
+  useEffect(() => {
+    const urls = previewUrls.current;
+    return () => {
+      urls.forEach((u) => URL.revokeObjectURL(u));
+      urls.clear();
+    };
+  }, []);
   const [cropping, setCropping] = useState<{ file: File; index: number } | null>(null);
   const [dragIndex, setDragIndex] = useState<{ list: "photos" | "pending"; index: number } | null>(null);
   const [form, setForm] = useState<FormState>({
@@ -340,8 +367,12 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
         </div>
         <ol className="row" style={{ listStyle: "none", padding: 0, margin: "10px 0 0", gap: 6, flexWrap: "wrap" }} aria-label="Étapes">
           {STEPS.map((s, i) => (
-            <li key={s} className={`pill ${i === step ? "pill-accent" : i < step ? "pill-green" : ""}`} aria-current={i === step ? "step" : undefined} style={{ cursor: i < step ? "pointer" : "default" }} onClick={() => i < step && setStep(i)}>
-              {i + 1}. {s}
+            <li key={s} aria-current={i === step ? "step" : undefined}>
+              {i < step ? (
+                <button type="button" className="pill pill-green" style={{ cursor: "pointer", border: 0 }} onClick={() => setStep(i)} aria-label={`Revenir à l'étape ${i + 1} : ${s}`}>{i + 1}. {s}</button>
+              ) : (
+                <span className={`pill ${i === step ? "pill-accent" : ""}`}>{i + 1}. {s}</span>
+              )}
             </li>
           ))}
         </ol>
@@ -505,7 +536,7 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
               <PhotoTile key={p.id} src={mediaUrl(p.url)!} cover={i === 0} position={i + 1} locked={!!p.lockedAt} onRemove={() => removePhoto(p)} onMove={(d) => moveTile("photos", i, d)} {...tileProps("photos", i)} draggable={!p.lockedAt} />
             ))}
             {pending.map((f, i) => (
-              <PhotoTile key={f.name + i + f.size} src={URL.createObjectURL(f)} cover={photos.length === 0 && i === 0} position={photos.length + i + 1} pendingLabel="À envoyer" onCrop={() => setCropping({ file: f, index: i })} onRemove={() => setPending((p) => p.filter((_, j) => j !== i))} onMove={(d) => moveTile("pending", i, d)} {...tileProps("pending", i)} />
+              <PhotoTile key={f.name + i + f.size} src={previewOf(f)} cover={photos.length === 0 && i === 0} position={photos.length + i + 1} pendingLabel="À envoyer" onCrop={() => setCropping({ file: f, index: i })} onRemove={() => setPending((p) => p.filter((_, j) => j !== i))} onMove={(d) => moveTile("pending", i, d)} {...tileProps("pending", i)} />
             ))}
           </div>
           {photos.length + pending.length === 0 && <p className="hint" style={{ marginTop: 10 }}>Les annonces avec photo reçoivent beaucoup plus de contacts. Vous pourrez en ajouter plus tard.</p>}
@@ -551,11 +582,11 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
         <div>
           <h2>Aperçu avant publication</h2>
           <CompletenessHint photosCount={photos.length + pending.length} description={form.description} price={form.price} priceType={form.priceType} attributes={form.attributes} schema={schema} onAction={completenessAction} />
-          <div className="card" style={{ display: "grid", gridTemplateColumns: "180px 1fr", gap: 16 }}>
+          <div className="card" style={{ display: "grid", gridTemplateColumns: "clamp(96px, 30vw, 180px) minmax(0, 1fr)", gap: 16 }}>
             <div style={{ aspectRatio: "4/3", background: "var(--ivory-warm)", borderRadius: 8, overflow: "hidden" }}>
               {(photos[0] || pending[0]) && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={photos[0] ? mediaUrl(photos[0].url) : URL.createObjectURL(pending[0])} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                <img src={photos[0] ? mediaUrl(photos[0].url) : previewOf(pending[0])} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
               )}
             </div>
             <div>

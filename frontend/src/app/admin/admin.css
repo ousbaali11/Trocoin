@@ -413,3 +413,52 @@
 .admin-nav-group:first-of-type {
   margin-top: 0;
 }
+
+/* Petit écran (AUDIT §60). Placé en fin de fichier : ces règles doivent l'emporter sur `.admin-nav-group` ci-dessus.
+   - bandeau : les groupes s'aplatissent (titres masqués, liens sur UNE ligne) — il mesurait 120 px de haut, titres
+     au-dessus des liens, soit un sixième de l'écran d'un téléphone ;
+   - chiffres du tableau de bord : deux colonnes (quatorze cartes pleine largeur faisaient cinq écrans de défilement) ;
+   - filtres : champs pleine largeur, de hauteur tactile. */
+@media (max-width: 900px) {
+  .admin-nav-group {
+    display: contents;
+  }
+  .admin-nav-title {
+    display: none;
+  }
+  .admin-side > a {
+    margin-top: 0 !important;
+  }
+  .admin-side a {
+    min-height: 40px;
+    gap: 6px;
+  }
+}
+@media (max-width: 640px) {
+  .a-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .a-stat {
+    padding: 12px;
+  }
+  .a-stat .v {
+    font-size: 1.35rem;
+    overflow-wrap: anywhere;
+  }
+  .a-filters > * {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+  .a-input,
+  .a-select {
+    min-height: 44px;
+    font-size: 1rem; /* 16 px : pas de zoom automatique à la saisie sur iOS */
+  }
+  .a-btn {
+    min-height: 40px;
+  }
+  .a-head h1 {
+    font-size: 1.3rem;
+  }
+}

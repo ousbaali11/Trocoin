@@ -107,7 +107,10 @@ export class ShippingService {
   /** Vente annulée avant l'expédition : le bon d'envoi déjà généré est annulé chez le prestataire quand il le permet (au mieux, sans bloquer). */
   async cancelLabelFor(transactionId: string): Promise<void> {
     const shipment = await this.shipments.findOne({ where: { transactionId, status: 'etiquette_prete' } });
-    if (!shipment?.providerRef || !this.provider.cancel) return;
+    if (!shipment) return;
+    // Le PDF est effacé dans tous les cas : un bon d'envoi d'une vente remboursée ne doit plus pouvoir servir
+    await this.shipments.update(shipment.id, { labelPdfBase64: null as any, status: 'echec', error: 'vente annulée : bon d\'envoi retiré' });
+    if (!shipment.providerRef || !this.provider.cancel) return;
     try {
       const done = await this.provider.cancel(shipment.providerRef);
       this.logger.log(`Bon d'envoi ${shipment.providerRef} de la vente annulée ${transactionId} : ${done ? 'annulé chez le prestataire' : 'annulation refusée (à reprendre à la main)'}`);
@@ -255,11 +258,18 @@ export class ShippingService {
     const tx = await this.ownedTransaction(transactionId, userId);
     const shipment = await this.shipments.findOne({ where: { transactionId: tx.id } });
     if (!shipment) return null;
-    return this.view(shipment);
+    if (tx.sellerId === userId) return this.view(shipment);
+    // Acheteur (AUDIT §60) : l'état et le suivi de SON colis, jamais l'adresse ni le téléphone du vendeur, ni les
+    // références et messages techniques du prestataire
+    const { sender, providerRef, error, offerCode, ...rest } = this.view(shipment);
+    void sender; void providerRef; void error; void offerCode;
+    return rest as ShipmentView;
   }
 
   async labelPdf(transactionId: string, sellerId: string): Promise<Buffer> {
-    await this.sellerTransaction(transactionId, sellerId, false);
+    const tx = await this.sellerTransaction(transactionId, sellerId, false);
+    // Vente annulée ou remboursée : le bon d'envoi (payé par la livraison de l'acheteur, qui a été remboursé) n'est plus délivré
+    if (['annulee', 'rembourse'].includes(tx.status)) throw new BadRequestException("Cette vente est annulée : le bon d'envoi n'est plus disponible.");
     const shipment = await this.shipments.findOne({ where: { transactionId } });
     if (!shipment || !shipment.labelPdfBase64) throw new NotFoundException("Aucune étiquette disponible pour cette vente.");
     return Buffer.from(shipment.labelPdfBase64, 'base64');

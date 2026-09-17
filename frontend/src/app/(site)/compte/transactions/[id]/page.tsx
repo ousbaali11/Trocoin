@@ -9,6 +9,7 @@ import { useConfirm } from "@/lib/confirm-context";
 import { deliveryLabel, formatDateTime, formatEuros, formatPercent, PICKUP_TYPE_LABELS, TX_STATUS_LABELS } from "@/lib/format";
 import type { Review, Transaction } from "@/lib/types";
 import { Modal } from "@/components/ui/Modal";
+import { BackLink } from "@/components/ui/BackLink";
 import { ShipmentPanel } from "@/components/transactions/ShipmentPanel";
 import { ShipmentStatus } from "@/components/transactions/ShipmentStatus";
 
@@ -42,7 +43,8 @@ export default function TransactionPage() {
     try {
       const t = await api<Transaction>(`/transactions/${id}`);
       setTx(t);
-      const given = await api<Review[]>("/users/me/reviews-given");
+      setError(null);
+      const given = await api<Review[]>("/users/me/reviews-given").catch(() => [] as Review[]);
       setMyReview(given.find((r) => r.transactionId === id) ?? null);
     } catch (e) {
       setError((e as Error).message);
@@ -74,7 +76,7 @@ export default function TransactionPage() {
     }
   };
 
-  if (error) return <div className="alert alert-error">{error} <Link href="/compte/transactions">Retour</Link></div>;
+  if (error && !tx) return <div className="alert alert-error">{error} <Link href="/compte/transactions">Retour</Link></div>;
   if (!tx) return <div className="skeleton" style={{ height: 320 }} />;
   const st = TX_STATUS_LABELS[tx.status];
   const buyer = tx.role === "acheteur";
@@ -85,7 +87,7 @@ export default function TransactionPage() {
 
   return (
     <div className="stack" style={{ gap: 16 }}>
-      <Link href="/compte/transactions" className="small">← Achats et ventes</Link>
+      <BackLink href="/compte/transactions" label="Achats et ventes" showLabel />
       <div className="page-head" style={{ marginBottom: 0 }}>
         <div>
           <p className="eyebrow">{buyer ? "Achat" : "Vente"} · {deliveryLabel(tx)}</p>
@@ -137,7 +139,7 @@ export default function TransactionPage() {
           <h2 className="h3">Récapitulatif</h2>
           <table className="table">
             <tbody>
-              <tr><td>Prix de l&apos;article</td><td style={{ textAlign: "right" }}>{formatEuros(tx.amount)}</td></tr>
+              <tr><td>{tx.listPrice ? `Prix négocié (affiché ${formatEuros(tx.listPrice)})` : "Prix de l'article"}</td><td style={{ textAlign: "right" }}>{formatEuros(tx.amount)}</td></tr>
               {buyer ? (
                 <>
                   <tr><td>Frais de protection acheteur</td><td style={{ textAlign: "right" }}>{formatEuros(tx.buyerFee)}</td></tr>

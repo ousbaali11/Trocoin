@@ -219,8 +219,11 @@ describe('Phase 13 : paiement hébergé (Checkout, capture différée) et webhoo
     it('checkout.session.completed → checkout_completed avec la session et la transaction ; charge.refunded → payment_refunded', () => {
       const completed = signed({ id: 'evt_c', object: 'event', type: 'checkout.session.completed', data: { object: { id: 'cs_test_abc', object: 'checkout.session', client_reference_id: 'tx-123' } } });
       expect(provider.parseWebhook(completed.payload, completed.header)).toEqual({ id: 'evt_c', raw: 'checkout.session.completed', type: 'checkout_completed', providerSessionId: 'cs_test_abc', transactionId: 'tx-123' });
-      const refunded = signed({ id: 'evt_r', object: 'event', type: 'charge.refunded', data: { object: { id: 'ch_1', object: 'charge', payment_intent: 'pi_9' } } });
+      const refunded = signed({ id: 'evt_r', object: 'event', type: 'charge.refunded', data: { object: { id: 'ch_1', object: 'charge', payment_intent: 'pi_9', refunded: true } } });
       expect(provider.parseWebhook(refunded.payload, refunded.header)).toMatchObject({ type: 'payment_refunded', providerPaymentId: 'pi_9' });
+      // Remboursement partiel (geste commercial) : la vente ne passe pas « remboursée » (AUDIT §60)
+      const partial = signed({ id: 'evt_p', object: 'event', type: 'charge.refunded', data: { object: { id: 'ch_2', object: 'charge', payment_intent: 'pi_10', refunded: false, amount_refunded: 500 } } });
+      expect(provider.parseWebhook(partial.payload, partial.header).type).toBe('ignored');
       const other = signed({ id: 'evt_o', object: 'event', type: 'customer.created', data: { object: { id: 'cus_1', object: 'customer' } } });
       expect(provider.parseWebhook(other.payload, other.header).type).toBe('ignored');
     });

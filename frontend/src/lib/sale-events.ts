@@ -4,6 +4,7 @@ import type { Message } from "@/lib/types";
 /**
  * Messages automatiques de suivi de vente (AUDIT §57) : le serveur inscrit l'étape dans la conversation, le site
  * compose le texte selon le lecteur (acheteur ou vendeur). Aucun de ces textes n'est écrit par une personne.
+ * Textes volontairement COURTS (AUDIT §60) : un titre, une phrase ; le détail vit dans « Détails de la vente ».
  */
 export interface SaleEventText {
   icon: string;
@@ -22,57 +23,56 @@ export function saleEventText(m: Message, role: "acheteur" | "vendeur", otherNam
   const handDelivery = meta.deliveryMethod === "main_propre";
   const payout = num(meta.payout);
   const paidOut = meta.transferred !== 0;
+  const amount = payout ? ` de ${formatEuros(payout)}` : "";
   switch (m.systemEvent) {
     case "achat_confirme": {
-      const pickup = str(meta.pickupPoint);
-      const carrier = meta.deliveryMethod === "colissimo" || meta.deliveryMethod === "mondial_relay" ? DELIVERY_LABELS[meta.deliveryMethod] : null;
-      const where = handDelivery ? "Remise en main propre." : pickup ? `Retrait choisi : ${pickup} (${carrier}).` : meta.deliveryMode === "domicile" ? `Livraison à domicile par ${carrier}.` : carrier ? `Envoi par ${carrier}.` : "";
+      const negotiated = num(meta.listPrice) ? " (prix négocié)" : "";
       return buyer
-        ? { icon: "✅", title: "Achat confirmé", body: `Votre paiement de ${formatEuros(num(meta.amount))} est sécurisé : Trocoin le conserve jusqu'à ce que vous confirmiez la réception. Vous recevrez ici, dans cette conversation, les mises à jour sur l'avancement ${handDelivery ? "de la remise" : "du colis"}. ${where}${num(meta.shipping) ? ` Livraison payée : ${formatEuros(num(meta.shipping))}.` : ""}`.trim() }
-        : { icon: "🛒", title: "Nouvelle vente", body: `${otherName} a acheté votre article (${formatEuros(num(meta.price))}) ; le paiement est conservé par Trocoin. Confirmez que l'article est disponible, puis ${handDelivery ? "convenez du rendez-vous" : num(meta.shipping) ? "générez le bon d'envoi : la livraison est déjà payée par l'acheteur" : "expédiez-le"}. ${where}`.trim() };
+        ? { icon: "✅", title: "Achat confirmé", body: `${formatEuros(num(meta.amount))} payés${negotiated}, conservés par Trocoin. Vous suivrez ${handDelivery ? "la remise" : "le colis"} ici.` }
+        : { icon: "🛒", title: "Nouvelle vente", body: `${otherName} a payé ${formatEuros(num(meta.price))}${negotiated}. Confirmez que l'article est disponible.` };
     }
     case "disponibilite_confirmee":
       return buyer
-        ? { icon: "👍", title: "Article disponible", body: "Le vendeur a confirmé que l'article est disponible et prêt à partir." }
-        : { icon: "👍", title: "Disponibilité confirmée", body: "Vous avez confirmé que l'article est disponible : l'acheteur est prévenu." };
+        ? { icon: "👍", title: "Article disponible", body: handDelivery ? "Convenez du rendez-vous ici." : "Le vendeur prépare l'envoi." }
+        : { icon: "👍", title: "Disponibilité confirmée", body: "L'acheteur est prévenu." };
     case "etiquette_generee": {
       const tracking = str(meta.trackingNumber);
       return buyer
-        ? { icon: "🏷️", title: "Bon d'envoi généré", body: `Le vendeur a généré le bon d'envoi de votre colis.${tracking ? ` Votre numéro de suivi : ${tracking}.` : ""} Il sera actif dès que le colis aura été déposé.`, trackingUrl: str(meta.trackingUrl) }
-        : { icon: "🏷️", title: "Bon d'envoi prêt", body: `Imprimez le bon d'envoi (PDF), collez-le sur le colis et déposez-le${tracking ? ` (suivi ${tracking})` : ""}. La livraison a été payée par l'acheteur : vous n'avez rien à régler. Confirmez ensuite l'expédition.` };
+        ? { icon: "🏷️", title: "Bon d'envoi généré", body: tracking ? `Votre numéro de suivi : ${tracking}` : "Le vendeur va déposer le colis.", trackingUrl: str(meta.trackingUrl) }
+        : { icon: "🏷️", title: "Bon d'envoi prêt", body: "Imprimez-le, collez-le sur le colis, déposez-le, puis confirmez l'expédition." };
     }
     case "expedie": {
       const tracking = str(meta.trackingNumber);
       const until = str(meta.autoConfirmAt);
-      const carrier = meta.carrier === "colissimo" || meta.carrier === "mondial_relay" ? DELIVERY_LABELS[meta.carrier] : "le transporteur";
+      const carrier = meta.carrier === "colissimo" || meta.carrier === "mondial_relay" ? DELIVERY_LABELS[meta.carrier] : "transporteur";
       return buyer
-        ? { icon: "📦", title: "Colis expédié", body: `Le vendeur a confié votre colis à ${carrier}.${tracking ? ` Numéro de suivi : ${tracking}.` : ""} À réception, confirmez-la ici pour que le vendeur soit payé${until ? ` (sans nouvelle de votre part, elle sera considérée acquise le ${formatDateTime(until)})` : ""}.`, trackingUrl: str(meta.trackingUrl) }
-        : { icon: "📦", title: "Colis expédié", body: `Vous avez déclaré l'expédition${tracking ? ` (suivi ${tracking})` : ""}. Vous serez payé dès que l'acheteur aura confirmé la réception.`, trackingUrl: str(meta.trackingUrl) };
+        ? { icon: "📦", title: "Colis expédié", body: `${carrier}${tracking ? ` · suivi ${tracking}` : ""}. Confirmez la réception à l'arrivée${until ? ` (acquise d'office le ${formatDateTime(until)})` : ""}.`, trackingUrl: str(meta.trackingUrl) }
+        : { icon: "📦", title: "Colis expédié", body: `${tracking ? `Suivi ${tracking}. ` : ""}Vous serez payé dès la réception confirmée.`, trackingUrl: str(meta.trackingUrl) };
     }
     case "pret_pour_remise":
       return buyer
-        ? { icon: "🤝", title: "Vendeur prêt pour la remise", body: "Convenez du rendez-vous ici. Au moment de la remise, une fois l'objet en main, donnez votre code de remise au vendeur (il se trouve dans « Achats et ventes »)." }
-        : { icon: "🤝", title: "Prêt pour la remise", body: "Vous avez indiqué être prêt. Au rendez-vous, saisissez le code à 6 chiffres que l'acheteur vous donne pour être payé." };
+        ? { icon: "🤝", title: "Vendeur prêt pour la remise", body: "Une fois l'objet en main, donnez-lui votre code de remise." }
+        : { icon: "🤝", title: "Prêt pour la remise", body: "Au rendez-vous, saisissez le code que l'acheteur vous donne." };
     case "reception_confirmee":
       return buyer
-        ? { icon: "🎉", title: "Réception confirmée", body: "Vous avez confirmé avoir bien reçu l'article : le vendeur est payé. Merci ! Pensez à laisser un avis." }
-        : { icon: "🎉", title: "Réception confirmée par l'acheteur", body: paidOut ? `${otherName} a confirmé avoir bien reçu le colis : le virement${payout ? ` de ${formatEuros(payout)}` : ""} vers votre compte de versement est déclenché. La vente est terminée : votre annonce a été supprimée automatiquement.` : `${otherName} a confirmé avoir bien reçu le colis. Votre annonce a été supprimée automatiquement. Le virement${payout ? ` de ${formatEuros(payout)}` : ""} attend votre compte de versement : configurez-le dans « Mes paiements » pour recevoir les fonds.` };
+        ? { icon: "🎉", title: "Réception confirmée", body: "Le vendeur est payé. Pensez à laisser un avis." }
+        : { icon: "🎉", title: "Réception confirmée", body: paidOut ? `Virement${amount} déclenché. Annonce retirée.` : `Virement${amount} en attente : configurez « Mes paiements ».` };
     case "remise_validee":
       return buyer
-        ? { icon: "🎉", title: "Remise validée", body: "Le vendeur a saisi votre code de remise : la vente est terminée. Pensez à laisser un avis." }
-        : { icon: "🎉", title: "Remise validée", body: paidOut ? `Code de remise accepté : le virement${payout ? ` de ${formatEuros(payout)}` : ""} vers votre compte de versement est déclenché.` : "Code de remise accepté. Le virement attend votre compte de versement : configurez-le dans « Mes paiements »." };
+        ? { icon: "🎉", title: "Remise validée", body: "Vente terminée. Pensez à laisser un avis." }
+        : { icon: "🎉", title: "Remise validée", body: paidOut ? `Virement${amount} déclenché. Annonce retirée.` : `Virement${amount} en attente : configurez « Mes paiements ».` };
     case "reception_presumee":
       return buyer
-        ? { icon: "⏱️", title: "Réception considérée acquise", body: "Sans confirmation ni signalement dans le délai, la réception est considérée acquise et le vendeur est payé. Un problème ? Vous pouvez encore ouvrir un litige depuis « Achats et ventes »." }
-        : { icon: "⏱️", title: "Réception considérée acquise", body: `L'acheteur n'a rien signalé dans le délai : la vente est confirmée${payout ? ` et le virement de ${formatEuros(payout)} est déclenché` : ""}.` };
+        ? { icon: "⏱️", title: "Réception considérée acquise", body: "Le vendeur est payé. Un litige reste possible quelques jours." }
+        : { icon: "⏱️", title: "Réception considérée acquise", body: `Virement${amount} déclenché.` };
     case "vente_annulee": {
-      const by = meta.by === "delai" ? "Le délai d'expédition est dépassé" : meta.by === "vendeur" ? (buyer ? "Le vendeur a annulé la vente" : "Vous avez annulé la vente") : buyer ? "Vous avez annulé votre achat" : "L'acheteur a annulé son achat";
-      return { icon: "↩️", title: "Vente annulée", body: `${by} : ${buyer ? "vous êtes intégralement remboursé, frais compris" : "l'acheteur est intégralement remboursé. Votre annonce est restée marquée « Vendue » : remettez-la en ligne d'un clic si l'article est toujours à vendre"}.` };
+      const by = meta.by === "delai" ? "Délai dépassé" : meta.by === "vendeur" ? (buyer ? "Annulée par le vendeur" : "Vous avez annulé") : buyer ? "Vous avez annulé" : "Annulée par l'acheteur";
+      return { icon: "↩️", title: "Vente annulée", body: buyer ? `${by}. Vous êtes intégralement remboursé.` : `${by}. Acheteur remboursé ; remettez l'annonce en ligne si l'article est toujours à vendre.` };
     }
     case "litige_ouvert":
-      return { icon: "⚠️", title: "Litige ouvert", body: "Un médiateur Trocoin examine le dossier ; les fonds restent bloqués jusqu'à sa décision. Vous pouvez continuer à échanger ici pour trouver un accord." };
+      return { icon: "⚠️", title: "Litige ouvert", body: "Un médiateur Trocoin examine le dossier ; les fonds restent bloqués." };
     case "litige_resolu":
-      return { icon: "⚖️", title: "Litige clos", body: meta.decision === "rembourser" ? "Décision du médiateur : l'acheteur est remboursé." : "Décision du médiateur : les fonds sont versés au vendeur." };
+      return { icon: "⚖️", title: "Litige clos", body: meta.decision === "rembourser" ? "L'acheteur est remboursé." : "Les fonds sont versés au vendeur." };
     default:
       return { icon: "ℹ️", title: "Suivi de la vente", body: m.content ?? "" };
   }

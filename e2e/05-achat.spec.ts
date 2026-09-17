@@ -77,7 +77,7 @@ test('contact, messagerie temps réel, achat, réception confirmée, avis', asyn
   // --- Achat par paiement sécurisé (simulé) depuis la conversation
   await buyer.getByRole('link', { name: 'Acheter', exact: true }).click();
   await expect(buyer).toHaveURL(new RegExp(`/annonces/${listing.id}`));
-  await buyer.getByRole('button', { name: /^Acheter · / }).click();
+  // Depuis la conversation, la fenêtre de paiement s'ouvre directement (AUDIT §60)
   const pay = buyer.getByRole('dialog', { name: 'Paiement sécurisé' });
   await expect(pay).toContainText('Total à payer');
   await expect(pay).toContainText('395,00 €'); // 380 € + frais de protection plafonnés à 15 €

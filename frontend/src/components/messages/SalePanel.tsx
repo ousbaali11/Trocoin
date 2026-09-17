@@ -7,6 +7,7 @@ import { useConfirm } from "@/lib/confirm-context";
 import { useToast } from "@/lib/toast-context";
 import { deliveryLabel, formatDateTime, formatEuros, TX_STATUS_LABELS } from "@/lib/format";
 import type { ConversationSale } from "@/lib/types";
+import { Disclosure } from "@/components/ui/Disclosure";
 
 /**
  * Suivi de la vente épinglé en tête de la conversation (AUDIT §57). Les boutons appellent les routes /transactions
@@ -61,14 +62,14 @@ export function SalePanel({ sale, listing, onChanged }: { sale: ConversationSale
 
   return (
     <section data-testid="sale-panel" aria-label="Suivi de la vente" style={{ minWidth: 0, maxWidth: "100%", padding: "10px 16px", borderBottom: "1px solid var(--line-soft)", background: "var(--accent-tint)" }}>
-      <div className="row" style={{ gap: 8, alignItems: "center", justifyContent: "space-between" }}>
-        <div className="small" style={{ minWidth: 0 }}>
-          <span className={st.pill}>{st.label}</span>{" "}
-          <strong>{seller ? "Vente" : "Achat"} · {formatEuros(sale.amount)}</strong>
+      {/* En-tête repliable (AUDIT §60), replié par défaut : l'état et le montant restent lisibles, le détail se déplie */}
+      <Disclosure tone="tint" testId="sale-summary" icon={<span>{seller ? "🏷️" : "🛍️"}</span>} label={<>{seller ? "Vente" : "Achat"} · {formatEuros(sale.amount)}</>} summary={st.label} openLabel="Détails" closeLabel="Réduire">
+        <div className="small" style={{ display: "flex", flexDirection: "column", gap: 4, padding: "0 4px 2px", fontSize: ".8rem" }}>
+          <span className="muted" style={{ overflowWrap: "anywhere" }}>{deliveryLabel(sale)}</span>
+          <span className="muted">{st.help}</span>
+          <Link href={href} data-testid="sale-details" style={{ fontWeight: 700, alignSelf: "flex-start" }}>Détails de la vente →</Link>
         </div>
-        <Link href={href} className="small" data-testid="sale-details" style={{ whiteSpace: "nowrap", fontWeight: 600 }}>Détails de la vente →</Link>
-      </div>
-      <div className="small muted" title={deliveryLabel(sale)} style={{ marginTop: 2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", overflowWrap: "anywhere" }}>{deliveryLabel(sale)}</div>
+      </Disclosure>
       {(open || sale.status === "confirme") && (
         <ol data-testid="sale-steps" data-scroll-x className="quick-filters" style={{ listStyle: "none", display: "flex", gap: 6, flexWrap: "wrap", margin: "8px 0 0", padding: 0 }}>
           {steps.map((s) => (
@@ -78,7 +79,7 @@ export function SalePanel({ sale, listing, onChanged }: { sale: ConversationSale
           ))}
         </ol>
       )}
-      <div className="row" style={{ gap: 8, marginTop: 8, alignItems: "center" }}>
+      <div className="sale-actions" data-testid="sale-actions">
         {seller && sale.status === "sequestre" && !sale.sellerConfirmedAt && (
           <button className="btn btn-primary btn-sm" disabled={busy} data-testid="sale-confirm-availability" onClick={() => run("confirm-availability", "Disponibilité confirmée : l'acheteur est prévenu.")}>Confirmer que l&apos;article est disponible</button>
         )}
@@ -89,8 +90,8 @@ export function SalePanel({ sale, listing, onChanged }: { sale: ConversationSale
           <Link href={href} className={`btn btn-sm ${sale.sellerConfirmedAt ? "btn-primary" : "btn-outline"}`} data-testid="sale-ship">{sale.labelReady ? "Confirmer l'expédition" : sale.shippingPaid ? (sale.sellerConfirmedAt ? "Générer le bon d'envoi (PDF)" : "Bon d'envoi : après la confirmation") : "Préparer l'envoi (étiquette, suivi)"}</Link>
         )}
         {seller && sale.status === "livree" && hand && <Link href={href} className="btn btn-primary btn-sm">Saisir le code de remise</Link>}
-        {seller && sale.status === "livree" && !hand && <span className="small muted">En attente de la confirmation de réception par l&apos;acheteur{sale.autoConfirmAt ? ` (acquise d'office le ${formatDateTime(sale.autoConfirmAt)})` : ""}.</span>}
-        {!seller && sale.status === "sequestre" && <span className="small muted">{sale.sellerConfirmedAt ? (hand ? "Article disponible : convenez du rendez-vous ci-dessous." : "Article disponible : le vendeur prépare l'envoi.") : "En attente du vendeur : il doit confirmer que l'article est disponible."}</span>}
+        {seller && sale.status === "livree" && !hand && <span className="sale-note">En attente de la confirmation de réception par l&apos;acheteur{sale.autoConfirmAt ? ` (acquise d'office le ${formatDateTime(sale.autoConfirmAt)})` : ""}.</span>}
+        {!seller && sale.status === "sequestre" && <span className="sale-note">{sale.sellerConfirmedAt ? (hand ? "Article disponible : convenez du rendez-vous ci-dessous." : "Article disponible : le vendeur prépare l'envoi.") : "En attente du vendeur : il doit confirmer que l'article est disponible."}</span>}
         {!seller && sale.status === "livree" && !hand && (
           <button
             className="btn btn-primary btn-sm"
@@ -105,11 +106,11 @@ export function SalePanel({ sale, listing, onChanged }: { sale: ConversationSale
         {sale.trackingUrl && open && (
           <a className="btn btn-outline btn-sm" href={sale.trackingUrl} target="_blank" rel="noopener noreferrer" data-testid="sale-track">Suivre le colis{sale.trackingNumber ? ` (${sale.trackingNumber})` : ""}</a>
         )}
-        {!seller && sale.status === "livree" && <Link href={href} className="small" style={{ color: "var(--brick)" }}>Un problème ?</Link>}
+        {!seller && sale.status === "livree" && <Link href={href} className="btn btn-ghost btn-sm" style={{ color: "var(--brick)" }}>Un problème ?</Link>}
         {sale.status === "confirme" && <Link href={href} className="btn btn-outline btn-sm">Laisser un avis</Link>}
         {canRelist && (
           <>
-            <span className="small muted">Vente annulée : votre annonce est restée marquée « Vendue ».</span>
+            <span className="sale-note">Vente annulée : votre annonce est restée marquée « Vendue ».</span>
             <button className="btn btn-primary btn-sm" disabled={busy} data-testid="sale-relist" onClick={relist}>Remettre l&apos;annonce en ligne</button>
           </>
         )}

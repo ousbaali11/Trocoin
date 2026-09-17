@@ -37,7 +37,7 @@ test('annonce payée : « Vendu » et plus de bouton Acheter ; annulation → re
   const sellerCtx = await browser.newContext();
   const sellerPage = await sellerCtx.newPage();
   await loginAs(sellerPage, seed.seller, `/compte/messages/${convId}`);
-  await expect(sellerPage.getByTestId('system-message').filter({ hasText: 'Vente annulée' })).toContainText('remettez-la en ligne');
+  await expect(sellerPage.getByTestId('system-message').filter({ hasText: 'Vente annulée' })).toContainText("remettez l'annonce en ligne");
   await sellerPage.getByTestId('sale-relist').click();
   await expect(sellerPage.getByText('Annonce remise en ligne.')).toBeVisible();
   await expect(sellerPage.getByTestId('sale-relist')).toHaveCount(0);

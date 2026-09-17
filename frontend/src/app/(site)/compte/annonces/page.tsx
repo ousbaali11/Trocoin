@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { LoadError } from "@/components/ui/LoadError";
 import { api, mediaUrl } from "@/lib/api";
 import { useToast } from "@/lib/toast-context";
 import { useConfirm } from "@/lib/confirm-context";
@@ -71,8 +72,9 @@ export default function MesAnnoncesPage() {
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
 
-  const load = useCallback(() => api<ListingCard[]>("/listings/mine").then(setListings).catch((e) => toast(e.message, "error")), [toast]);
+  const load = useCallback(() => { setFailed(false); return api<ListingCard[]>("/listings/mine").then(setListings).catch((e) => { setFailed(true); toast(e.message, "error"); }); }, [toast]);
   useEffect(() => {
     load();
     api<Entitlements>("/users/me/entitlements").then(setEnt).catch(() => null);
@@ -201,7 +203,7 @@ export default function MesAnnoncesPage() {
       )}
 
       {listings === null ? (
-        <div className="skeleton" style={{ height: 200 }} />
+        failed ? <LoadError message="Impossible de charger vos annonces." onRetry={load} /> : <div className="skeleton" style={{ height: 200 }} />
       ) : visible.length === 0 ? (
         <EmptyState title="Aucune annonce ici" text="Vos annonces apparaîtront dans cette liste avec leurs statistiques." action={{ href: "/deposer", label: "Déposer une annonce" }} />
       ) : (

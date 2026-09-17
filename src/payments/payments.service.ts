@@ -11,7 +11,7 @@ import {
 import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomInt } from 'crypto';
-import { Between, In, IsNull, LessThan, MoreThan, Not, Repository } from 'typeorm';
+import { Between, In, IsNull, LessThan, Like, MoreThan, Not, Repository } from 'typeorm';
 import { resolveSiteUrl } from '../config/env.validation';
 import { Listing } from '../listings/listing.entity';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -27,7 +27,7 @@ import { StripeConnectService } from '../users/stripe-connect.service';
 import { UsersService } from '../users/users.service';
 import { CheckoutSync, IPaymentProvider } from './payment-provider.interface';
 import { CHECKOUT_TTL_MINUTES, PAYMENT_PROVIDER } from './payments.constants';
-import { ChosenPickupPoint, DeliveryAddress, DeliveryMethod, DeliveryMode, Transaction } from './transaction.entity';
+import { ChosenPickupPoint, DeliveryAddress, DeliveryMethod, DeliveryMode, Transaction, TransactionStatus } from './transaction.entity';
 
 /**
  * Barème (cahier des charges §3.6 : "commission transparente affichée avant validation"). Modèle : le vendeur
@@ -92,6 +92,8 @@ export function quoteOfTransaction(tx: Pick<Transaction, 'amount' | 'commission'
 @Injectable()
 export class PaymentsService {
   private readonly logger = new Logger('Paiements');
+  /** Codes de remise incorrects par vente (mémoire du processus) : 5 essais par heure, quelle que soit l'adresse IP. */
+  private readonly handoverFailures = new Map<string, { count: number; until: number }>();
   constructor(
     @InjectRepository(Transaction) private transactionsRepo: Repository<Transaction>,
     @InjectRepository(Listing) private listingsRepo: Repository<Listing>,
@@ -112,15 +114,29 @@ export class PaymentsService {
     if (!listing || listing.status !== 'en_ligne') throw new NotFoundException('Annonce introuvable.');
     const eligibility = await this.checkEligibility(listing);
     const fees = this.settings.fees();
+    const offer = await this.negotiatedPrice(listing, viewerId);
     return {
       eligible: eligibility.ok,
       reason: eligibility.reason,
       isOwner: viewerId === listing.userId,
       deliveryAvailable: listing.deliveryAvailable,
-      ...(listing.price ? computeQuote(listing.price, fees) : {}),
+      ...(listing.price ? computeQuote(offer?.amount ?? listing.price, fees) : {}),
+      // Proposition de prix acceptée par le vendeur, encore valable pour CE membre (AUDIT §60) : les montants ci-dessus sont
+      // calculés sur ce prix négocié ; `listPrice` rappelle le prix affiché
+      ...(offer ? { offer: { id: offer.id, amount: offer.amount, expiresAt: offer.expiresAt }, listPrice: listing.price } : {}),
       // Barème en vigueur, affiché à côté des montants (« 5 % + 0,50 € »)
       rates: fees,
     };
+  }
+
+  /**
+   * Prix négocié (AUDIT §60) : proposition de prix de cet acheteur, acceptée par le vendeur et encore valable, si elle
+   * est inférieure au prix affiché. Toujours relue ici, côté serveur : le navigateur n'envoie jamais de prix.
+   */
+  private async negotiatedPrice(listing: Listing, buyerId?: string): Promise<{ id: string; amount: number; expiresAt: Date } | null> {
+    if (!buyerId || buyerId === listing.userId || !listing.price) return null;
+    const offer = await this.conversations.acceptedOfferFor(listing.id, buyerId);
+    return offer && offer.amount < listing.price ? offer : null;
   }
 
   private async checkEligibility(listing: Listing): Promise<{ ok: boolean; reason?: string }> {
@@ -198,7 +214,10 @@ export class PaymentsService {
     // ultérieur par l'admin ne la touche plus (AUDIT §51).
     const fees = this.settings.fees();
     const shippingFee = shippingQuote ? round2(shippingQuote.priceCents / 100) : 0;
-    const base0 = computeQuote(listing.price!, fees);
+    // Prix payé : celui de la proposition acceptée par le vendeur si l'acheteur en a une valable, sinon le prix affiché
+    const offer = await this.negotiatedPrice(listing, buyerId);
+    const price = offer?.amount ?? listing.price!;
+    const base0 = computeQuote(price, fees);
     const q = { ...base0, shippingFee, buyerTotal: round2(base0.buyerTotal + shippingFee) };
     // Garde-fou : le total que l'acheteur a vu avant de cliquer doit être celui qu'on va débiter. Si le barème
     // (ou le prix) a changé entre-temps, on refuse et on renvoie le nouveau devis plutôt que de le surprendre.
@@ -221,7 +240,8 @@ export class PaymentsService {
       listingTitle: listing.title,
       buyerId,
       sellerId: listing.userId,
-      amount: listing.price!,
+      amount: price,
+      listPrice: offer ? listing.price! : null,
       commission: q.commission,
       buyerFee: q.buyerFee,
       feeRates: fees,
@@ -240,6 +260,10 @@ export class PaymentsService {
       // Paiement hébergé (Stripe Checkout) : la transaction attend l'autorisation de l'acheteur sur la
       // page du fournisseur ; elle passe « sequestre » à son retour (syncPending) ou par webhook.
       const pending = await this.transactionsRepo.save(this.transactionsRepo.create({ ...base, status: 'en_attente' }));
+      if (!(await this.isFirstActiveSale(pending))) {
+        await this.transactionsRepo.delete(pending.id);
+        throw new BadRequestException('Une transaction est déjà en cours sur cette annonce.');
+      }
       const site = resolveSiteUrl();
       try {
         const buyer = await this.usersService.findById(buyerId);
@@ -277,8 +301,32 @@ export class PaymentsService {
     const fresh = this.transactionsRepo.create({ ...base, status: 'sequestre', providerPaymentId: intent.providerPaymentId });
     this.enterEscrow(fresh, intent.captureBefore);
     const transaction = await this.transactionsRepo.save(fresh);
+    if (!(await this.isFirstActiveSale(transaction))) {
+      await this.paymentProvider.refund(intent.providerPaymentId).catch((e) => this.logger.error(`Double vente ${transaction.id} : libération de l'autorisation impossible (${(e as Error).message})`));
+      await this.transactionsRepo.delete(transaction.id);
+      throw new BadRequestException('Une transaction est déjà en cours sur cette annonce.');
+    }
     await this.notifySellerPaid(transaction, listing.title);
     return { transaction: this.viewFor(transaction, buyerId), clientSecret: intent.clientSecret, quote: q };
+  }
+
+  /**
+   * Double vente (AUDIT §60) : deux acheteurs qui cliquent « Payer » à une seconde d'écart passaient tous deux le contrôle
+   * « aucune vente en cours », séparé de l'insertion par des appels réseau. On revérifie donc APRÈS l'insertion : parmi les
+   * ventes actives de l'annonce, seule la plus ancienne (date, puis identifiant) est gardée ; les deux requêtes concurrentes
+   * calculent le même ordre, une seule survit.
+   */
+  private async isFirstActiveSale(tx: Transaction): Promise<boolean> {
+    const actives = await this.transactionsRepo.find({
+      where: [
+        { listingId: tx.listingId, status: In(['sequestre', 'livree', 'litige']) },
+        { listingId: tx.listingId, status: 'en_attente', createdAt: MoreThan(new Date(Date.now() - PENDING_TTL_MS)) },
+      ],
+      select: { id: true, createdAt: true },
+    });
+    if (actives.length <= 1) return true;
+    actives.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() || a.id.localeCompare(b.id));
+    return actives[0].id === tx.id;
   }
 
   /**
@@ -324,6 +372,23 @@ export class PaymentsService {
     return new Date(Math.min(wanted, guard));
   }
 
+  /**
+   * Transition atomique (AUDIT §60) : `UPDATE … WHERE id = ? AND status IN (…)`. De deux actions concurrentes sur la même
+   * vente (deux confirmations, une annulation et une confirmation, l'acheteur et la tâche périodique…), une seule obtient
+   * la transition ; l'autre est refusée AVANT tout mouvement d'argent. Sans elle, les deux lisaient le même état puis
+   * agissaient : double virement, ou remboursement ET virement sur la même vente.
+   */
+  private async claim(tx: Transaction, from: TransactionStatus[], patch: Partial<Transaction>): Promise<void> {
+    const res = await this.transactionsRepo.update({ id: tx.id, status: In(from) }, patch);
+    if (!res.affected) throw new ConflictException("Cette vente vient d'être traitée par une autre action : rechargez la page.");
+    Object.assign(tx, patch);
+  }
+  /** Mouvement d'argent échoué après une transition obtenue : la vente revient à son état précédent, l'erreur remonte. */
+  private async release(tx: Transaction, previous: Partial<Transaction>) {
+    Object.assign(tx, previous);
+    await this.transactionsRepo.update(tx.id, previous);
+  }
+
   /** Modèle platform : encaisse l'autorisation sur le solde de la plateforme (idempotent). */
   private async ensureCaptured(tx: Transaction): Promise<boolean> {
     if (!this.isPlatform(tx) || tx.capturedAt) return false;
@@ -339,8 +404,14 @@ export class PaymentsService {
    * versement prêt, le virement reste en attente et la tâche périodique le retente ; la vente est
    * confirmée dans tous les cas. Idempotent (transferId).
    */
+  /** Réservation de virement restée en plan plus de 10 minutes (serveur arrêté pendant l'appel) : à reprendre. */
+  private isStaleReservation(tx: Transaction): boolean {
+    return !!tx.transferId?.startsWith('en-cours:') && new Date(tx.updatedAt).getTime() < Date.now() - 10 * 60_000;
+  }
+
   private async payoutSeller(tx: Transaction, title?: string): Promise<boolean> {
-    if (!this.isPlatform(tx) || tx.transferId) return false;
+    if (!this.isPlatform(tx) || (tx.transferId && !this.isStaleReservation(tx))) return false;
+    if (tx.transferId) await this.transactionsRepo.update({ id: tx.id, transferId: tx.transferId }, { transferId: null });
     let accountId: string | undefined;
     try {
       accountId = await this.stripeConnect.getPayableAccountId(tx.sellerId);
@@ -351,13 +422,30 @@ export class PaymentsService {
       this.logger.warn(`Transaction ${tx.id} : vendeur ${tx.sellerId} sans compte de versement, virement de ${this.sellerPayout(tx)} € en attente`);
       return false;
     }
-    const { transferId } = await this.paymentProvider.transfer({
+    // Réservation atomique du virement : une seule exécution concurrente passe (le fournisseur reçoit en plus une clé
+    // d'idempotence par vente). En cas d'échec la réservation est rendue ; une réservation restée orpheline (arrêt du
+    // serveur en plein appel) est reprise par la tâche périodique, sans risque de doublon grâce à la clé.
+    const reservation = `en-cours:${randomInt(1, 2 ** 31)}`;
+    const reserved = await this.transactionsRepo.update({ id: tx.id, transferId: IsNull() }, { transferId: reservation });
+    if (!reserved.affected) {
+      // Un autre passage (tâche périodique, autre requête) a pris le virement : on reprend son état pour ne pas l'écraser en enregistrant
+      const fresh = await this.transactionsRepo.findOne({ where: { id: tx.id } });
+      if (fresh) Object.assign(tx, { transferId: fresh.transferId, transferredAt: fresh.transferredAt });
+      return false;
+    }
+    let transferId: string;
+    try {
+      ({ transferId } = await this.paymentProvider.transfer({
       providerPaymentId: tx.providerPaymentId!,
       sellerConnectedAccountId: accountId,
       amountEuros: this.sellerPayout(tx),
       transactionId: tx.id,
-      description: `Trocoin · vente ${title ?? tx.listingId}`,
-    });
+        description: `Trocoin · vente ${title ?? tx.listingId}`,
+      }));
+    } catch (e) {
+      await this.transactionsRepo.update({ id: tx.id, transferId: reservation }, { transferId: null });
+      throw e;
+    }
     tx.transferId = transferId;
     tx.transferredAt = new Date();
     await this.transactionsRepo.save(tx);
@@ -386,7 +474,7 @@ export class PaymentsService {
    * virement échoue (elle est alors à reprendre à la main, journal d'erreur).
    */
   private async refundBuyer(tx: Transaction) {
-    if (this.isPlatform(tx) && tx.transferId) {
+    if (this.isPlatform(tx) && tx.transferId && !tx.transferId.startsWith('en-cours:')) {
       try {
         await this.paymentProvider.reverseTransfer(tx.transferId);
         tx.transferId = null;
@@ -404,8 +492,14 @@ export class PaymentsService {
       // Ancien modèle, litige à l'échéance : capture seule, les fonds restent bloqués jusqu'à la décision
       await this.paymentProvider.capture(tx.providerPaymentId!);
     } else {
-      await this.settle(tx, title);
-      tx.status = 'confirme';
+      const previous = tx.status;
+      await this.claim(tx, [previous], { status: 'confirme' });
+      try {
+        await this.settle(tx, title);
+      } catch (e) {
+        await this.release(tx, { status: previous });
+        throw e;
+      }
     }
     tx.confirmedAt = new Date();
     tx.autoResolution = reason;
@@ -490,9 +584,15 @@ export class PaymentsService {
             for (const uid of [tx.buyerId, tx.sellerId]) await this.notifications.notify(uid, { type: 'transaction', title: tx.status === 'litige' ? 'Fonds mis en sécurité' : 'Paiement encaissé', body, link });
           } else {
             // Ni expédié ni remis avant l'échéance : l'acheteur récupère son argent ; l'annonce reste « vendue », au vendeur de la remettre en ligne
-            await this.refundBuyer(tx);
-            tx.status = 'annulee';
-            tx.resolvedAt = now;
+            const previous = tx.status;
+            await this.claim(tx, [previous], { status: 'annulee', resolvedAt: now });
+            try {
+              await this.refundBuyer(tx);
+            } catch (e) {
+              await this.release(tx, { status: previous, resolvedAt: null } as unknown as Partial<Transaction>);
+              throw e;
+            }
+            await this.shipping.cancelLabelFor(tx.id);
             tx.autoResolution = 'annulation_echeance';
             tx.resolutionNote = tx.deliveryMethod === 'main_propre' ? 'Remise non confirmée avant l\'échéance : vente annulée, acheteur remboursé' : 'Article non expédié avant l\'échéance : vente annulée, acheteur remboursé';
             await this.transactionsRepo.save(tx);
@@ -524,7 +624,7 @@ export class PaymentsService {
     }
 
     // 3. Modèle platform : virements en attente (vendeur sans compte de versement au moment de la confirmation)
-    const pendingPayouts = await this.transactionsRepo.find({ where: { status: 'confirme', escrowModel: 'platform', transferId: IsNull(), capturedAt: Not(IsNull()) }, take: 100 });
+    const pendingPayouts = await this.transactionsRepo.find({ where: [{ status: 'confirme', escrowModel: 'platform', transferId: IsNull(), capturedAt: Not(IsNull()) }, { status: 'confirme', escrowModel: 'platform', transferId: Like('en-cours:%'), capturedAt: Not(IsNull()) }], take: 100 });
     for (const tx of pendingPayouts) {
       try {
         if (await this.payoutSeller(tx)) {
@@ -605,6 +705,7 @@ export class PaymentsService {
       amount: round2(tx.amount + tx.buyerFee + (tx.shippingFee ?? 0)),
       shipping: tx.shippingFee ?? 0,
       price: tx.amount,
+      listPrice: tx.listPrice ?? null,
       deliveryMethod: tx.deliveryMethod,
       deliveryMode: tx.deliveryMode ?? null,
       pickupPoint: tx.pickupPoint ? `${tx.pickupPoint.name}, ${tx.pickupPoint.city}` : null,
@@ -676,6 +777,14 @@ export class PaymentsService {
     if (event.type === 'checkout_completed' || event.type === 'checkout_expired') {
       const tx = await this.findByProviderRef(event.transactionId, event.providerSessionId);
       if (tx && tx.status === 'en_attente') await this.syncPending(tx);
+      else if (event.type === 'checkout_completed' && (!tx || tx.status === 'annulee') && event.providerSessionId && this.paymentProvider.syncCheckout) {
+        // Payé sur une page restée ouverte alors que la vente a été abandonnée ou l'annonce supprimée : rien ne doit rester bloqué chez l'acheteur
+        const sync = await this.paymentProvider.syncCheckout(event.providerSessionId).catch(() => null);
+        if (sync?.providerPaymentId) {
+          await this.paymentProvider.refund(sync.providerPaymentId).catch((e) => this.logger.error(`Paiement orphelin ${sync.providerPaymentId} : libération impossible (${(e as Error).message})`));
+          this.logger.warn(`Paiement ${sync.providerPaymentId} reçu pour une vente ${tx ? 'annulée' : 'introuvable'} : autorisation libérée`);
+        }
+      }
     } else if (event.type === 'payment_canceled' && event.providerPaymentId) {
       const tx = await this.transactionsRepo.findOne({ where: { providerPaymentId: event.providerPaymentId } });
       if (tx && ['sequestre', 'livree'].includes(tx.status)) {
@@ -844,9 +953,14 @@ export class PaymentsService {
     if (tx.status !== 'sequestre' && tx.status !== 'livree') {
       throw new BadRequestException(`Impossible de confirmer une transaction "${tx.status}".`);
     }
-    await this.settle(tx);
-    tx.status = 'confirme';
-    tx.confirmedAt = new Date();
+    const before = { status: tx.status, confirmedAt: tx.confirmedAt ?? null };
+    await this.claim(tx, ['sequestre', 'livree'], { status: 'confirme', confirmedAt: new Date() });
+    try {
+      await this.settle(tx);
+    } catch (e) {
+      await this.release(tx, before as Partial<Transaction>);
+      throw e;
+    }
     const saved = await this.transactionsRepo.save(tx);
     await this.removeSoldListing(saved);
     await this.notifications.notify(tx.sellerId, {
@@ -867,10 +981,22 @@ export class PaymentsService {
     if (tx.sellerId !== userId) throw new ForbiddenException('Seul le vendeur saisit le code de remise.');
     if (tx.deliveryMethod !== 'main_propre') throw new BadRequestException('Cette transaction n\'est pas une remise en main propre.');
     if (!['sequestre', 'livree'].includes(tx.status)) throw new BadRequestException(`Impossible depuis le statut "${tx.status}".`);
-    if (!tx.handoverCode || tx.handoverCode !== code) throw new BadRequestException('Code de remise incorrect.');
-    await this.settle(tx);
-    tx.status = 'confirme';
-    tx.confirmedAt = new Date();
+    const attempts = this.handoverFailures.get(tx.id);
+    if (attempts && attempts.count >= 5 && attempts.until > Date.now()) throw new BadRequestException('Trop de codes incorrects sur cette vente : réessayez dans une heure, ou ouvrez un litige.');
+    if (!tx.handoverCode || tx.handoverCode !== code) {
+      const next = attempts && attempts.until > Date.now() ? attempts.count + 1 : 1;
+      this.handoverFailures.set(tx.id, { count: next, until: Date.now() + HOUR_MS });
+      throw new BadRequestException('Code de remise incorrect.');
+    }
+    this.handoverFailures.delete(tx.id);
+    const before = { status: tx.status, confirmedAt: tx.confirmedAt ?? null };
+    await this.claim(tx, ['sequestre', 'livree'], { status: 'confirme', confirmedAt: new Date() });
+    try {
+      await this.settle(tx);
+    } catch (e) {
+      await this.release(tx, before as Partial<Transaction>);
+      throw e;
+    }
     const saved = await this.transactionsRepo.save(tx);
     await this.removeSoldListing(saved);
     await this.notifications.notify(tx.buyerId, {
@@ -887,11 +1013,14 @@ export class PaymentsService {
   async cancel(transactionId: string, userId: string): Promise<Transaction> {
     const tx = await this.getOwned(transactionId, userId);
     if (tx.status !== 'sequestre') throw new BadRequestException('Annulation possible uniquement avant expédition / remise.');
-    await this.refundBuyer(tx);
+    await this.claim(tx, ['sequestre'], { status: 'annulee', resolvedAt: new Date(), resolutionNote: userId === tx.sellerId ? 'Annulée par le vendeur' : "Annulée par l'acheteur" });
+    try {
+      await this.refundBuyer(tx);
+    } catch (e) {
+      await this.release(tx, { status: 'sequestre', resolvedAt: null, resolutionNote: null } as unknown as Partial<Transaction>);
+      throw e;
+    }
     await this.shipping.cancelLabelFor(tx.id);
-    tx.status = 'annulee';
-    tx.resolvedAt = new Date();
-    tx.resolutionNote = userId === tx.sellerId ? 'Annulée par le vendeur' : 'Annulée par l\'acheteur';
     const saved = await this.transactionsRepo.save(tx);
     const otherId = userId === tx.sellerId ? tx.buyerId : tx.sellerId;
     await this.notifications.notify(otherId, {
@@ -913,10 +1042,14 @@ export class PaymentsService {
     }
     // Modèle platform : les fonds sont mis en sécurité sur le solde de Trocoin dès l'ouverture du litige
     // (un litige peut durer plus longtemps qu'une autorisation bancaire)
-    await this.ensureCaptured(tx);
-    tx.status = 'litige';
-    tx.disputeReason = reason;
-    tx.disputeOpenedBy = userId;
+    const previous = tx.status;
+    await this.claim(tx, [previous], { status: 'litige', disputeReason: reason, disputeOpenedBy: userId });
+    try {
+      await this.ensureCaptured(tx);
+    } catch (e) {
+      await this.release(tx, { status: previous, disputeReason: null, disputeOpenedBy: null } as unknown as Partial<Transaction>);
+      throw e;
+    }
     const saved = await this.transactionsRepo.save(tx);
     const otherId = userId === tx.sellerId ? tx.buyerId : tx.sellerId;
     await this.notifications.notify(otherId, {
@@ -993,10 +1126,23 @@ export class PaymentsService {
     return tx;
   }
 
-  /** Le code de remise (et l'URL de paiement) ne sont visibles que par l'acheteur ; les références du fournisseur restent internes. */
-  private viewFor(tx: Transaction, viewerId: string, checkoutUrl?: string) {
+  /**
+   * Le code de remise (et l'URL de paiement) ne sont visibles que par l'acheteur ; les références du fournisseur restent
+   * internes. TOUTE réponse d'une route de vente passe par ici (AUDIT §60) : les routes d'action (expédier, confirmer,
+   * annuler, litige…) renvoyaient l'entité brute — le vendeur y lisait le code de remise et pouvait valider la remise seul.
+   */
+  viewFor(tx: Transaction, viewerId: string, checkoutUrl?: string) {
     const { handoverCode, providerPaymentId, transferId, ...rest } = tx;
+    void providerPaymentId;
+    void transferId;
     const isBuyer = viewerId === tx.buyerId;
-    return { ...rest, handoverCode: isBuyer ? handoverCode : undefined, checkoutUrl: isBuyer && tx.status === 'en_attente' ? checkoutUrl : undefined };
+    return {
+      ...rest,
+      // Adresse de l'acheteur : le vendeur ne la voit qu'une fois la vente PAYÉE (un acheteur qui ouvre la page de paiement
+      // puis renonce n'a pas à laisser son nom, son adresse et son téléphone au vendeur — AUDIT §60)
+      shippingAddress: isBuyer || tx.paidAt ? rest.shippingAddress : null,
+      handoverCode: isBuyer ? handoverCode : undefined,
+      checkoutUrl: isBuyer && tx.status === 'en_attente' ? checkoutUrl : undefined,
+    };
   }
 }

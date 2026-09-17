@@ -27,6 +27,7 @@ export class ShippingController {
   }
 
   @Get(':id/shipment/relay-points')
+  @Throttle({ default: { limit: 60, ttl: 600_000 } })
   relayPoints(@Req() req: any, @Param('id', ParseUUIDPipe) id: string, @Query('postalCode') postalCode?: string, @Query('city') city?: string) {
     return this.shipping.relayPoints(id, req.user.userId, (postalCode || '').trim(), (city || '').trim().slice(0, 80) || undefined);
   }

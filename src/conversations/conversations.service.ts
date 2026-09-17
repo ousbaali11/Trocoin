@@ -17,6 +17,9 @@ import { Transaction } from '../payments/transaction.entity';
 import { Shipment } from '../shipping/shipment.entity';
 import { carrierTrackingUrl } from '../shipping/tracking-url';
 
+/** Durée de validité d'une proposition de prix acceptée : passé ce délai, l'annonce se paie de nouveau à son prix affiché. */
+export const OFFER_VALID_HOURS = Number(process.env.OFFER_VALID_HOURS) > 0 ? Number(process.env.OFFER_VALID_HOURS) : 72;
+
 /** Réponses rapides proposées par l'interface (cahier des charges §3.5). */
 export const QUICK_REPLIES = [
   'Bonjour, est-ce toujours disponible ?',
@@ -182,6 +185,8 @@ export class ConversationsService {
       blocked,
       quickReplies: QUICK_REPLIES,
       transaction: await this.saleSummary(c, userId),
+      // Proposition acceptée encore valable : l'acheteur peut payer ce prix (AUDIT §60) ; le vendeur voit qu'il est engagé jusqu'à l'échéance
+      acceptedOffer: listing && listing.status === 'en_ligne' ? await this.acceptedOfferFor(c.listingId, c.buyerId).then((o) => (o && listing.price && o.amount < listing.price ? o : null)) : null,
     };
   }
 
@@ -218,15 +223,45 @@ export class ConversationsService {
     };
   }
 
+  /**
+   * Proposition de prix acceptée par le vendeur, encore valable, pour cet acheteur et cette annonce (AUDIT §60) : c'est
+   * le prix que l'acheteur paie. Valable OFFER_VALID_HOURS (72 h par défaut) après l'acceptation — le vendeur ne reste
+   * pas engagé indéfiniment —, et seulement la plus récente.
+   */
+  async acceptedOfferFor(listingId: string, buyerId: string): Promise<{ id: string; amount: number; expiresAt: Date } | null> {
+    const c = await this.conversationsRepo.findOne({ where: { listingId, buyerId } });
+    if (!c) return null;
+    const offer = await this.messagesRepo.findOne({ where: { conversationId: c.id, type: 'offer', offerStatus: 'acceptee', senderId: buyerId }, order: { createdAt: 'DESC' } });
+    if (!offer || !offer.offerAmount || offer.offerAmount <= 0) return null;
+    const answeredAt = new Date(offer.offerAnsweredAt ?? offer.createdAt);
+    const expiresAt = new Date(answeredAt.getTime() + OFFER_VALID_HOURS * 3_600_000);
+    if (expiresAt.getTime() <= Date.now()) return null;
+    return { id: offer.id, amount: offer.offerAmount, expiresAt };
+  }
+
   /** Conversation de l'annonce entre cet acheteur et le vendeur, si elle existe (lien depuis la page de la vente). */
   async findIdFor(listingId: string, buyerId: string): Promise<string | null> {
     return (await this.conversationsRepo.findOne({ where: { listingId, buyerId }, select: { id: true } }))?.id ?? null;
   }
 
-  /** Abonnés aux messages automatiques (la passerelle WebSocket les diffuse à la conversation et aux deux boîtes). */
-  private systemListeners: Array<(e: { message: Message; buyerId: string; sellerId: string }) => void> = [];
-  onSystemMessage(fn: (e: { message: Message; buyerId: string; sellerId: string }) => void) {
-    this.systemListeners.push(fn);
+  /**
+   * Abonnés à tout ce qui change dans une conversation (AUDIT §60) : nouveau message — texte, photo, proposition de prix,
+   * message automatique — ou message modifié (proposition acceptée, refusée, retirée). La passerelle WebSocket s'y
+   * abonne et diffuse, QUEL QUE SOIT le chemin d'origine (socket ou route HTTP) : avant, seuls les textes envoyés par
+   * le socket étaient diffusés ; propositions, réponses et photos n'apparaissaient chez l'autre qu'après un rechargement.
+   */
+  private messageListeners: Array<(e: { kind: 'new' | 'update'; message: Message; buyerId: string; sellerId: string }) => void> = [];
+  onMessageEvent(fn: (e: { kind: 'new' | 'update'; message: Message; buyerId: string; sellerId: string }) => void) {
+    this.messageListeners.push(fn);
+  }
+  private broadcast(kind: 'new' | 'update', message: Message, c: Pick<Conversation, 'buyerId' | 'sellerId'>) {
+    for (const fn of this.messageListeners) {
+      try {
+        fn({ kind, message, buyerId: c.buyerId, sellerId: c.sellerId });
+      } catch {
+        /* un abonné défaillant ne bloque pas l'écriture du message */
+      }
+    }
   }
 
   /**
@@ -243,13 +278,7 @@ export class ConversationsService {
       if (already) return already;
       const saved = await this.messagesRepo.save(this.messagesRepo.create({ createdAt: new Date(), conversationId: c.id, senderId: p.actorId, type: 'system', systemEvent: p.event, transactionId: p.transactionId, content: p.content, meta: p.meta ?? null }));
       await this.conversationsRepo.update(c.id, { lastMessageAt: saved.createdAt, hiddenForBuyerAt: null, hiddenForSellerAt: null });
-      for (const fn of this.systemListeners) {
-        try {
-          fn({ message: saved, buyerId: c.buyerId, sellerId: c.sellerId });
-        } catch {
-          /* un abonné défaillant ne bloque pas le suivi */
-        }
-      }
+      this.broadcast('new', saved, c);
       return saved;
     } catch (e) {
       this.logger.warn('Message de suivi « ' + p.event + ' » non écrit pour la vente ' + p.transactionId + ' : ' + (e as Error).message);
@@ -306,6 +335,7 @@ export class ConversationsService {
     const unhide = otherId === c.buyerId ? { hiddenForBuyerAt: null } : { hiddenForSellerAt: null };
     await this.conversationsRepo.update(c.id, { lastMessageAt: saved.createdAt, ...unhide });
     await this.notifications.notify(otherId, { type: 'message', title: 'Nouveau message', body: notifBody, link: `/compte/messages/${c.id}` });
+    this.broadcast('new', saved, c);
     return saved;
   }
 
@@ -332,7 +362,10 @@ export class ConversationsService {
     if (!listing || listing.status !== 'en_ligne') throw new BadRequestException('Cette annonce n\'est plus disponible.');
     if (!Number.isFinite(amount) || amount <= 0 || amount > 10_000_000) throw new BadRequestException('Montant invalide.');
     const pending = await this.messagesRepo.findOne({ where: { conversationId, type: 'offer', offerStatus: 'en_attente' } });
-    if (pending) await this.messagesRepo.update(pending.id, { offerStatus: 'retiree' });
+    if (pending) {
+      await this.messagesRepo.update(pending.id, { offerStatus: 'retiree', offerAnsweredAt: new Date() });
+      this.broadcast('update', { ...pending, offerStatus: 'retiree' } as Message, c);
+    }
     const rounded = Math.round(amount * 100) / 100;
     return this.persist(c, otherId, this.messagesRepo.create({ conversationId, senderId, type: 'offer', offerAmount: rounded, offerStatus: 'en_attente' }), `💶 Proposition de prix : ${rounded} €`);
   }
@@ -345,10 +378,12 @@ export class ConversationsService {
     if (m.offerStatus !== 'en_attente') throw new BadRequestException('Cette proposition n\'est plus en attente.');
     if (decision === 'retiree' && userId !== c.buyerId) throw new ForbiddenException('Seul l\'acheteur peut retirer sa proposition.');
     if (decision !== 'retiree' && userId !== c.sellerId) throw new ForbiddenException('Seul le vendeur peut répondre à une proposition.');
-    await this.messagesRepo.update(m.id, { offerStatus: decision });
+    await this.messagesRepo.update(m.id, { offerStatus: decision, offerAnsweredAt: new Date() });
     const label = decision === 'acceptee' ? 'acceptée' : decision === 'refusee' ? 'refusée' : 'retirée';
     await this.conversationsRepo.update(c.id, { lastMessageAt: new Date() });
     await this.notifications.notify(otherId, { type: 'message', title: `Proposition ${label}`, body: `${m.offerAmount} € — ${label}`, link: `/compte/messages/${c.id}` });
-    return (await this.messagesRepo.findOne({ where: { id: m.id } }))!;
+    const updated = (await this.messagesRepo.findOne({ where: { id: m.id } }))!;
+    this.broadcast('update', updated, c);
+    return updated;
   }
 }

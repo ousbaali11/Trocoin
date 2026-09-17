@@ -185,6 +185,8 @@ La recherche comprend les pluriels et ignore les accents.`,
         keywords: ["message", "messagerie", "offre", "négocier", "prix"],
         body: `Le bouton **Contacter le vendeur** ouvre une conversation dans la messagerie Trocoin. Vous pouvez envoyer du texte, des photos et, pour un achat, une **proposition de prix** que le vendeur accepte ou refuse (une seule proposition en attente à la fois).
 
+**Proposition acceptée** : un bouton **Payer** au prix convenu apparaît aussitôt dans la conversation. Il ouvre le paiement sécurisé au prix négocié (les frais de protection sont recalculés sur ce prix). Ce prix vous est réservé pendant 72 heures ; passé ce délai, ou pour tout autre acheteur, le prix affiché s'applique.
+
 Les échanges sont en temps réel quand les deux membres sont connectés, sinon ils sont livrés à la prochaine ouverture. Un membre importun peut être **bloqué** ou **signalé** depuis la conversation.`,
       },
       {

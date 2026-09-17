@@ -47,6 +47,12 @@
   gap: 6px;
   flex-wrap: wrap;
 }
+/* Sous-catégories : ce sont des boutons — hauteur tactile (elles mesuraient 24 px, AUDIT §60) */
+.chips :global(.pill) {
+  min-height: 36px;
+  padding-inline: 14px;
+  font-size: 0.85rem;
+}
 @media (max-width: 900px) {
   .layout {
     grid-template-columns: 1fr;

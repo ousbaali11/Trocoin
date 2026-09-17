@@ -27,14 +27,23 @@ function AdminListingsInner() {
     if (status) p.set("status", status);
     if (category) p.set("category", category);
     setError(null);
-    api<Paged<ListingCard>>(`/admin/listings?${p}`).then(setData).catch((e) => setError((e as Error).message));
+    // Une requête par pause de frappe (300 ms) ; une réponse arrivée après une frappe plus récente est ignorée —
+    // sans cela, une requête lente pouvait écraser le résultat de la suivante (AUDIT §60).
+    let stale = false;
+    const timer = setTimeout(() => {
+      api<Paged<ListingCard>>(`/admin/listings?${p}`).then((d) => { if (!stale) setData(d); }).catch((e) => { if (!stale) setError((e as Error).message); });
+    }, q ? 300 : 0);
+    return () => {
+      stale = true;
+      clearTimeout(timer);
+    };
   }, [q, status, category, page]);
 
   return (
     <div>
       <div className="a-head"><div><h1>Annonces</h1><p>Toutes les annonces, tous statuts. Les annonces « à vérifier » ont été bloquées par la pré-modération automatique.</p></div></div>
       <div className="a-filters">
-        <input className="a-input" placeholder="Titre, description ou identifiant" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />
+        <input className="a-input" type="search" aria-label="Rechercher une annonce" placeholder="Titre, description ou identifiant" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />
         <select className="a-select" aria-label="Statut de l'annonce" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
           <option value="">Tous statuts</option>
           {["en_attente", "en_ligne", "brouillon", "vendue", "refusee", "desactivee"].map((s) => <option key={s} value={s}>{statusPill(s).label}</option>)}

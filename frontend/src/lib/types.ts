@@ -330,6 +330,8 @@ export interface ConversationDetail extends Omit<ConversationSummary, "lastMessa
   blocked: boolean;
   quickReplies: string[];
   transaction?: ConversationSale | null;
+  /** Proposition de prix acceptée et encore valable : l'acheteur peut payer ce prix (AUDIT §60). */
+  acceptedOffer?: { id: string; amount: number; expiresAt: string } | null;
 }
 
 export interface Quote {
@@ -341,6 +343,9 @@ export interface Quote {
   commission?: number;
   buyerFee?: number;
   buyerTotal?: number;
+  /** Prix négocié (proposition acceptée, encore valable, pour le membre connecté) : les montants du devis sont calculés dessus. */
+  offer?: { id: string; amount: number; expiresAt: string };
+  listPrice?: number;
   sellerPayout?: number;
   /** Barème en vigueur (devis d'annonce) ou barème figé de la vente (détail d'une transaction). */
   rates?: { commissionPercent: number; buyerFeePercent: number; buyerFeeFixed: number; buyerFeeCap: number } | null;
@@ -364,6 +369,8 @@ export interface Transaction {
   /** Choix de l'acheteur au paiement (AUDIT §57) : domicile ou point de retrait, et le point choisi. */
   deliveryMode?: "domicile" | "point_relais" | null;
   pickupPoint?: { id: string; name: string; line1: string; postalCode: string; city: string; type: PickupPointType } | null;
+  /** Prix affiché de l'annonce quand la vente s'est faite à un prix négocié (`amount` est alors le prix négocié). */
+  listPrice?: number | null;
   /** Frais de livraison payés par l'acheteur avec son achat (AUDIT §59), en euros ; 0 en main propre et sur les ventes antérieures. */
   shippingFee?: number;
   /** Offre cotée à l'achat : présente quand la livraison a été payée par l'acheteur (le vendeur n'a qu'à générer le bon d'envoi). */

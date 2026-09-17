@@ -135,6 +135,10 @@ export class Transaction {
   @Column({ type: JSON_TYPE, nullable: true })
   shippingQuote?: { offerCode: string; priceCents: number; mode: DeliveryMode; weightGrams: number; lengthCm?: number; widthCm?: number; heightCm?: number } | null;
 
+  /** Prix affiché de l'annonce quand la vente s'est faite au prix d'une proposition acceptée (`amount` porte alors le prix négocié) ; nul sinon. */
+  @Column({ type: 'float', nullable: true })
+  listPrice?: number | null;
+
   /** Le vendeur a confirmé que l'article existe et est prêt à partir (AUDIT §57) ; l'expédition vaut confirmation. */
   @Column({ type: DATE_TYPE, nullable: true })
   sellerConfirmedAt?: Date | null;

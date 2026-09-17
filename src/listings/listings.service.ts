@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, In, IsNull, Repository } from 'typeorm';
+import { Brackets, In, IsNull, MoreThan, Repository } from 'typeorm';
 import { CategoriesService } from '../categories/categories.service';
 import { computeCompleteness } from './listing-completeness';
 import { FieldSchema, getSchemaForSlugs, validateAttributes } from '../categories/category-schemas';
@@ -361,15 +361,16 @@ export class ListingsService {
 
     if (dto.status !== undefined) {
       const from = listing.status;
+      // Changements de statut par le propriétaire (AUDIT §60) : jamais depuis « en vérification » ou « refusée » (passer par
+      // « en pause » puis « renouveler » contournait la modération), jamais pendant une vente payée en cours (l'annonce
+      // « vendue » mise en pause puis renouvelée revenait en ligne pendant la vente).
+      if (dto.status !== from && ['en_attente', 'refusee'].includes(from)) throw new BadRequestException("Cette annonce attend une décision de notre équipe : son statut ne peut pas être changé.");
+      if (dto.status !== from && (await this.hasActiveSale(listing.id))) throw new BadRequestException("Une vente est en cours sur cette annonce : elle ne peut pas être remise en ligne tant que la vente n'est pas terminée ou annulée.");
       if (dto.status === 'en_ligne') {
         if (!['brouillon', 'desactivee', 'expiree', 'en_ligne', 'vendue'].includes(from)) {
           throw new BadRequestException(`Impossible de publier depuis le statut "${from}".`);
         }
-        // Vente payée en cours (AUDIT §58) : l'annonce est « vendue » et le reste tant que la vente n'est ni terminée ni
-        // annulée — sinon le même objet pourrait être payé deux fois. Après une annulation, le vendeur la remet en ligne.
-        if (from === 'vendue' && (await this.transactionsRepo.count({ where: { listingId: listing.id, status: In(['sequestre', 'livree', 'litige']) } })) > 0) {
-          throw new BadRequestException("Une vente est en cours sur cette annonce : elle ne peut pas être remise en ligne tant que la vente n'est pas terminée ou annulée.");
-        }
+        // (vente payée en cours : refusée plus haut, quel que soit le statut demandé — AUDIT §58 et §60)
         if (from !== 'en_ligne') {
           await this.assertPhone(listing.userId);
           await this.assertQuota(listing.userId);
@@ -446,20 +447,31 @@ export class ListingsService {
     if (!['en_ligne', 'expiree', 'desactivee'].includes(listing.status)) {
       throw new BadRequestException(`Impossible de renouveler une annonce "${listing.status}".`);
     }
+    if (await this.hasActiveSale(listing.id)) throw new BadRequestException("Une vente est en cours sur cette annonce : elle ne peut pas être remise en ligne tant que la vente n'est pas terminée ou annulée.");
     if (listing.status !== 'en_ligne') await this.assertQuota(listing.userId);
     const now = new Date();
-    await this.listingsRepo.update(listingId, {
-      status: 'en_ligne',
-      publishedAt: now,
-      moderationReason: null as any,
-    });
+    // Remise en ligne = même contrôle du texte qu'à la publication (le texte a pu être modifié pendant la pause)
+    const mod = moderateText(listing.title, listing.description);
+    await this.listingsRepo.update(listingId, mod.flagged && listing.status !== 'en_ligne'
+      ? { status: 'en_attente', moderationReason: `Vérification requise : ${mod.reasons.join(', ')}` }
+      : { status: 'en_ligne', publishedAt: now, moderationReason: null as any });
     // Remise en ligne : les photos ajoutées entre-temps rejoignent les photos verrouillées
     if (listing.status !== 'en_ligne') await this.lockPhotos(listingId);
     return this.listingsRepo.findOne({ where: { id: listingId } }) as Promise<Listing>;
   }
 
+  /** Vente payée encore ouverte sur l'annonce (fonds bloqués, expédiée, litige). */
+  private async hasActiveSale(listingId: string): Promise<boolean> {
+    return (await this.transactionsRepo.count({ where: { listingId, status: In(['sequestre', 'livree', 'litige']) } })) > 0;
+  }
+
   async deleteOwn(listingId: string, userId: string): Promise<void> {
     const listing = await this.getManaged(listingId, userId);
+    // Pas de suppression par le vendeur pendant une vente (AUDIT §60) : vente payée en cours, ou acheteur en train de payer
+    // (la vente non payée serait effacée alors que sa page de paiement reste ouverte : l'argent arriverait sans vente)
+    if (await this.hasActiveSale(listing.id)) throw new BadRequestException("Une vente est en cours sur cette annonce : elle sera retirée automatiquement une fois l'article reçu.");
+    const paying = await this.transactionsRepo.count({ where: { listingId: listing.id, status: 'en_attente', createdAt: MoreThan(new Date(Date.now() - 45 * 60_000)) } });
+    if (paying > 0) throw new BadRequestException("Un acheteur est en train de payer cette annonce : réessayez dans quelques minutes.");
     await this.deleteListing(listing);
   }
 

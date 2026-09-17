@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, mediaUrl } from "@/lib/api";
+import { io } from "socket.io-client";
+import { api, API_URL, getToken, mediaUrl } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useConfirm } from "@/lib/confirm-context";
 import { useToast } from "@/lib/toast-context";
@@ -34,6 +35,33 @@ export default function MessagesPage() {
   useEffect(() => {
     load();
   }, [load]);
+  // Liste vivante (AUDIT §60) : le serveur réveille la boîte (« inbox ») à chaque message, proposition ou étape de vente ;
+  // on relit aussi au retour sur l'onglet et, par sécurité, toutes les 20 s tant que la page est à l'écran
+  useEffect(() => {
+    const token = getToken();
+    if (!token) return;
+    const socket = io(API_URL, { transports: ["websocket", "polling"], auth: (cb) => cb({ token: getToken() || "" }) });
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const refresh = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => { load(); refreshCounters(); }, 300);
+    };
+    socket.on("inbox", refresh);
+    socket.on("connect", refresh);
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      refresh();
+      if (!socket.connected) socket.connect();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    const poll = setInterval(() => { if (document.visibilityState === "visible") load(); }, 20_000);
+    return () => {
+      clearInterval(poll);
+      if (timer) clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+      socket.close();
+    };
+  }, [load, refreshCounters]);
 
   const visible = (items ?? []).filter((c) => filter === "all" || c.role === filter);
   const allSelected = visible.length > 0 && visible.every((c) => selected.has(c.id));

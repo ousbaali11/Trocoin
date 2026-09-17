@@ -21,6 +21,9 @@ function roomName(conversationId: string) {
 function userRoom(userId: string) {
   return `user:${userId}`;
 }
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Messages par socket et par minute (AUDIT §60) : le canal temps réel échappait à la limite de débit des routes HTTP. */
+const WS_MESSAGES_PER_MINUTE = 30;
 
 /**
  * Temps réel : même liste blanche CORS que l'API HTTP, même secret JWT.
@@ -53,10 +56,11 @@ export class ConversationsGateway implements OnGatewayInit, OnGatewayConnection,
     this.conversationsService.onMessagesRead((e) => {
       server.to(roomName(e.conversationId)).emit('read', { conversationId: e.conversationId, readerId: e.readerId, readAt: e.readAt.toISOString() });
     });
-    // Messages automatiques de suivi de vente (AUDIT §57) : écrits par le service des paiements, hors WebSocket. La
-    // conversation ouverte les reçoit aussitôt ; « inbox » réveille les deux boîtes (badge, état de la vente relu).
-    this.conversationsService.onSystemMessage((e) => {
-      server.to(roomName(e.message.conversationId)).emit('message', e.message);
+    // Tout ce qui change dans une conversation (AUDIT §60) — texte, photo, proposition de prix, réponse à une proposition,
+    // message automatique de suivi de vente —, d'où qu'il vienne (socket ou route HTTP) : la conversation ouverte le
+    // reçoit aussitôt ; « inbox » réveille les deux boîtes (badge de non-lus, liste des conversations, état de la vente).
+    this.conversationsService.onMessageEvent((e) => {
+      server.to(roomName(e.message.conversationId)).emit(e.kind === 'new' ? 'message' : 'message:update', e.message);
       for (const uid of [e.buyerId, e.sellerId]) server.to(userRoom(uid)).emit('inbox', { conversationId: e.message.conversationId });
     });
     server.use(async (socket, next) => {
@@ -95,7 +99,7 @@ export class ConversationsGateway implements OnGatewayInit, OnGatewayConnection,
 
   @SubscribeMessage('join')
   async onJoin(@ConnectedSocket() client: Socket, @MessageBody() data: { conversationId: string }) {
-    if (!client.data.userId || typeof data?.conversationId !== 'string') {
+    if (!client.data.userId || typeof data?.conversationId !== 'string' || !UUID.test(data.conversationId)) {
       return { ok: false, message: 'Requête invalide.' };
     }
     try {
@@ -143,20 +147,22 @@ export class ConversationsGateway implements OnGatewayInit, OnGatewayConnection,
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { conversationId: string; content: string },
   ) {
-    if (!client.data.userId || typeof data?.conversationId !== 'string' || typeof data?.content !== 'string') {
+    if (!client.data.userId || typeof data?.conversationId !== 'string' || !UUID.test(data.conversationId) || typeof data?.content !== 'string') {
       return { ok: false, message: 'Requête invalide.' };
     }
+    const now = Date.now();
+    const rate = (client.data.rate as { count: number; since: number } | undefined) ?? { count: 0, since: now };
+    if (now - rate.since > 60_000) { rate.count = 0; rate.since = now; }
+    rate.count += 1;
+    client.data.rate = rate;
+    if (rate.count > WS_MESSAGES_PER_MINUTE) return { ok: false, message: 'Trop de messages en peu de temps : patientez une minute.' };
     try {
       const message = await this.conversationsService.postMessage(
         data.conversationId,
         client.data.userId,
         data.content,
       );
-      this.server.to(roomName(data.conversationId)).emit('message', message);
-      // Réveil de l'autre participant même s'il n'a pas rejoint la room (badge non-lus)
-      const conv = await this.conversationsService.assertMember(data.conversationId, client.data.userId);
-      const otherId = conv.buyerId === client.data.userId ? conv.sellerId : conv.buyerId;
-      this.server.to(userRoom(otherId)).emit('inbox', { conversationId: data.conversationId });
+      // La diffusion (conversation ouverte + réveil des deux boîtes) est faite par l'abonnement ci-dessus, commun à tous les chemins
       // L'expéditeur reçoit aussi le message en retour d'accusé (utile s'il n'a pas encore rejoint la room)
       return { ok: true, messageId: message.id, message };
     } catch (err) {

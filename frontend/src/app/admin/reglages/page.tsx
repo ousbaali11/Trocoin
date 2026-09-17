@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useToast } from "@/lib/toast-context";
 import { useConfirm } from "@/lib/confirm-context";
+import { LoadError } from "@/components/ui/LoadError";
 import type { Plan } from "@/lib/types";
 import { FeeSettingsPanel, type FeesInfo } from "@/components/admin/FeeSettingsPanel";
 
@@ -20,12 +21,14 @@ export default function AdminSettingsPage() {
   const [form, setForm] = useState({ free_listings_per_30_days: "20", boost_price_eur: "2.99", urgent_price_eur: "1.99" });
   const [plans, setPlans] = useState<Plan[]>([]);
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   const load = useCallback(() => api<SettingsPayload>("/admin/settings").then((d) => {
+    setFailed(false);
     setData(d);
     setPlans(d.plans);
     setForm({ free_listings_per_30_days: String(d.settings.free_listings_per_30_days ?? 20), boost_price_eur: String(d.settings.boost_price_eur ?? 2.99), urgent_price_eur: String(d.settings.urgent_price_eur ?? 1.99) });
-  }).catch((e) => toast(e.message, "error")), [toast]);
+  }).catch((e) => { setFailed(true); toast(e.message, "error"); }), [toast]);
   useEffect(() => {
     load();
   }, [load]);
@@ -56,7 +59,7 @@ export default function AdminSettingsPage() {
   };
   const setPlan = (id: string, patchP: Partial<Plan>) => setPlans((ps) => ps.map((p) => (p.id === id ? { ...p, ...patchP } : p)));
 
-  if (!data) return <div className="skeleton" style={{ height: 300 }} />;
+  if (!data) return failed ? <LoadError admin message="Impossible de charger les réglages." onRetry={load} /> : <div className="skeleton" style={{ height: 300 }} />;
   const enabled = data.settings.monetization_enabled === true;
 
   return (

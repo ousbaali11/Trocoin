@@ -55,7 +55,7 @@ export class PaymentsController {
   @UseGuards(JwtAuthGuard)
   @Post(':id/ship')
   ship(@Req() req: any, @Param('id', ParseUUIDPipe) id: string, @Body() dto: ShipTransactionDto) {
-    return this.paymentsService.markShipped(id, req.user.userId, dto.trackingNumber);
+    return this.paymentsService.markShipped(id, req.user.userId, dto.trackingNumber).then((tx) => this.paymentsService.viewFor(tx, req.user.userId));
   }
 
   /** Le vendeur confirme que l'article est disponible et prêt à partir (bouton de la conversation et de la page de la vente). */
@@ -63,7 +63,7 @@ export class PaymentsController {
   @Post(':id/confirm-availability')
   @HttpCode(200)
   confirmAvailability(@Req() req: any, @Param('id', ParseUUIDPipe) id: string) {
-    return this.paymentsService.confirmAvailability(id, req.user.userId);
+    return this.paymentsService.confirmAvailability(id, req.user.userId).then((tx) => this.paymentsService.viewFor(tx, req.user.userId));
   }
 
   /** L'acheteur renonce à un paiement non finalisé : la page de paiement est fermée, l'annonce redevient achetable. */
@@ -77,25 +77,25 @@ export class PaymentsController {
   @UseGuards(JwtAuthGuard)
   @Post(':id/confirm-delivery')
   confirmDelivery(@Req() req: any, @Param('id', ParseUUIDPipe) id: string) {
-    return this.paymentsService.confirmDelivery(id, req.user.userId);
+    return this.paymentsService.confirmDelivery(id, req.user.userId).then((tx) => this.paymentsService.viewFor(tx, req.user.userId));
   }
 
   @UseGuards(JwtAuthGuard)
   @Post(':id/handover')
   @Throttle({ default: { limit: 10, ttl: 600_000 } })
   handover(@Req() req: any, @Param('id', ParseUUIDPipe) id: string, @Body() dto: HandoverDto) {
-    return this.paymentsService.confirmHandover(id, req.user.userId, dto.code);
+    return this.paymentsService.confirmHandover(id, req.user.userId, dto.code).then((tx) => this.paymentsService.viewFor(tx, req.user.userId));
   }
 
   @UseGuards(JwtAuthGuard)
   @Post(':id/cancel')
   cancel(@Req() req: any, @Param('id', ParseUUIDPipe) id: string) {
-    return this.paymentsService.cancel(id, req.user.userId);
+    return this.paymentsService.cancel(id, req.user.userId).then((tx) => this.paymentsService.viewFor(tx, req.user.userId));
   }
 
   @UseGuards(JwtAuthGuard)
   @Post(':id/dispute')
   dispute(@Req() req: any, @Param('id', ParseUUIDPipe) id: string, @Body() dto: DisputeTransactionDto) {
-    return this.paymentsService.openDispute(id, req.user.userId, dto.reason);
+    return this.paymentsService.openDispute(id, req.user.userId, dto.reason).then((tx) => this.paymentsService.viewFor(tx, req.user.userId));
   }
 }

@@ -5,6 +5,7 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast-context";
+import { LoadError } from "@/components/ui/LoadError";
 import { DEFAULT_FEE_RATES, formatBuyerFeeFormula, formatPercent, type FeeRates } from "@/lib/format";
 
 interface StripeStatus {
@@ -19,6 +20,7 @@ function PaiementsInner() {
   const params = useSearchParams();
   const [status, setStatus] = useState<StripeStatus | null>(null);
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
   // Barème en vigueur (réglé par l'admin) : jamais de chiffre écrit en dur
   const [fees, setFees] = useState<FeeRates>(DEFAULT_FEE_RATES);
   useEffect(() => {
@@ -26,12 +28,22 @@ function PaiementsInner() {
   }, []);
 
   const loadStatus = useCallback(
-    () => api<StripeStatus>("/users/me/stripe-status").then((s) => { setStatus(s); refresh(); }).catch(() => null),
+    () => { setFailed(false); return api<StripeStatus>("/users/me/stripe-status").then((s) => { setStatus(s); refresh(); }).catch(() => setFailed(true)); },
     [refresh],
   );
 
   useEffect(() => {
     loadStatus();
+  }, [loadStatus]);
+  // Retour arrière depuis Stripe : la page sort du cache du navigateur avec « Redirection… » figé — on la réarme
+  useEffect(() => {
+    const onShow = (e: PageTransitionEvent) => {
+      if (!e.persisted) return;
+      setBusy(false);
+      loadStatus();
+    };
+    window.addEventListener("pageshow", onShow);
+    return () => window.removeEventListener("pageshow", onShow);
   }, [loadStatus]);
 
   useEffect(() => {
@@ -55,7 +67,7 @@ function PaiementsInner() {
       <section className="panel">
         <h2 className="h3">Recevoir mes paiements</h2>
         <p className="muted">Pour encaisser les ventes réalisées avec le paiement sécurisé, configurez votre compte de versement auprès de notre prestataire de paiement (Stripe). Vos coordonnées bancaires ne transitent jamais par Trocoin.</p>
-        {status === null ? <div className="skeleton" style={{ height: 40, width: 260 }} /> : status.onboardingComplete ? (
+        {status === null ? (failed ? <LoadError message="Impossible de lire l'état de votre compte de versement." onRetry={loadStatus} /> : <div className="skeleton" style={{ height: 40, width: 260 }} />) : status.onboardingComplete ? (
           <div className="alert alert-success" style={{ margin: 0 }}>Compte de versement actif : vos ventes vous sont versées automatiquement après confirmation de réception.</div>
         ) : status.connected ? (
           <div className="stack">

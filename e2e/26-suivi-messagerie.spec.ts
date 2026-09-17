@@ -28,10 +28,12 @@ test('achat → disponibilité confirmée → expédition (suivi) → réception
 
   // 1. Achat : message automatique, texte selon le lecteur, visuellement à part des bulles des personnes
   const buyerFirst = buyer.getByTestId('system-message').first();
-  await expect(buyerFirst).toContainText(/Livraison payée : 13,85\s€/); // Colissimo à domicile, colis de 2,5 kg
+  await expect(buyerFirst).toContainText(/98,35\s€ payés/); // 80 € + 4,50 € de protection + 13,85 € de livraison (Colissimo domicile, 2,5 kg)
   await expect(buyerFirst).toContainText('Message automatique · Trocoin');
   await expect(buyerFirst).toContainText('Achat confirmé');
-  await expect(buyerFirst).toContainText("Vous recevrez ici, dans cette conversation, les mises à jour sur l'avancement du colis");
+  await expect(buyerFirst).toContainText('Vous suivrez le colis ici.');
+  // Tickets courts (AUDIT §60) : un titre et une phrase
+  expect((await buyerFirst.innerText()).length).toBeLessThan(170);
   await expect(seller.getByTestId('system-message').first()).toContainText('Nouvelle vente');
   await expect(seller.getByTestId('system-message').first()).toContainText("Confirmez que l'article est disponible");
   const look = await buyerFirst.evaluate((el) => { const s = getComputedStyle(el); return { border: s.borderTopStyle, align: s.textAlign }; });
@@ -47,7 +49,7 @@ test('achat → disponibilité confirmée → expédition (suivi) → réception
   await sellerPanel.getByTestId('sale-confirm-availability').click();
   await expect(seller.getByText("Disponibilité confirmée : l'acheteur est prévenu.")).toBeVisible();
   await expect(sellerPanel.getByTestId('sale-confirm-availability')).toHaveCount(0);
-  await expect(buyer.getByTestId('system-message').filter({ hasText: 'Article disponible' })).toContainText('Le vendeur a confirmé que l\'article est disponible et prêt à partir.');
+  await expect(buyer.getByTestId('system-message').filter({ hasText: 'Article disponible' })).toContainText("Le vendeur prépare l'envoi.");
   await expect(buyer.getByTestId('sale-panel')).toContainText("le vendeur prépare l'envoi");
   await expect(buyer.getByTestId('sale-steps').locator('[data-done="true"]')).toHaveCount(2);
   // Même état sur la page de la vente (mêmes routes) : l'action ne s'y propose plus
@@ -71,7 +73,7 @@ test('achat → disponibilité confirmée → expédition (suivi) → réception
   await seller.getByRole('button', { name: "Confirmer l'expédition" }).click();
   await expect(seller.getByText('Expédition enregistrée.')).toBeVisible();
   const shipped = buyer.getByTestId('system-message').filter({ hasText: 'Colis expédié' });
-  await expect(shipped).toContainText(/Numéro de suivi : SIM\d{10}/);
+  await expect(shipped).toContainText(/suivi SIM\d{10}/);
   await expect(shipped.getByTestId('system-track')).toHaveAttribute('href', /^https:\/\/www\.laposte\.fr\/outils\/suivre-vos-envois\?code=SIM\d{10}$/);
   await expect(buyer.getByTestId('sale-track')).toHaveAttribute('href', /laposte\.fr/);
 
@@ -82,11 +84,19 @@ test('achat → disponibilité confirmée → expédition (suivi) → réception
   await buyer.getByRole('button', { name: "J'ai bien reçu l'article" }).click();
   await expect(buyer.getByText('Réception confirmée, merci !')).toBeVisible();
   await expect(buyer.getByTestId('sale-confirm-reception')).toHaveCount(0);
-  const paid = seller.getByTestId('system-message').filter({ hasText: "Réception confirmée par l'acheteur" });
-  await expect(paid).toContainText('a confirmé avoir bien reçu le colis');
-  await expect(paid).toContainText(/virement de 73,60\s€/);
+  const paid = seller.getByTestId('system-message').filter({ hasText: 'Virement de' });
+  await expect(paid).toContainText('Réception confirmée');
+  // Le vendeur du jeu d'essai n'a pas de compte de versement : le virement est annoncé « en attente » (déclenché sinon)
+  await expect(paid).toContainText(/Virement de 73,60\s€ (déclenché|en attente)/);
   await expect(seller.getByTestId('sale-steps').locator('[data-done="true"]')).toHaveCount(4);
   // La page « Achats et ventes » raconte la même chose
+  // En-tête du suivi repliable, replié par défaut (AUDIT §60) : le détail se déplie par une commande large
+  await expect(buyer.getByTestId('sale-details')).toBeHidden();
+  const summaryToggle = buyer.getByTestId('sale-summary-toggle');
+  await expect(summaryToggle).toHaveAttribute('aria-expanded', 'false');
+  expect((await summaryToggle.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  await summaryToggle.click();
+  await expect(summaryToggle).toHaveAttribute('aria-expanded', 'true');
   await buyer.getByTestId('sale-details').click();
   await expect(buyer).toHaveURL(new RegExp(`/compte/transactions/${txId}$`));
   await expect(buyer.getByText(/^Réception confirmée :/)).toBeVisible();

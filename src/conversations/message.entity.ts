@@ -50,6 +50,10 @@ export class Message {
   @Column({ type: 'varchar', nullable: true })
   offerStatus?: OfferStatus;
 
+  /** Date de la réponse du vendeur : une proposition acceptée vaut OFFER_VALID_HOURS pour payer au prix négocié (AUDIT §60). */
+  @Column({ type: DATE_TYPE, nullable: true })
+  offerAnsweredAt?: Date | null;
+
   /** Message automatique (type = 'system') : étape de la vente, vente concernée, données d'affichage (suivi…). `senderId` porte l'auteur de l'action. */
   @Column({ type: 'varchar', nullable: true })
   systemEvent?: SystemEvent;

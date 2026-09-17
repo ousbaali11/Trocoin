@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast-context";
-import { formatEuros, formatPhone } from "@/lib/format";
+import { formatEuros, formatPhone, formatPrice } from "@/lib/format";
 import type { ListingDetail, Quote } from "@/lib/types";
 import { FavoriteButton } from "@/components/ui/FavoriteButton";
 import { Modal } from "@/components/ui/Modal";
@@ -55,11 +55,32 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
     }
   };
   const active = listing.status === "en_ligne";
+  // Barre d'action du téléphone (AUDIT §60) : sur petit écran, « Contacter » et « Acheter » se trouvaient à quatre écrans
+  // de défilement, sous la description et la carte. Une barre fixe les garde sous le pouce ; elle s'efface dès que le
+  // vrai bloc d'actions est à l'écran (pas de doublon) et pendant les fenêtres de contact et de paiement.
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [cardInView, setCardInView] = useState(true);
+  useEffect(() => {
+    const el = cardRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(([entry]) => setCardInView(entry.isIntersecting), { threshold: 0.15 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [isOwner]);
 
+  // Devis relu quand le membre est connu : s'il a une proposition de prix acceptée par le vendeur, le devis est au prix négocié
   useEffect(() => {
     if (!active) return;
     api<Quote>(`/transactions/quote?listingId=${listing.id}`).then(setQuote).catch(() => setQuote(null));
-  }, [listing.id, active]);
+  }, [listing.id, active, user?.id]);
+  // Arrivée depuis la conversation (« Payer 15,00 € ») : la fenêtre de paiement s'ouvre directement
+  useEffect(() => {
+    if (!user || !quote?.eligible || isOwner || typeof window === "undefined") return;
+    if (new URLSearchParams(window.location.search).get("acheter") !== "1") return;
+    setBuyOpen(true);
+    window.history.replaceState(null, "", window.location.pathname);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, quote?.eligible]);
   useEffect(() => {
     // Retour de la page de paiement Stripe par « Retour » : rien n'a été débité
     if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("paiement") === "annule") {
@@ -123,7 +144,7 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
   }
 
   return (
-    <div className="card stack">
+    <div className="card stack" ref={cardRef}>
       {active ? (
         <>
           <button className="btn btn-primary btn-lg btn-block" onClick={() => (user ? setContactOpen(true) : requireAuth(`/annonces/${listing.id}`))}>
@@ -134,6 +155,7 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
               <button className="btn btn-dark btn-block" onClick={() => (user ? setBuyOpen(true) : requireAuth(`/annonces/${listing.id}`))} title="Paiement sécurisé : fonds bloqués jusqu'à la réception">
                 Acheter · {formatEuros(quote.buyerTotal)}
               </button>
+              {quote.offer && <p className="small" style={{ margin: "-4px 0 0", textAlign: "center", color: "var(--accent-dark)", fontWeight: 600 }} data-testid="negotiated-price">Prix négocié avec le vendeur : {formatEuros(quote.offer.amount)} au lieu de {formatEuros(quote.listPrice)}</p>}
               <p className="small muted" style={{ margin: "-4px 0 0", textAlign: "center" }} data-testid="buy-breakdown">Paiement sécurisé : {formatEuros(quote.price)} + {formatEuros(quote.buyerFee)} de frais de protection</p>
             </>
           )}
@@ -159,13 +181,24 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
         <ReportListingButton listingId={listing.id} />
       </div>
 
+      {active && (
+        <div className="listing-bar" data-testid="listing-bar" data-hidden={cardInView || contactOpen || buyOpen ? "true" : "false"}>
+          <div className="listing-bar-price">
+            <strong>{quote?.offer ? formatEuros(quote.offer.amount) : formatPrice(listing.price, listing.priceType)}</strong>
+            {quote?.offer && <span>prix négocié</span>}
+          </div>
+          <button type="button" className="btn btn-outline" onClick={() => (user ? setContactOpen(true) : requireAuth(`/annonces/${listing.id}`))}>Message</button>
+          {quote?.eligible && <button type="button" className="btn btn-primary" onClick={() => (user ? setBuyOpen(true) : requireAuth(`/annonces/${listing.id}`))}>Acheter</button>}
+        </div>
+      )}
+
       <Modal open={contactOpen} onClose={() => setContactOpen(false)} title="Écrire au vendeur">
         <div className="field">
           <label htmlFor="msg">Votre message</label>
           <textarea id="msg" className="textarea" value={message} onChange={(e) => setMessage(e.target.value)} maxLength={2000} style={{ minHeight: 100 }} />
           <div className="row">
             {["Quel est votre dernier prix ?", "Où se situe le retrait ?", "Acceptez-vous un envoi ?"].map((q) => (
-              <button key={q} type="button" className="pill" style={{ cursor: "pointer", border: 0 }} onClick={() => setMessage(q)}>{q}</button>
+              <button key={q} type="button" className="pill pill-phrase" onClick={() => setMessage(q)}>{q}</button>
             ))}
           </div>
         </div>
@@ -206,7 +239,7 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
             {delivery !== "main_propre" && <DeliveryChooser key={optionsNonce} listingId={listing.id} carrier={delivery} postalCode={address.postalCode} city={address.city} onChange={setChoice} />}
             <table className="table" style={{ marginBottom: 16 }}>
               <tbody>
-                <tr data-testid="quote-price"><td>Prix de l&apos;article</td><td style={{ textAlign: "right" }}>{formatEuros(quote.price)}</td></tr>
+                <tr data-testid="quote-price"><td>{quote.offer ? "Prix négocié" : "Prix de l'article"}</td><td style={{ textAlign: "right" }}>{formatEuros(quote.price)}</td></tr>
                 <tr data-testid="quote-fee"><td>Frais de protection acheteur</td><td style={{ textAlign: "right" }}>{formatEuros(quote.buyerFee)}</td></tr>
                 {delivery !== "main_propre" && <tr data-testid="quote-shipping"><td>Frais de livraison{delivery === "colissimo" ? " Colissimo" : " Mondial Relay"}</td><td style={{ textAlign: "right" }}>{choice.shippingCents !== null ? formatEuros(shippingEuros) : "à choisir"}</td></tr>}
                 <tr data-testid="quote-total"><td><strong>Total à payer</strong></td><td style={{ textAlign: "right" }}><strong>{formatEuros(payTotal)}</strong></td></tr>
