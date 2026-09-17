@@ -66,7 +66,7 @@ export function SalePanel({ sale, listing, onChanged }: { sale: ConversationSale
       <Disclosure tone="tint" testId="sale-summary" icon={<span>{seller ? "🏷️" : "🛍️"}</span>} label={<>{seller ? "Vente" : "Achat"} · {formatEuros(sale.amount)}</>} summary={st.label} openLabel="Détails" closeLabel="Réduire">
         <div className="small" style={{ display: "flex", flexDirection: "column", gap: 4, padding: "0 4px 2px", fontSize: ".8rem" }}>
           <span className="muted" style={{ overflowWrap: "anywhere" }}>{deliveryLabel(sale)}</span>
-          <span className="muted">{st.help}</span>
+          <span className="muted">{seller && sale.status === "sequestre" ? "Le paiement est sécurisé : à vous d'expédier ou d'organiser la remise." : st.help}</span>
           <Link href={href} data-testid="sale-details" style={{ fontWeight: 700, alignSelf: "flex-start" }}>Détails de la vente →</Link>
         </div>
       </Disclosure>

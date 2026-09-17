@@ -92,7 +92,7 @@ export default function TransactionPage() {
         <div>
           <p className="eyebrow">{buyer ? "Achat" : "Vente"} · {deliveryLabel(tx)}</p>
           <h1 style={{ fontSize: "1.6rem" }}>{tx.listing?.title ?? (tx.listingTitle ? `${tx.listingTitle} (annonce supprimée)` : "Annonce supprimée")}</h1>
-          <span className={st.pill}>{st.label}</span> <span className="small muted">{st.help}</span>
+          <span className={st.pill}>{st.label}</span> <span className="small muted">{!buyer && tx.status === "sequestre" ? "Le paiement est sécurisé : à vous d'expédier ou d'organiser la remise." : st.help}</span>
         </div>
         <div className="row" style={{ gap: 8 }}>
           {tx.conversationId && <Link href={`/compte/messages/${tx.conversationId}`} className="btn btn-outline btn-sm" data-testid="open-conversation">Conversation et suivi</Link>}

@@ -3248,3 +3248,23 @@ distincte du site public.
 - Navigateur : `28-prix-negocie-direct` (deux navigateurs, aucun rechargement : message, proposition, acceptation,
   « Payer 15,00 € », vente à 16,25 €, blocs A / B / K) et `29-audit-interfaces` (barre mobile, console mobile, recherche
   de la console, « Réessayer », puces) jouées à 375 px et sur grand écran ; `05`, `26`, `27` adaptées.
+- Suites complètes avant livraison : API **209 réussis, 1 ignoré** ; navigateur **135 réussis, 11 ignorés** (bureau et
+  mobile 375 px) ; `npm audit` sans alerte haute ; types API et front propres.
+- Captures (pile locale, bureau et mobile) : blocs A / B repliés puis dépliés, proposition reçue en direct, « Payer
+  15,00 € », fenêtre au prix négocié, vente « Prix négocié (affiché 20,00 €) », blocs F / K / N côté vendeur, barre
+  d'action mobile, console sur téléphone (bandeau de 56 px, chiffres sur deux colonnes), liens du texte courant.
+
+Production 1.32.0 (CI verte sur `f1713ca` — tests API sur SQLite et PostgreSQL 16 avec la migration `1789580000000`,
+parcours navigateur, image Docker, déploiement). Deux sessions réelles sur www.trocoin.fr — acheteur sur téléphone
+375 px (compte de démonstration), vendeur temporaire sur grand écran —, **aucun rechargement** : message de
+l'acheteur visible chez le vendeur en 94 ms ; ticket « Proposition · En attente · 15,00 € » chez le vendeur en 199 ms ;
+après « Accepter », bouton **« Payer 15,00 € »** et « Prix valable jusqu'au 20 sept. » chez l'acheteur en 1,8 s,
+en-tête « Payer 15,00 € », vendeur « En attente du paiement de l'acheteur ». Devis du serveur pour l'acheteur : prix 15,
+protection 1,25, total 16,25, prix affiché 20 ; **pour un autre compte : 20 €**. Fenêtre de paiement (mobile) : « Prix
+négocié 15,00 € · Frais de protection 1,25 € · Total à payer 16,25 € », bouton « Payer 16,25 € ». Page Stripe réelle :
+**16,25 €**, 20,00 € nulle part. Retour par « ← » sans payer : vente `en_attente` à 15 € (prix affiché 20 gardé), puis
+abandon. Fiche annonce sur téléphone : barre « 15,00 € · prix négocié · Message · Acheter ». Conversation, annonce et
+compte temporaires supprimés (200, 204, 204). Aucun numéro de carte saisi.
+
+Correctif 1.32.1, vu sur les captures : l'aide de l'état « Fonds bloqués » disait au vendeur « le vendeur doit
+expédier… » → « à vous d'expédier ou d'organiser la remise » (conversation et page de la vente).
