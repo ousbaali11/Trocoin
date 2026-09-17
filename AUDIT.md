@@ -3061,3 +3061,12 @@ Migration `1789560000000` : les annonces des ventes en cours au déploiement pas
 - Captures (pile locale) : avant achat, « Vendu » (visiteur bureau et mobile, vendeur), annulation avec bouton
   « Remettre l'annonce en ligne » (conversation bureau et mobile, page de la vente), après remise en ligne, annonce
   supprimée (404, page de la vente, conversation).
+
+Production 1.30.0 (CI verte sur `7d84d77`, migrations jouées sur PostgreSQL, `/health` → 1.30.0) — annonce temporaire :
+en ligne → bouton « Acheter » et « Contacter » présents, devis 200 ; passée « vendue » → badge « Vendu », **plus de
+bouton Acheter ni Contacter** (bureau et mobile 375 px), « Article vendu : il n'est plus disponible à l'achat. »,
+devis et achat → 404, absente de la recherche ; remise en ligne par le vendeur → 200 (403 pour un autre membre),
+bouton Acheter de retour. Annonce et compte temporaires supprimés (204, 204). Le passage automatique à « vendue » au
+paiement, la remise en ligne après annulation et la suppression à la réception demandent une vente payée : ils sont
+prouvés par `phase35`, `27-annonce-vendue` et les captures de la pile locale — aucun numéro de carte n'est saisi en
+production.
