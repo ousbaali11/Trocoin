@@ -3336,3 +3336,13 @@ maintenant clairement au lieu d'une « erreur interne ». Options de réception 
 lenteur restante est celle du prestataire lui-même (bac à sable Boxtal, une cotation ≈ 5 s), d'où deux mesures de
 plus : **préchargement** dès la fiche, et **deux moitiés indépendantes** (`part=points`, `part=prices`) demandées
 ensemble — la liste des points n'attend pas la cotation, et inversement. Compte et annonce temporaires supprimés.
+
+**Production 1.33.2** (CI verte sur `ad1fb42`), fenêtre d'achat réelle, acheteur de démonstration avec code postal connu
+(75017), annonce temporaire Lyon → Paris : sur téléphone 375 px, **mémoire vide côté serveur**, les options sont
+préchargées 5,5 s après le début du chargement de la fiche ; en cochant Mondial Relay aussitôt, les prix arrivent 4,4 s
+plus tard (cotation du bac à sable Boxtal) mais la **liste des points est déjà là : 4 ms** après le choix « point relais »
+(9 relais, 11 consignes). Sur grand écran, juste après (mémoire chaude) : options préchargées en 1,3 s, **prix et
+nombre de points affichés 10 ms après avoir coché le transporteur, liste en 5 ms**. Limite connue : la première
+cotation d'un colis pour une destination dépend du prestataire (5 à 9 s en bac à sable) ; elle ne se voit que si
+l'acheteur ouvre la fenêtre dans les secondes qui suivent son arrivée sur une fiche jamais cotée. Compte et annonce
+temporaires supprimés.
