@@ -2858,3 +2858,5 @@ et « À envoyer » se chevauchaient sur la première tuile.
   `listitem` par un conteneur et non par le `label`), `08-clavier`, `11-marges-mobile` : tous réussis.
 - Captures (pile locale) : étape Photos bureau et mobile (vide, puis deux photos), panneau d'expédition avec
   téléphone prérempli puis invalide. L'achat réel d'une étiquette n'est pas rejoué en production (il est payant).
+
+Production 1.27.2 (CI verte sur `685026f`) : formulaire de dépôt ouvert avec un compte de démonstration, sans rien publier — tuile « + Ajouter jusqu'à 10 photos » présente sur bureau et mobile 375 px, ancienne zone « Cliquez pour choisir des photos » absente, aucun lien « Faire » pour les photos (captures).
