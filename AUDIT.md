@@ -2728,3 +2728,24 @@ GTIN, de marque, d'avis ou de note ; documenter pourquoi ces champs restent vide
 - Reste à faire par le propriétaire : dans Search Console, « Valider la correction » sur les deux alertes
   traitées. Les alertes sur l'identifiant global et les avis resteront en « améliorations facultatives » :
   c'est attendu et documenté.
+
+## 53. Fenêtre de paiement : formule des frais et net du vendeur retirés de la vue de l'acheteur — 17 septembre 2026
+
+Demande (capture annotée) : dans la fenêtre « Paiement sécurisé », ne plus montrer aux utilisateurs le bloc A
+(ligne « 5 % + 0,50 € (plafonnés à 15 €) : paiement conservé par Trocoin jusqu'à la réception » sous « Frais
+de protection acheteur ») ni le bloc B (« Le vendeur perçoit 9,20 € (commission Trocoin de 8 % : 0,80 €) »).
+Ces deux mentions avaient été ajoutées au tour §51.
+
+Livré (1.26.2) : la ligne « Frais de protection acheteur » n'affiche plus que son montant ; la phrase sur le
+net du vendeur et la commission est retirée ; « Frais de port à convenir avec le vendeur pour un envoi. » est
+conservée, comme les trois lignes prix / frais / total et la ligne sous le bouton « Acheter ». Rien d'autre ne
+change : le barème reste réglable par l'admin, le vendeur voit toujours sa commission sur la fiche de sa
+transaction, la formule reste dans le centre d'aide et la page Versements.
+`docs/mecanisme-paiement-explique.md` §3 et le README sont alignés.
+
+Vérification : `e2e/23-bareme` affirme désormais l'absence de « plafonnés », « Le vendeur perçoit » et
+« commission » dans la fenêtre (6 scénarios d'achat et de barème réussis, CI verte sur `d34fcc0`).
+Production 1.26.2, annonce temporaire à 10 € et compte de démonstration acheteur, bureau et mobile : la fenêtre
+contient « Prix de l'article 10,00 € · Frais de protection acheteur 1,00 € · Total à payer 11,00 € · Frais de
+port à convenir avec le vendeur pour un envoi. » et aucune des trois mentions retirées (captures). Annonce et
+compte temporaires supprimés (204).
