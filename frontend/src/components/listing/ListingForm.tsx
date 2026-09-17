@@ -621,9 +621,8 @@ function PhotoTile({ src, cover, pendingLabel, dragging, position, locked, onCro
       <img src={src} alt={`Photo ${position}${cover ? " (couverture)" : ""}`} style={{ width: "100%", aspectRatio: "4/3", objectFit: "cover", pointerEvents: "none" }} />
       {cover && <span className="pill pill-accent" style={{ position: "absolute", top: 6, left: 6 }}>Couverture</span>}
       {pendingLabel && <span className="pill" style={{ position: "absolute", top: 6, right: 6 }}>{pendingLabel}</span>}
-      {locked && <span className="pill" style={{ position: "absolute", top: 6, right: 6 }} title="Photo de l'annonce publiée : ni retirable, ni remplaçable, ni déplaçable">🔒 Verrouillée</span>}
       {locked ? (
-        <div className="small muted" style={{ padding: "8px 6px", background: "var(--ivory-warm)" }} data-testid="locked-photo">Photo de publication</div>
+        <div className="small muted" style={{ padding: "8px 6px", background: "var(--ivory-warm)" }} data-testid="locked-photo" title="Photo de l'annonce publiée : ni retirable, ni remplaçable, ni déplaçable">🔒 Verrouillée</div>
       ) : (
       <div className="row" style={{ justifyContent: "space-between", padding: 4, background: "var(--white)" }}>
         <span>

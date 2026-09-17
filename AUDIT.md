@@ -2749,3 +2749,67 @@ Production 1.26.2, annonce temporaire à 10 € et compte de démonstration ache
 contient « Prix de l'article 10,00 € · Frais de protection acheteur 1,00 € · Total à payer 11,00 € · Frais de
 port à convenir avec le vendeur pour un envoi. » et aucune des trois mentions retirées (captures). Annonce et
 compte temporaires supprimés (204).
+
+## 54. Annonces sans expiration, verrous anti-fraude après publication, sous-catégories au tap sur mobile — 17 septembre 2026
+
+Demande : (1) supprimer la limite de 60 jours (`LISTING_LIFETIME_DAYS`) ; (2) après publication, rendre non
+modifiables pour le vendeur la catégorie, la marque et les photos de publication, avec des champs visiblement
+grisés, sans toucher aux pouvoirs de l'admin, et un test de refus ; (3) corriger l'absence de sous-catégories
+au tap sur mobile.
+
+### 1. Annonces sans expiration
+
+- Retiré : la constante de durée de vie, la tâche horaire `expireListings`, l'écriture de `expiresAt` (création,
+  publication, renouvellement, approbation par l'admin). Migration
+  `1789540000000-AnnoncesSansExpirationEtVerrous` : dates effacées, annonces « expiree » remises en ligne
+  (seule la limite de temps menait à ce statut).
+- Impacts vérifiés : sitemap (ne lit que les annonces en ligne, inchangé) ; « Mes annonces » (onglet « En
+  pause », plus de « expire le … ») ; filtre des annonces de la console (option « Expirée » retirée) ;
+  réactivation d'un compte suspendu (toutes les annonces reviennent en ligne, test `phase25` adapté) ;
+  statistiques (aucune ne dépendait de l'expiration) ; centre d'aide (« sans limite de durée »). Le
+  renouvellement reste : il fait remonter l'annonce. Le statut `expiree` ne subsiste que dans le type.
+
+### 2. Verrous anti-fraude
+
+Raison, écrite dans le code (`updateOwn`) et dans `docs/audit-admin.md` : empêcher qu'un vendeur publie une
+annonce crédible, accumule vues, favoris et confiance, puis la transforme discrètement en autre chose.
+
+- **Catégorie / sous-catégorie** : 400 si différente après publication (même valeur acceptée).
+- **Marque** (attribut `marque` renseigné) : 400 si changée ou retirée ; les autres critères restent libres.
+- **Photos de publication** (`listing_photos.lockedAt`) : ni retrait (400), ni déplacement (400), elles restent
+  en tête et la couverture ne change pas. **Ajouter** des photos reste permis : elles viennent à la suite,
+  restent retirables et déplaçables entre elles, et sont verrouillées à la remise en ligne suivante.
+- Le dépôt passe en trois temps (brouillon, photos, publication) pour que les photos existent au moment du
+  verrou ; pour les clients qui publient d'abord, les photos reçues dans les 10 minutes suivant la publication
+  en font partie. Un brouillon reste entièrement modifiable.
+- **Formulaire** : catégorie remplacée par un champ grisé « 🔒 Famille › Catégorie » avec l'explication, marque
+  désactivée avec sa note, tuiles « 🔒 Verrouillée » sans bouton, bandeau qui rappelle que l'ajout reste
+  possible. La fiche expose `locks`.
+- **Admin** : pouvoirs inchangés (modifier, mettre en pause, refuser, supprimer) et nouveau retrait d'une photo,
+  même verrouillée, avec motif obligatoire, journal `listing.photo.delete` et notification du vendeur (bouton
+  sur la fiche admin). C'est le recours pour une photo publiée par erreur (plaque, visage, adresse).
+
+### 3. Sous-catégories sur mobile
+
+Cause : au tour §48, le panneau n'avait été branché que sur le survol (pointeur précis, ≥ 1024 px) et un tap
+naviguait directement vers la famille ; le repli mobile renvoyait à l'accordéon du menu, que rien n'indiquait
+depuis la grille. Corrigé : sans survol, un tap sur une famille déplie sous la grille un panneau « Tout
+<famille> » + sous-catégories sur deux colonnes (cibles de 44 px, mêmes couleurs que le panneau du bureau),
+un second tap ou « Fermer » le replie, une autre famille le remplace ; une famille sans sous-catégorie navigue.
+
+### Vérification
+
+- API : `test/phase31` (4 tests : aucune expiration ; brouillon libre puis verrou ; refus de catégorie, marque,
+  retrait et déplacement de photo, ajout permis ; admin et journal) ; tests `listings`, `phase9`, `phase25`
+  adaptés → **182 tests**. Navigateur : `04-depot` (formulaire grisé après publication, photo ajoutée retirable),
+  `14-filtres` (accordéon mobile) ; suite complète 111 réussis + le scénario mobile corrigé (mesure prise pendant
+  l'animation) ; le scénario `19-session` reste instable dans la suite (passe seul 5/5, sans lien avec ce tour,
+  tâche de suivi proposée). CI verte sur `adbe14c`.
+- Production 1.27.0 : annonce existante `expiresAt = null`, en ligne. Annonce temporaire (brouillon, 2 photos,
+  publication) : `locks` tous vrais, 2/2 photos verrouillées ; changer de catégorie → 400, de marque → 400,
+  retirer une photo → 400, la déplacer → 400, modifier titre et prix → 200, ajouter une photo → 201. Formulaire :
+  catégorie « 🔒 Électronique › Téléphonie » désactivée, marque « Apple » désactivée, 2 tuiles verrouillées,
+  0 bouton de suppression (captures). Mobile 375 px : tap sur « Véhicules » → reste sur l'accueil, panneau avec
+  les 6 sous-catégories ; tap sur « Motos » → `/recherche?category=motos` (capture). Annonce et compte
+  temporaires supprimés (204).
+- 1.27.1 : l'indication « 🔒 Verrouillée » passe dans le pied de la tuile (elle chevauchait « Couverture »).
