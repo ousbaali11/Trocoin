@@ -141,7 +141,7 @@ export default function TransactionPage() {
               {buyer ? (
                 <>
                   <tr><td>Frais de protection acheteur</td><td style={{ textAlign: "right" }}>{formatEuros(tx.buyerFee)}</td></tr>
-                  <tr><td><strong>Total payé</strong></td><td style={{ textAlign: "right" }}><strong>{formatEuros(tx.amount + tx.buyerFee)}</strong></td></tr>
+                  <tr><td><strong>{tx.status === "en_attente" || unpaidClosed ? "Total à payer" : "Total payé"}</strong></td><td style={{ textAlign: "right" }}><strong>{formatEuros(tx.amount + tx.buyerFee)}</strong></td></tr>
                 </>
               ) : (
                 <>
@@ -160,7 +160,7 @@ export default function TransactionPage() {
         <section className="panel">
           <h2 className="h3">Chronologie</h2>
           <ul className="small" style={{ paddingLeft: 18, margin: 0 }}>
-            <li>Paiement sécurisé{tx.paymentMethod === "paypal" ? " via PayPal" : tx.paymentMethod === "card" ? " par carte" : ""} : {formatDateTime(tx.createdAt)}</li>
+            <li>{tx.status === "en_attente" || unpaidClosed ? "Achat commencé, paiement non finalisé" : `Paiement sécurisé${tx.paymentMethod === "paypal" ? " via PayPal" : tx.paymentMethod === "card" ? " par carte" : ""}`} : {formatDateTime(tx.createdAt)}</li>
             {tx.sellerConfirmedAt && <li data-testid="seller-confirmed-at">Disponibilité confirmée par le vendeur : {formatDateTime(tx.sellerConfirmedAt)}</li>}
             {tx.shippedAt && <li>{tx.deliveryMethod === "main_propre" ? "Vendeur prêt pour la remise" : `Expédié${tx.deliveryTrackingNumber ? ` (suivi ${tx.deliveryTrackingNumber})` : ""}`} : {formatDateTime(tx.shippedAt)}</li>}
             {tx.confirmedAt && <li>Réception confirmée : {formatDateTime(tx.confirmedAt)}</li>}

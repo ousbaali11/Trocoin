@@ -3001,3 +3001,25 @@ ne s'affichent plus dans une conversation dont la vente est en cours.
   (réussi / refusé, bureau et mobile), `26-suivi-messagerie` (deux navigateurs, temps réel, bureau et mobile),
   `17-expedition` adaptée (options réelles par transporteur, choix imposé au vendeur).
 - Migration `1789550000000-SuiviDansLaMessagerie` (colonnes nullables, aucune donnée réécrite).
+
+Production 1.29.0 (CI verte sur `cbcb921`, migration jouée sur PostgreSQL, `/health` → 1.29.0) :
+- **Saisie** : dans « Paiement sécurisé » (compte de démonstration, bureau 1280 px et mobile 375 px), nom, adresse, code
+  postal et ville tapés touche par touche → focus resté dans le champ, valeurs complètes, « Remise en main propre »
+  non cochée, Colissimo toujours coché.
+- **Points réels (Boxtal, 75017)** : recherche par offre v3.2 acceptée (`MONR-CpourToi`, `POFR-ColissimoPickupStation`
+  → 200). Colissimo : domicile + 13 relais + 3 bureaux de poste (« BUREAU DE POSTE PARIS BATIGNOLLES »…) + 4 consignes
+  (« CONSIGNE LAPOSTE PICKUP BATIGNOLLES »…) ; Mondial Relay : domicile + 9 relais + 11 consignes (« LOCKER STATION
+  AVIA… »). Le prestataire ne fournit pas de champ « type » (champs : code, name, compatibleNetworks, location,
+  openingDays) : le classement par nom commercial est donc le bon levier, vérifié sur ces données.
+- **Retour de paiement** : « Payer » → `checkout.stripe.com` → lien « ← » de Stripe → `www.trocoin.fr/compte/
+  transactions/:id` avec « Paiement non abouti : rien n'a été débité », puis « Abandonner cet achat » → vente
+  `annulee` (« Paiement abandonné par l'acheteur »), annonce de nouveau achetable. Aucun numéro de carte n'a été saisi :
+  le retour après un paiement **réussi** est prouvé sur la pile locale (même adresse `success_url`, page hébergée
+  simulée), pas en production.
+- Routes déployées : `confirm-availability`, `abandon`, `pickup-options` → 401 sans session ; page de paiement simulée
+  → 404 en production. Le fil de conversation complet (messages automatiques, boutons) est prouvé sur la pile locale ;
+  en production il demande un paiement Stripe réel, que je ne fais pas (saisie de carte).
+- Vendeur et annonce temporaires supprimés (204, 204).
+
+1.29.1 : pour un paiement non finalisé, la page de la vente dit « Total à payer » et « Achat commencé, paiement non
+finalisé » (elle affichait « Total payé » / « Paiement sécurisé » à côté de « rien n'a été débité »).
