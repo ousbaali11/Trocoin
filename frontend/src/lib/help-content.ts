@@ -206,8 +206,9 @@ Les échanges sont en temps réel quand les deux membres sont connectés, sinon 
         keywords: ["paiement", "sécurisé", "frais", "commission", "séquestre"],
         body: `Pour les objets jusqu'à **2 500 €** (hors véhicules, immobilier, emploi, services, vacances et animaux), l'acheteur paie sur Trocoin. Trocoin **encaisse et conserve** les fonds jusqu'à ce qu'il confirme la réception ; le vendeur est payé à ce moment-là seulement. Le vendeur doit expédier (ou remettre) sous **7 jours**, sinon la vente est annulée et l'acheteur intégralement remboursé.
 
-- **Frais acheteur** : 5 % + 0,50 € (plafonnés à 15 €), affichés avant validation.
-- **Commission vendeur** : 8 % retenus sur le versement.
+- **Frais acheteur** : {{frais_acheteur}}, affichés séparément du prix avant validation.
+- **Commission vendeur** : {{commission}} retenus sur le versement.
+- Le barème d'une vente est celui en vigueur au moment du paiement ; il ne change plus ensuite.
 - **Remise en main propre** : l'acheteur reçoit un code à 6 chiffres ; le vendeur le saisit au rendez-vous pour libérer les fonds.
 - **Envoi** : le vendeur renseigne le numéro de suivi Colissimo ou Mondial Relay.
 

@@ -3,6 +3,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { findHelpArticle, HELP_ARTICLES } from "@/lib/help-content";
 import { renderMarkdown } from "@/lib/markdown";
+import { api } from "@/lib/api";
+import { DEFAULT_FEE_RATES, formatBuyerFeeFormula, formatPercent, type FeeRates } from "@/lib/format";
 
 export function generateStaticParams() {
   return HELP_ARTICLES.map((a) => ({ slug: a.slug }));
@@ -19,6 +21,8 @@ export default async function HelpArticlePage({ params }: { params: Promise<{ sl
   const article = findHelpArticle(slug);
   if (!article) notFound();
   const siblings = article.section.articles.filter((a) => a.slug !== article.slug);
+  // Barème en vigueur (réglé par l'admin, AUDIT §51) : les articles portent des jetons, pas des chiffres en dur
+  const fees = await api<{ fees?: FeeRates }>("/settings/public", { revalidate: 300 }).then((s) => s.fees ?? DEFAULT_FEE_RATES).catch(() => DEFAULT_FEE_RATES);
   return (
     <div className="container page narrow">
       <nav className="small muted" aria-label="Fil d'Ariane" style={{ marginBottom: 12 }}>
@@ -27,7 +31,7 @@ export default async function HelpArticlePage({ params }: { params: Promise<{ sl
       <p className="eyebrow">{article.section.title}</p>
       <h1>{article.title}</h1>
       <p className="muted" style={{ fontSize: "1.05rem" }}>{article.summary}</p>
-      <div className="panel legal" dangerouslySetInnerHTML={{ __html: renderMarkdown(article.body) }} />
+      <div className="panel legal" dangerouslySetInnerHTML={{ __html: renderMarkdown(article.body.replaceAll("{{frais_acheteur}}", formatBuyerFeeFormula(fees)).replaceAll("{{commission}}", formatPercent(fees.commissionPercent))) }} />
       <style>{`.legal h2{font-size:1.15rem;margin-top:1.4em}.legal h2:first-child{margin-top:0}.legal ul,.legal ol{padding-left:20px}.legal p{margin:0 0 .9em}.legal li{margin-bottom:.35em}`}</style>
 
       {siblings.length > 0 && (

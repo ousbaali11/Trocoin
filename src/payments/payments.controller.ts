@@ -37,7 +37,7 @@ export class PaymentsController {
   @Post()
   @Throttle({ default: { limit: 10, ttl: 600_000 } })
   create(@Req() req: any, @Body() dto: CreateTransactionDto) {
-    return this.paymentsService.createTransaction(req.user.userId, dto.listingId, dto.deliveryMethod, dto.shippingAddress);
+    return this.paymentsService.createTransaction(req.user.userId, dto.listingId, dto.deliveryMethod, dto.shippingAddress, dto.expectedTotal);
   }
 
   @UseGuards(JwtAuthGuard)

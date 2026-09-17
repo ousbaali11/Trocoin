@@ -5,10 +5,12 @@ import { api } from "@/lib/api";
 import { useToast } from "@/lib/toast-context";
 import { useConfirm } from "@/lib/confirm-context";
 import type { Plan } from "@/lib/types";
+import { FeeSettingsPanel, type FeesInfo } from "@/components/admin/FeeSettingsPanel";
 
 interface SettingsPayload {
   settings: Record<string, unknown>;
   plans: Plan[];
+  fees?: FeesInfo;
 }
 
 export default function AdminSettingsPage() {
@@ -72,6 +74,8 @@ export default function AdminSettingsPage() {
           </button>
         </div>
       </section>
+
+      {data.fees && <FeeSettingsPanel fees={data.fees} onSaved={load} />}
 
       <div className="a-two">
         <section className="a-panel">

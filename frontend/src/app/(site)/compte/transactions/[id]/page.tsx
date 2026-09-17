@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useToast } from "@/lib/toast-context";
 import { useConfirm } from "@/lib/confirm-context";
-import { DELIVERY_LABELS, formatDateTime, formatEuros, TX_STATUS_LABELS } from "@/lib/format";
+import { DELIVERY_LABELS, formatDateTime, formatEuros, formatPercent, TX_STATUS_LABELS } from "@/lib/format";
 import type { Review, Transaction } from "@/lib/types";
 import { Modal } from "@/components/ui/Modal";
 import { ShipmentPanel } from "@/components/transactions/ShipmentPanel";
@@ -95,7 +95,7 @@ export default function TransactionPage() {
                 </>
               ) : (
                 <>
-                  <tr><td>Commission Trocoin (8 %)</td><td style={{ textAlign: "right" }}>− {formatEuros(tx.commission)}</td></tr>
+                  <tr><td>Commission Trocoin ({formatPercent(tx.rates?.commissionPercent ?? (tx.amount > 0 ? Math.round((tx.commission / tx.amount) * 1000) / 10 : 0))})</td><td style={{ textAlign: "right" }}>− {formatEuros(tx.commission)}</td></tr>
                   <tr><td><strong>Montant versé</strong></td><td style={{ textAlign: "right" }}><strong>{formatEuros(q?.sellerPayout ?? tx.amount - tx.commission)}</strong></td></tr>
                 </>
               )}

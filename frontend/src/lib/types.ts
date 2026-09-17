@@ -273,6 +273,8 @@ export interface Quote {
   buyerFee?: number;
   buyerTotal?: number;
   sellerPayout?: number;
+  /** Barème en vigueur (devis d'annonce) ou barème figé de la vente (détail d'une transaction). */
+  rates?: { commissionPercent: number; buyerFeePercent: number; buyerFeeFixed: number; buyerFeeCap: number } | null;
 }
 
 export interface Transaction {
@@ -321,6 +323,8 @@ export interface Transaction {
   other?: SellerSummary | null;
   listing?: { id: string; title: string; price?: number | null; status: ListingStatus } | null;
   quote?: Quote;
+  /** Barème figé de cette vente (null pour les ventes antérieures au réglage par l'admin). */
+  rates?: Quote["rates"];
 }
 
 export interface Notification {

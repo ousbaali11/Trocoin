@@ -88,12 +88,15 @@ export class StripePaymentProvider implements IPaymentProvider {
       locale: 'fr',
       client_reference_id: params.transactionId,
       customer_email: params.buyerEmail,
-      line_items: [
-        {
-          quantity: 1,
-          price_data: { currency: 'eur', unit_amount: this.toCents(params.amountEuros), product_data: { name: params.title.slice(0, 120) } },
-        },
-      ],
+      // Deux lignes sur la page Stripe (AUDIT §51) : l'article et les frais de protection, jamais un total sans détail.
+      // Leur somme est le total du devis ; à défaut de détail (anciens appels), une seule ligne au montant total.
+      line_items:
+        params.priceEuros !== undefined && params.feeEuros !== undefined && params.feeEuros > 0 && this.toCents(params.priceEuros) + this.toCents(params.feeEuros) === this.toCents(params.amountEuros)
+          ? [
+              { quantity: 1, price_data: { currency: 'eur', unit_amount: this.toCents(params.priceEuros), product_data: { name: params.title.slice(0, 120) } } },
+              { quantity: 1, price_data: { currency: 'eur', unit_amount: this.toCents(params.feeEuros), product_data: { name: 'Frais de protection acheteur Trocoin', description: "Paiement conservé par Trocoin jusqu'à la réception, remboursement si le colis n'arrive pas." } } },
+            ]
+          : [{ quantity: 1, price_data: { currency: 'eur', unit_amount: this.toCents(params.amountEuros), product_data: { name: params.title.slice(0, 120) } } }],
       payment_intent_data: {
         capture_method: 'manual',
         metadata: params.metadata,

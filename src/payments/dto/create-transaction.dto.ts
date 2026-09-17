@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsIn, IsOptional, IsString, IsUUID, Matches, MaxLength, MinLength, ValidateNested } from 'class-validator';
+import { IsIn, IsNumber, IsOptional, IsString, IsUUID, Matches, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
 import { DeliveryMethod } from '../transaction.entity';
 
 export const DELIVERY_METHODS: DeliveryMethod[] = ['main_propre', 'colissimo', 'mondial_relay'];
@@ -51,6 +51,16 @@ export class CreateTransactionDto {
   @ValidateNested()
   @Type(() => DeliveryAddressDto)
   shippingAddress?: DeliveryAddressDto;
+
+  /**
+   * Total affiché à l'acheteur au moment où il clique sur « Payer » (AUDIT §51). Ce n'est PAS le montant débité
+   * (toujours recalculé côté serveur) : c'est un garde-fou. Si l'admin a changé le barème entre l'affichage et le
+   * clic, le serveur refuse (409) et renvoie le nouveau devis au lieu de débiter un total que l'acheteur n'a pas vu.
+   */
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  expectedTotal?: number;
 }
 
 export class ShipTransactionDto {

@@ -61,7 +61,7 @@ export class AdminService {
   // ---------------------------------------------------- réglages / formules
 
   async getSettings() {
-    return { settings: await this.settings.all(), plans: await this.settings.listPlans(true) };
+    return { settings: await this.settings.all(), plans: await this.settings.listPlans(true), fees: await this.settings.feesInfo() };
   }
 
   async updateSettings(ctx: AdminContext, dto: AdminSettingsDto) {

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
@@ -14,6 +15,7 @@ import { In, IsNull, LessThan, MoreThan, Not, Repository } from 'typeorm';
 import { resolveSiteUrl } from '../config/env.validation';
 import { Listing } from '../listings/listing.entity';
 import { NotificationsService } from '../notifications/notifications.service';
+import { DEFAULT_FEE_RATES, FeeRates, SettingsService } from '../settings/settings.service';
 import { Shipment } from '../shipping/shipment.entity';
 import { StripeConnectService } from '../users/stripe-connect.service';
 import { UsersService } from '../users/users.service';
@@ -22,15 +24,11 @@ import { CHECKOUT_TTL_MINUTES, PAYMENT_PROVIDER } from './payments.constants';
 import { DeliveryAddress, DeliveryMethod, Transaction } from './transaction.entity';
 
 /**
- * Barème (cahier des charges §3.6 : "commission transparente affichée
- * avant validation"). Modèle : le vendeur paie une commission de 8 %
- * retenue sur le versement ; l'acheteur paie des frais de protection
- * (5 % + 0,50 €, plafonnés à 15 €) ajoutés au prix.
+ * Barème (cahier des charges §3.6 : "commission transparente affichée avant validation"). Modèle : le vendeur
+ * paie une commission retenue sur le versement ; l'acheteur paie des frais de protection (pourcentage + fixe,
+ * plafonnés) ajoutés au prix. Les valeurs vivent dans les réglages système (AUDIT §51, défaut 8 % et
+ * 5 % + 0,50 € plafonnés à 15 €), modifiables par l'admin ; chaque transaction fige le barème de sa création.
  */
-export const COMMISSION_RATE = 0.08;
-export const BUYER_FEE_RATE = 0.05;
-export const BUYER_FEE_FIXED = 0.5;
-export const BUYER_FEE_CAP = 15;
 export const MAX_SECURE_AMOUNT = 2500;
 /** Familles exclues du paiement sécurisé (comme leboncoin). */
 export const SECURE_PAYMENT_EXCLUDED_ROOTS = ['immobilier', 'vehicules', 'emploi', 'services', 'vacances', 'animaux'];
@@ -68,9 +66,9 @@ export const ESCROW_SHIP_DEADLINE_DAYS = envNum('ESCROW_SHIP_DEADLINE_DAYS', 7);
 
 const frDate = (d: Date) => new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' }).format(d);
 
-export function computeQuote(price: number) {
-  const commission = round2(price * COMMISSION_RATE);
-  const buyerFee = round2(Math.min(price * BUYER_FEE_RATE + BUYER_FEE_FIXED, BUYER_FEE_CAP));
+export function computeQuote(price: number, fees: FeeRates = DEFAULT_FEE_RATES) {
+  const commission = round2((price * fees.commissionPercent) / 100);
+  const buyerFee = round2(Math.min((price * fees.buyerFeePercent) / 100 + fees.buyerFeeFixed, fees.buyerFeeCap));
   return {
     price,
     commission,
@@ -78,6 +76,11 @@ export function computeQuote(price: number) {
     buyerTotal: round2(price + buyerFee),
     sellerPayout: round2(price - commission),
   };
+}
+
+/** Devis d'une transaction EXISTANTE : relu sur ses montants figés, jamais recalculé avec le barème du jour. */
+export function quoteOfTransaction(tx: Pick<Transaction, 'amount' | 'commission' | 'buyerFee'>) {
+  return { price: tx.amount, commission: tx.commission, buyerFee: tx.buyerFee, buyerTotal: round2(tx.amount + tx.buyerFee), sellerPayout: round2(tx.amount - tx.commission) };
 }
 
 @Injectable()
@@ -91,6 +94,7 @@ export class PaymentsService {
     private usersService: UsersService,
     private stripeConnect: StripeConnectService,
     private notifications: NotificationsService,
+    private settings: SettingsService,
   ) {}
 
   /** Devis affiché avant validation : prix, frais acheteur, total, commission vendeur. */
@@ -98,12 +102,15 @@ export class PaymentsService {
     const listing = await this.listingsRepo.findOne({ where: { id: listingId } });
     if (!listing || listing.status !== 'en_ligne') throw new NotFoundException('Annonce introuvable.');
     const eligibility = await this.checkEligibility(listing);
+    const fees = this.settings.fees();
     return {
       eligible: eligibility.ok,
       reason: eligibility.reason,
       isOwner: viewerId === listing.userId,
       deliveryAvailable: listing.deliveryAvailable,
-      ...(listing.price ? computeQuote(listing.price) : {}),
+      ...(listing.price ? computeQuote(listing.price, fees) : {}),
+      // Barème en vigueur, affiché à côté des montants (« 5 % + 0,50 € »)
+      rates: fees,
     };
   }
 
@@ -136,7 +143,7 @@ export class PaymentsService {
     return this.rootSlugCache.get(rootCategoryId)!;
   }
 
-  async createTransaction(buyerId: string, listingId: string, deliveryMethod: DeliveryMethod = 'main_propre', shippingAddress?: DeliveryAddress) {
+  async createTransaction(buyerId: string, listingId: string, deliveryMethod: DeliveryMethod = 'main_propre', shippingAddress?: DeliveryAddress, expectedTotal?: number) {
     const listing = await this.listingsRepo.findOne({ where: { id: listingId } });
     if (!listing || listing.status !== 'en_ligne') throw new NotFoundException('Annonce introuvable ou plus disponible.');
     if (listing.userId === buyerId) {
@@ -161,7 +168,21 @@ export class PaymentsService {
     });
     if (active > 0) throw new BadRequestException('Une transaction est déjà en cours sur cette annonce.');
 
-    const q = computeQuote(listing.price!);
+    // Barème lu UNE fois, à la création : il est figé sur la transaction (montants + taux), un changement
+    // ultérieur par l'admin ne la touche plus (AUDIT §51).
+    const fees = this.settings.fees();
+    const q = computeQuote(listing.price!, fees);
+    // Garde-fou : le total que l'acheteur a vu avant de cliquer doit être celui qu'on va débiter. Si le barème
+    // (ou le prix) a changé entre-temps, on refuse et on renvoie le nouveau devis plutôt que de le surprendre.
+    if (expectedTotal !== undefined && Math.abs(expectedTotal - q.buyerTotal) > 0.005) {
+      throw new ConflictException({
+        statusCode: 409,
+        error: 'Conflict',
+        code: 'QUOTE_CHANGED',
+        message: `Le montant à payer a changé depuis son affichage (${q.buyerTotal.toFixed(2).replace('.', ',')} € au lieu de ${expectedTotal.toFixed(2).replace('.', ',')} €). Vérifiez le nouveau total avant de payer.`,
+        quote: { ...q, rates: fees },
+      });
+    }
     // Modèle platform : la charge reste sur le solde de Trocoin, le compte du vendeur ne sert qu'au
     // transfert à la confirmation. On vérifie dès l'achat qu'il est prêt (onboarding terminé) pour ne pas
     // bloquer un versement plus tard ; un vendeur sans compte est payé dès qu'il en crée un.
@@ -175,6 +196,7 @@ export class PaymentsService {
       amount: listing.price!,
       commission: q.commission,
       buyerFee: q.buyerFee,
+      feeRates: fees,
       deliveryMethod,
       // Adresse de livraison (envoi) : gardée telle que saisie, jamais exposée en dehors des deux parties
       shippingAddress: deliveryMethod !== 'main_propre' && shippingAddress ? shippingAddress : null,
@@ -195,6 +217,8 @@ export class PaymentsService {
           applicationFeeEuros,
           transferGroup: pending.id,
           title: listing.title,
+          priceEuros: q.price,
+          feeEuros: q.buyerFee,
           buyerEmail: buyer?.email || undefined,
           successUrl: `${site}/compte/transactions/${pending.id}?paiement=retour`,
           cancelUrl: `${site}/annonces/${listingId}?paiement=annule`,
@@ -635,7 +659,9 @@ export class PaymentsService {
       role: tx.buyerId === userId ? 'acheteur' : 'vendeur',
       other,
       listing: listing ? { id: listing.id, title: listing.title, price: listing.price, status: listing.status } : null,
-      quote: computeQuote(tx.amount),
+      // Montants figés de CETTE vente (jamais recalculés avec le barème du jour) et barème appliqué à sa création
+      quote: quoteOfTransaction(tx),
+      rates: tx.feeRates ?? null,
     };
   }
 

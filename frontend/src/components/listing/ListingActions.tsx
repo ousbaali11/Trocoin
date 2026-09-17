@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast-context";
-import { formatEuros, formatPhone } from "@/lib/format";
+import { formatBuyerFeeFormula, formatEuros, formatPercent, formatPhone } from "@/lib/format";
 import type { ListingDetail, Quote } from "@/lib/types";
 import { FavoriteButton } from "@/components/ui/FavoriteButton";
 import { Modal } from "@/components/ui/Modal";
@@ -75,7 +75,7 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
     if (!requireAuth(`/annonces/${listing.id}`)) return;
     setBusy(true);
     try {
-      const res = await api<{ transaction: { id: string }; checkoutUrl?: string }>("/transactions", { method: "POST", body: { listingId: listing.id, deliveryMethod: delivery, ...(delivery !== "main_propre" ? { shippingAddress: { name: address.name.trim(), line1: address.line1.trim(), line2: address.line2.trim() || undefined, postalCode: address.postalCode, city: address.city.trim(), phone: address.phone.trim() || undefined } } : {}) } });
+      const res = await api<{ transaction: { id: string }; checkoutUrl?: string }>("/transactions", { method: "POST", body: { listingId: listing.id, deliveryMethod: delivery, expectedTotal: quote?.buyerTotal, ...(delivery !== "main_propre" ? { shippingAddress: { name: address.name.trim(), line1: address.line1.trim(), line2: address.line2.trim() || undefined, postalCode: address.postalCode, city: address.city.trim(), phone: address.phone.trim() || undefined } } : {}) } });
       if (res.checkoutUrl) {
         // Paiement hébergé : la carte est saisie sur la page sécurisée Stripe, puis retour sur la transaction
         window.location.assign(res.checkoutUrl);
@@ -84,7 +84,11 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
       toast("Paiement sécurisé enregistré : les fonds sont bloqués jusqu'à votre confirmation.", "success");
       router.push(`/compte/transactions/${res.transaction.id}`);
     } catch (e) {
-      toast((e as Error).message, "error");
+      // Barème ou prix modifié depuis l'affichage : rien n'a été débité, on montre le nouveau total avant tout paiement
+      const err = e as ApiError;
+      const fresh = err.status === 409 && (err.details as { code?: string; quote?: Partial<Quote> } | undefined)?.code === "QUOTE_CHANGED" ? (err.details as { quote?: Partial<Quote> }).quote : undefined;
+      if (fresh) setQuote((q) => (q ? { ...q, ...fresh } : q));
+      toast(err.message, fresh ? "info" : "error");
     } finally {
       setBusy(false);
     }
@@ -113,7 +117,7 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
               <button className="btn btn-dark btn-block" onClick={() => (user ? setBuyOpen(true) : requireAuth(`/annonces/${listing.id}`))} title="Paiement sécurisé : fonds bloqués jusqu'à la réception">
                 Acheter · {formatEuros(quote.buyerTotal)}
               </button>
-              <p className="small muted" style={{ margin: "-4px 0 0", textAlign: "center" }}>Paiement sécurisé, frais de protection inclus</p>
+              <p className="small muted" style={{ margin: "-4px 0 0", textAlign: "center" }} data-testid="buy-breakdown">Paiement sécurisé : {formatEuros(quote.price)} + {formatEuros(quote.buyerFee)} de frais de protection</p>
             </>
           )}
           {quote && !quote.eligible && quote.reason && <p className="small muted" style={{ margin: 0 }}>{quote.reason}</p>}
@@ -184,12 +188,12 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
             )}
             <table className="table" style={{ marginBottom: 16 }}>
               <tbody>
-                <tr><td>Prix de l&apos;article</td><td style={{ textAlign: "right" }}>{formatEuros(quote.price)}</td></tr>
-                <tr><td>Frais de protection acheteur</td><td style={{ textAlign: "right" }}>{formatEuros(quote.buyerFee)}</td></tr>
-                <tr><td><strong>Total à payer</strong></td><td style={{ textAlign: "right" }}><strong>{formatEuros(quote.buyerTotal)}</strong></td></tr>
+                <tr data-testid="quote-price"><td>Prix de l&apos;article</td><td style={{ textAlign: "right" }}>{formatEuros(quote.price)}</td></tr>
+                <tr data-testid="quote-fee"><td>Frais de protection acheteur{quote.rates && <span className="small muted" style={{ display: "block" }}>{formatBuyerFeeFormula(quote.rates)} : paiement conservé par Trocoin jusqu&apos;à la réception</span>}</td><td style={{ textAlign: "right", verticalAlign: "top" }}>{formatEuros(quote.buyerFee)}</td></tr>
+                <tr data-testid="quote-total"><td><strong>Total à payer</strong></td><td style={{ textAlign: "right" }}><strong>{formatEuros(quote.buyerTotal)}</strong></td></tr>
               </tbody>
             </table>
-            <p className="small muted">Frais de port à convenir avec le vendeur pour un envoi. Le vendeur perçoit {formatEuros(quote.sellerPayout)} (commission Trocoin {formatEuros(quote.commission)}).</p>
+            <p className="small muted">Frais de port à convenir avec le vendeur pour un envoi. Le vendeur perçoit {formatEuros(quote.sellerPayout)} (commission Trocoin{quote.rates ? ` de ${formatPercent(quote.rates.commissionPercent)}` : ""} : {formatEuros(quote.commission)}).</p>
             <div className="row" style={{ justifyContent: "flex-end" }}>
               <button className="btn btn-outline" onClick={() => setBuyOpen(false)}>Annuler</button>
               <button className="btn btn-primary" onClick={buy} disabled={busy || !addressOk}>{busy ? "Paiement…" : `Payer ${formatEuros(quote.buyerTotal)}`}</button>

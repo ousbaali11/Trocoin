@@ -37,6 +37,9 @@ export interface CreateCheckoutParams extends CreatePaymentIntentParams {
   transactionId: string;
   /** Libellé affiché sur la page de paiement. */
   title: string;
+  /** Détail du total (AUDIT §51) : prix de l'article et frais de protection, affichés sur deux lignes de la page de paiement. */
+  priceEuros?: number;
+  feeEuros?: number;
   buyerEmail?: string;
   successUrl: string;
   cancelUrl: string;

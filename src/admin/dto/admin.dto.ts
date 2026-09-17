@@ -3,6 +3,7 @@ import {
   IsBoolean,
   IsIn,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   Matches,
@@ -180,6 +181,19 @@ export class AdminSettingsDto {
 
   @IsOptional() @Transform(toNumber) @Min(0) @Max(1000)
   urgent_price_eur?: number;
+
+  // Barème du paiement sécurisé (AUDIT §51) : bornes larges mais finies, deux décimales au plus
+  @IsOptional() @Transform(toNumber) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(30)
+  commission_percent?: number;
+
+  @IsOptional() @Transform(toNumber) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(30)
+  buyer_fee_percent?: number;
+
+  @IsOptional() @Transform(toNumber) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(20)
+  buyer_fee_fixed_eur?: number;
+
+  @IsOptional() @Transform(toNumber) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(500)
+  buyer_fee_cap_eur?: number;
 }
 
 export class AdminPlanDto {

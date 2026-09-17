@@ -98,6 +98,13 @@ export class Transaction {
   @Column({ type: JSON_TYPE, nullable: true })
   shippingAddress?: DeliveryAddress | null;
 
+  /**
+   * Barème appliqué à CETTE vente, figé à sa création (AUDIT §51) : un changement de commission ou de frais par
+   * l'admin ne touche jamais une transaction existante. Nul pour les ventes antérieures (barème 8 % / 5 % + 0,50 €).
+   */
+  @Column({ type: JSON_TYPE, nullable: true })
+  feeRates?: { commissionPercent: number; buyerFeePercent: number; buyerFeeFixed: number; buyerFeeCap: number } | null;
+
   /** Code de remise en main propre (l'acheteur le donne au vendeur au RDV). */
   @Column({ nullable: true })
   handoverCode?: string;

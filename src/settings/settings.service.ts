@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Plan } from './plan.entity';
 import { Subscription } from './subscription.entity';
 import { SystemSetting } from './system-setting.entity';
@@ -10,7 +10,21 @@ export const SETTING_KEYS = {
   FREE_LISTINGS_PER_30_DAYS: 'free_listings_per_30_days',
   BOOST_PRICE: 'boost_price_eur',
   URGENT_PRICE: 'urgent_price_eur',
+  // Barème du paiement sécurisé (AUDIT §51) : modifiable par l'admin, appliqué aux NOUVELLES transactions seulement
+  COMMISSION_PERCENT: 'commission_percent',
+  BUYER_FEE_PERCENT: 'buyer_fee_percent',
+  BUYER_FEE_FIXED: 'buyer_fee_fixed_eur',
+  BUYER_FEE_CAP: 'buyer_fee_cap_eur',
 } as const;
+
+/** Barème du paiement sécurisé : pourcentages en points (8 = 8 %), montants en euros. */
+export interface FeeRates {
+  commissionPercent: number;
+  buyerFeePercent: number;
+  buyerFeeFixed: number;
+  buyerFeeCap: number;
+}
+export const DEFAULT_FEE_RATES: FeeRates = { commissionPercent: 8, buyerFeePercent: 5, buyerFeeFixed: 0.5, buyerFeeCap: 15 };
 
 /** Plans par défaut (cahier des charges §3.7). Modifiables ensuite depuis le back-office. */
 export const DEFAULT_PLANS: Array<Partial<Plan>> = [
@@ -52,6 +66,10 @@ export class SettingsService implements OnModuleInit {
       [SETTING_KEYS.FREE_LISTINGS_PER_30_DAYS]: Number(process.env.FREE_LISTINGS_PER_30_DAYS || 20),
       [SETTING_KEYS.BOOST_PRICE]: 2.99,
       [SETTING_KEYS.URGENT_PRICE]: 1.99,
+      [SETTING_KEYS.COMMISSION_PERCENT]: DEFAULT_FEE_RATES.commissionPercent,
+      [SETTING_KEYS.BUYER_FEE_PERCENT]: DEFAULT_FEE_RATES.buyerFeePercent,
+      [SETTING_KEYS.BUYER_FEE_FIXED]: DEFAULT_FEE_RATES.buyerFeeFixed,
+      [SETTING_KEYS.BUYER_FEE_CAP]: DEFAULT_FEE_RATES.buyerFeeCap,
     };
     for (const [key, value] of Object.entries(defaults)) {
       const existing = await this.settingsRepo.findOne({ where: { key } });
@@ -76,6 +94,20 @@ export class SettingsService implements OnModuleInit {
     return this.get<boolean>(SETTING_KEYS.MONETIZATION_ENABLED, false) === true;
   }
 
+  /** Barème actif du paiement sécurisé (valeur par défaut si un réglage manque ou n'est pas un nombre fini ≥ 0). */
+  fees(): FeeRates {
+    const num = (key: string, fallback: number) => {
+      const v = Number(this.get<unknown>(key, fallback));
+      return Number.isFinite(v) && v >= 0 ? v : fallback;
+    };
+    return {
+      commissionPercent: num(SETTING_KEYS.COMMISSION_PERCENT, DEFAULT_FEE_RATES.commissionPercent),
+      buyerFeePercent: num(SETTING_KEYS.BUYER_FEE_PERCENT, DEFAULT_FEE_RATES.buyerFeePercent),
+      buyerFeeFixed: num(SETTING_KEYS.BUYER_FEE_FIXED, DEFAULT_FEE_RATES.buyerFeeFixed),
+      buyerFeeCap: num(SETTING_KEYS.BUYER_FEE_CAP, DEFAULT_FEE_RATES.buyerFeeCap),
+    };
+  }
+
   async set(key: string, value: unknown, updatedBy?: string) {
     if (!Object.values(SETTING_KEYS).includes(key as any)) throw new BadRequestException(`Réglage inconnu : ${key}`);
     await this.settingsRepo.save(this.settingsRepo.create({ key, value, updatedBy }));
@@ -89,6 +121,14 @@ export class SettingsService implements OnModuleInit {
     return Object.fromEntries(this.cache.entries());
   }
 
+  /** Barème actif et dernière modification par un admin (null : valeurs par défaut jamais modifiées). */
+  async feesInfo() {
+    const keys = [SETTING_KEYS.COMMISSION_PERCENT, SETTING_KEYS.BUYER_FEE_PERCENT, SETTING_KEYS.BUYER_FEE_FIXED, SETTING_KEYS.BUYER_FEE_CAP];
+    const rows = (await this.settingsRepo.find({ where: { key: In(keys) } })).filter((r) => !!r.updatedBy);
+    const last = rows.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
+    return { rates: this.fees(), defaults: DEFAULT_FEE_RATES, lastChangedAt: last?.updatedAt ?? null, lastChangedBy: last?.updatedBy ?? null };
+  }
+
   /** Vue publique (front) : l'état de la monétisation et les prix affichables. */
   publicSettings() {
     return {
@@ -96,6 +136,8 @@ export class SettingsService implements OnModuleInit {
       boostPrice: this.get<number>(SETTING_KEYS.BOOST_PRICE, 2.99),
       urgentPrice: this.get<number>(SETTING_KEYS.URGENT_PRICE, 1.99),
       freeListingsPer30Days: this.get<number>(SETTING_KEYS.FREE_LISTINGS_PER_30_DAYS, 20),
+      // Barème du paiement sécurisé en vigueur (pages d'aide et de versement : jamais de chiffre écrit en dur)
+      fees: this.fees(),
     };
   }
 

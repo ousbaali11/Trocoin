@@ -5,6 +5,7 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast-context";
+import { DEFAULT_FEE_RATES, formatBuyerFeeFormula, formatPercent, type FeeRates } from "@/lib/format";
 
 interface StripeStatus {
   connected: boolean;
@@ -18,6 +19,11 @@ function PaiementsInner() {
   const params = useSearchParams();
   const [status, setStatus] = useState<StripeStatus | null>(null);
   const [busy, setBusy] = useState(false);
+  // Barème en vigueur (réglé par l'admin) : jamais de chiffre écrit en dur
+  const [fees, setFees] = useState<FeeRates>(DEFAULT_FEE_RATES);
+  useEffect(() => {
+    api<{ fees?: FeeRates }>("/settings/public").then((s) => s.fees && setFees(s.fees)).catch(() => null);
+  }, []);
 
   const loadStatus = useCallback(
     () => api<StripeStatus>("/users/me/stripe-status").then((s) => { setStatus(s); refresh(); }).catch(() => null),
@@ -67,8 +73,9 @@ function PaiementsInner() {
       <section className="panel" style={{ marginTop: 16 }}>
         <h2 className="h3">Comment sont calculés les frais ?</h2>
         <ul className="small">
-          <li>Acheteur : frais de protection de 5 % + 0,50 € (plafonnés à 15 €), affichés avant paiement.</li>
-          <li>Vendeur : commission de 8 % retenue sur le versement.</li>
+          <li>Acheteur : frais de protection de {formatBuyerFeeFormula(fees)}, affichés séparément du prix avant paiement.</li>
+          <li>Vendeur : commission de {formatPercent(fees.commissionPercent)} retenue sur le versement.</li>
+          <li>Le barème appliqué à une vente est celui en vigueur au moment du paiement : il ne change plus ensuite.</li>
           <li>Aucun frais sur les remises en main propre payées hors plateforme — mais aucune protection non plus.</li>
         </ul>
         {user?.accountType === "particulier" && <p className="small muted" style={{ margin: 0 }}>Au-delà de 30 ventes ou 2 000 € par an, la réglementation européenne (DAC7) nous oblige à déclarer vos revenus : nous vous demanderons alors des informations complémentaires.</p>}

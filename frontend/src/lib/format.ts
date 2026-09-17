@@ -9,6 +9,20 @@ export function formatPrice(price?: number | null, priceType: PriceType = "fixe"
   return priceType === "negociable" ? `${formatted} à débattre` : formatted;
 }
 
+/** Barème du paiement sécurisé (AUDIT §51) : réglé par l'admin, jamais écrit en dur dans les textes. */
+export interface FeeRates { commissionPercent: number; buyerFeePercent: number; buyerFeeFixed: number; buyerFeeCap: number }
+export const DEFAULT_FEE_RATES: FeeRates = { commissionPercent: 8, buyerFeePercent: 5, buyerFeeFixed: 0.5, buyerFeeCap: 15 };
+const frNumber = (n: number) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 }).format(n);
+/** « 8 % » */
+export function formatPercent(n: number): string {
+  return `${frNumber(n)} %`;
+}
+/** « 5 % + 0,50 € (plafonnés à 15 €) » */
+export function formatBuyerFeeFormula(r: FeeRates): string {
+  const parts = [r.buyerFeePercent > 0 ? formatPercent(r.buyerFeePercent) : "", r.buyerFeeFixed > 0 ? formatEuros(r.buyerFeeFixed) : ""].filter(Boolean);
+  return `${parts.join(" + ") || "0 €"} (plafonnés à ${formatEuros(r.buyerFeeCap).replace(",00", "")})`;
+}
+
 export function formatEuros(n?: number | null): string {
   if (n === null || n === undefined) return "—";
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(n);
