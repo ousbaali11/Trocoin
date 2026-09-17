@@ -28,6 +28,7 @@ test('paiement : taper dans les champs d\'adresse garde le focus dans le champ, 
       await expect(handDelivery).not.toBeChecked();
     }
     await expect(dialog.getByRole('radio', { name: /Colissimo/ }).first()).toBeChecked();
+    await expect(dialog.getByTestId('quote-shipping')).toBeVisible(); // AUDIT §59 : la livraison s'ajoute au total
     // Échap ferme toujours la boîte et rend le focus au bouton d'ouverture
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);

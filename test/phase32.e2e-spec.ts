@@ -5,7 +5,7 @@ import { Repository } from 'typeorm';
 import { describeBoxtalRefusal } from '../src/shipping/boxtal-shipping.provider';
 import { normalizeFrenchPhone } from '../src/shipping/phone';
 import { User } from '../src/users/user.entity';
-import { createApp, createListing, login } from './utils';
+import { buyShipped, createApp, createListing, login } from './utils';
 
 /**
  * Phase 32 (AUDIT §55) : téléphones de l'étiquette réglés avant tout appel au transporteur (repli sur les comptes,
@@ -30,7 +30,7 @@ describe('Phase 32 : étiquette — téléphones exigés par le transporteur, re
     const seller = await login(app);
     const buyer = await login(app);
     const listing = await createListing(app, seller, { price: 120, deliveryAvailable: true, title: 'Enceinte Bluetooth JBL Flip 6' });
-    const created = await request(server).post('/transactions').set(buyer.auth).send({ listingId: listing.id, deliveryMethod: 'colissimo' }).expect(201);
+    const created = { body: await buyShipped(app, buyer, listing.id, 'colissimo', { legacy: true }) }; // vente antérieure à AUDIT §59 : le vendeur saisit les adresses
     return { seller, buyer, txId: (created.body.transaction ?? created.body).id as string };
   }
 

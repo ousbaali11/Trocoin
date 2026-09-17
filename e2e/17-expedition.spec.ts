@@ -43,6 +43,10 @@ test("achat avec envoi : l'acheteur saisit son adresse, le vendeur obtient un ta
   await expect(options.getByLabel(/En bureau de poste ou consigne automatique \(locker\) \(2 à proximité\)/)).toBeVisible();
   await dialog.getByLabel('Envoi par Mondial Relay').check();
   await expect(options.getByLabel(/En point relais \(2 à proximité\)/)).toBeVisible();
+  // Frais de livraison (AUDIT §59) : tarif réel de chaque option, ajouté au total payé par l'acheteur
+  await expect(options).toContainText('En point relais (2 à proximité) — 5,49 €');
+  await expect(dialog.getByTestId('quote-shipping')).toContainText('à choisir');
+  await expect(dialog.getByTestId('quote-total')).toContainText('63,50 €'); // 60 € + 3,50 € de protection, livraison pas encore choisie
   await options.getByLabel(/En consigne automatique \(locker\) \(1 à proximité\)/).check();
   await expect(pay).toBeDisabled(); // point à choisir
   await expect(options.getByTestId('pickup-point')).toHaveCount(1);
@@ -50,37 +54,42 @@ test("achat avec envoi : l'acheteur saisit son adresse, le vendeur obtient un ta
   await expect(options.getByTestId('pickup-point')).toHaveCount(2);
   await options.getByTestId('pickup-point').filter({ hasText: 'Point Relais Boulangerie Martin' }).getByRole('radio').check();
   await expect(pay).toBeEnabled();
+  await expect(dialog.getByTestId('quote-shipping')).toContainText('5,49 €');
+  await expect(dialog.getByTestId('quote-total')).toContainText('68,99 €');
+  await expect(pay).toHaveText(/Payer 68,99\s€/);
   await pay.click();
   await expect(page).toHaveURL(/\/compte\/transactions\/[0-9a-f-]{36}/);
   const txId = page.url().split('/').pop()!;
   await expect(page.getByText('Alex Acheteur')).toHaveCount(0); // l'acheteur voit sa propre adresse seulement dans le récapitulatif vendeur
 
-  // Vendeur : panneau d'étiquette, adresse de l'acheteur préremplie, tarif, achat
+  await expect(page.getByTestId('recap-shipping')).toContainText('5,49 €');
+
+  // Vendeur : il ne paie rien et ne choisit rien — il confirme la disponibilité, puis génère le bon d'envoi
   const sellerCtx = await browser.newContext();
   const seller = await sellerCtx.newPage();
   await mockGeo(seller);
   await loginAs(seller, seed.seller, `/compte/transactions/${txId}`);
   const panel = seller.getByTestId('shipment-panel');
-  await expect(panel).toBeVisible();
-  await expect(panel.getByLabel('Poids du colis (g)')).toHaveValue('900');
-  // Le bloc des adresses est déjà déplié quand une adresse manque ; on ne clique que s'il est replié
-  if (!(await panel.locator('details').evaluate((d) => (d as HTMLDetailsElement).open))) await panel.locator('summary').click();
-  await expect(panel.locator('#to-line1')).toHaveValue('5 avenue des Ternes');
-  await expect(panel.locator('#to-cp')).toHaveValue('75017');
+  await expect(panel).toHaveAttribute('data-prepaid', 'true');
+  await expect(panel).toContainText('payée par l\'acheteur');
+  await expect(panel).toContainText('5,49 €');
+  await expect(panel.getByTestId('ship-mode-fixed')).toContainText('point relais « Point Relais Boulangerie Martin »');
+  await expect(panel.getByTestId('ship-mode-fixed')).toContainText('colis de 900 g');
+  await expect(seller.getByTestId('recap-shipping-seller')).toContainText('5,49 €');
+  // Ni tarif à calculer, ni poids à saisir, ni point à choisir, ni étiquette à acheter
+  await expect(panel.getByTestId('get-rates')).toHaveCount(0);
+  await expect(panel.getByTestId('buy-label')).toHaveCount(0);
+  await expect(panel.getByLabel('Poids du colis (g)')).toHaveCount(0);
   await panel.locator('#from-line1').fill('12 rue de la République');
   await panel.locator('#from-cp').fill('69003');
   await panel.locator('#from-city').fill('Lyon');
-  await panel.getByTestId('get-rates').click();
-  const rates = panel.getByTestId('rates');
-  await expect(rates).toContainText('Mondial Relay en point relais');
-  await expect(rates).toContainText('5,49');
-  // Le mode et le point choisis par l'acheteur sont repris tels quels : ni autre mode, ni liste de points à l'étiquette
-  await expect(panel.getByTestId('ship-mode-fixed')).toContainText('point relais « Point Relais Boulangerie Martin »');
-  await expect(rates).not.toContainText('à domicile');
-  await expect(rates.getByLabel('Point relais', { exact: true })).toHaveCount(0);
-  await expect(seller.getByTestId('buyer-delivery-choice')).toContainText('Point Relais Boulangerie Martin');
-  await panel.getByTestId('buy-label').click();
-  const ready = seller.getByTestId('shipment-ready');
+  // D'abord la disponibilité, ensuite le bon d'envoi
+  await expect(panel.getByTestId('generate-label')).toBeDisabled();
+  await expect(panel.getByTestId('label-needs-confirmation')).toBeVisible();
+  await seller.getByTestId('confirm-availability').click();
+  await expect(seller.getByTestId('availability-confirmed')).toBeVisible();
+  await expect(panel.getByTestId('generate-label')).toBeEnabled();
+  await panel.getByTestId('generate-label').click();  const ready = seller.getByTestId('shipment-ready');
   await expect(ready).toBeVisible();
   await expect(ready.getByTestId('shipment-tracking')).toHaveText(/^SIM\d{10}$/);
   // Téléchargement du PDF
@@ -101,6 +110,8 @@ test("achat avec envoi : l'acheteur saisit son adresse, le vendeur obtient un ta
   const status = page.getByTestId('shipment-status');
   await expect(status).toBeVisible();
   await expect(status.getByTestId('tracking-number')).toHaveText(/^SIM\d{10}$/);
+  // L'acheteur a le numéro de suivi, jamais le PDF
+  await expect(page.getByTestId('download-label')).toHaveCount(0);
   await expect(status).toContainText('Mondial Relay');
   await expect(status.getByTestId('tracking-state')).toContainText('Étiquette créée');
   await expect(page.getByText(/^Expédié \(suivi SIM\d{10}\)/)).toBeVisible();
@@ -109,22 +120,21 @@ test("achat avec envoi : l'acheteur saisit son adresse, le vendeur obtient un ta
 test("échec de l'étiquette : adresse refusée par le transporteur → message clair, nouvel essai possible, saisie manuelle du numéro toujours acceptée", async ({ page }) => {
   const { listing } = await sellerListing(`Enceinte à envoyer (échec) ${Date.now().toString().slice(-4)}`);
   const buyerLogin = await api<{ accessToken: string }>('/auth/login', { method: 'POST', body: { identifier: seed.buyer.email, password: seed.buyer.password } });
-  const created = await api<{ transaction: { id: string } }>('/transactions', { method: 'POST', token: buyerLogin.accessToken, body: { listingId: listing.id, deliveryMethod: 'colissimo', shippingAddress: { name: 'Alex Acheteur', line1: '5 avenue des Ternes', postalCode: '99999', city: 'Nulle part' } } });
+  const created = await api<{ transaction: { id: string } }>('/transactions', { method: 'POST', token: buyerLogin.accessToken, body: { listingId: listing.id, deliveryMethod: 'colissimo', deliveryMode: 'domicile', shippingAddress: { name: 'Alex Acheteur', line1: '5 avenue des Ternes', postalCode: '99999', city: 'Nulle part' } } });
   const txId = created.transaction.id;
 
   await loginAs(page, seed.seller, `/compte/transactions/${txId}`);
   const panel = page.getByTestId('shipment-panel');
-  // Le bloc des adresses est déjà déplié quand une adresse manque ; on ne clique que s'il est replié
-  if (!(await panel.locator('details').evaluate((d) => (d as HTMLDetailsElement).open))) await panel.locator('summary').click();
   await panel.locator('#from-line1').fill('12 rue de la République');
   await panel.locator('#from-cp').fill('69003');
   await panel.locator('#from-city').fill('Lyon');
-  await panel.getByTestId('get-rates').click();
-  await expect(panel.getByTestId('rates')).toContainText('Colissimo');
-  await panel.getByTestId('buy-label').click();
+  await page.getByTestId('confirm-availability').click();
+  await expect(page.getByTestId('availability-confirmed')).toBeVisible();
+  await panel.getByTestId('generate-label').click();
   await expect(panel.getByTestId('shipment-error').first()).toContainText(/adresse du destinataire refusée/);
   // La vente n'est pas bloquée : saisie manuelle et confirmation possibles
   await expect(page.getByRole('button', { name: "Confirmer l'expédition" })).toBeVisible();
+  await page.getByTestId('manual-tracking').locator('summary').click();
   await page.getByLabel(/Numéro de suivi/).fill('6A12345678901');
   await page.getByRole('button', { name: "Confirmer l'expédition" }).click();
   await expect(page.getByText('Expédition enregistrée.')).toBeVisible();

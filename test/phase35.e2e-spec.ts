@@ -107,7 +107,7 @@ describe('Phase 35 : annonce « vendue » dès le paiement, remise en ligne apr�
     const buyer = await login(app);
     const mk = async (title: string) => {
       const listing = await createListing(app, seller, { price: 60, deliveryAvailable: true, title });
-      const created = await request(server).post('/transactions').set(buyer.auth).send({ listingId: listing.id, deliveryMethod: 'colissimo' }).expect(201);
+      const created = await request(server).post('/transactions').set(buyer.auth).send({ listingId: listing.id, deliveryMethod: 'colissimo', deliveryMode: 'domicile', shippingAddress: { name: 'Nora Acheteur', line1: '5 avenue des Ternes', postalCode: '75017', city: 'Paris' } }).expect(201);
       const txId = (created.body.transaction ?? created.body).id as string;
       await request(server).post(`/transactions/${txId}/ship`).set(seller.auth).send({ trackingNumber: '6A00000000001' }).expect(201);
       await transactions.update(txId, { autoConfirmAt: new Date(Date.now() - 60_000) });

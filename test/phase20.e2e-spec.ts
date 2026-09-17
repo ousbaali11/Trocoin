@@ -5,7 +5,7 @@ import request from 'supertest';
 import { AddressInfo } from 'net';
 import { BoxtalShippingProvider } from '../src/shipping/boxtal-shipping.provider';
 import { ShippingProviderError } from '../src/shipping/shipping-provider.interface';
-import { createApp, createListing, login } from './utils';
+import { buyShipped, createApp, createListing, login } from './utils';
 
 /**
  * Étiquettes transporteur, phase 2 :
@@ -176,7 +176,7 @@ describe('Adresse de livraison au paiement et colis déclaré au dépôt', () =>
     expect((await request(server).get(`/transactions/${handId}`).set(buyer.auth).expect(200)).body.shippingAddress).toBeNull();
     // Vente créée sans adresse (ancien client) : acceptée, le vendeur voit qu'elle manque
     const listing3 = await createListing(app, seller, { price: 30, deliveryAvailable: true });
-    const old = await request(server).post('/transactions').set(buyer.auth).send({ listingId: listing3.id, deliveryMethod: 'colissimo' }).expect(201);
+    const old = { body: await buyShipped(app, buyer, listing3.id, 'colissimo', { legacy: true }) };
     expect((await request(server).get(`/transactions/${(old.body.transaction ?? old.body).id}`).set(seller.auth).expect(200)).body.shippingAddress).toBeNull();
   });
 
@@ -188,7 +188,7 @@ describe('Adresse de livraison au paiement et colis déclaré au dépôt', () =>
     await request(server).post('/listings').set(seller.auth).send({ title: 'Trop lourd pour un colis', description: 'Description assez longue pour passer.', categorySlug: 'ameublement', price: 10, priceType: 'fixe', condition: 'bon_etat', city: 'Lyon', postalCode: '69003', weightGrams: 40000 }).expect(400);
     await request(server).patch(`/listings/${listing.id}`).set(seller.auth).send({ weightGrams: 1500 }).expect(200);
     expect((await request(server).get(`/listings/${listing.id}`).expect(200)).body.weightGrams).toBe(1500);
-    const plain = await createListing(app, seller, {});
+    const plain = await createListing(app, seller, { weightGrams: undefined });
     expect((await request(server).get(`/listings/${plain.id}`).expect(200)).body.weightGrams).toBeNull();
   });
 });

@@ -41,7 +41,9 @@ test('fenêtre de paiement : prix de l\'article, frais de protection et total su
   await expect(pay).not.toContainText('plafonnés');
   await expect(pay).not.toContainText('Le vendeur perçoit');
   await expect(pay).not.toContainText(/commission/i);
-  await expect(pay).toContainText('Frais de port à convenir avec le vendeur pour un envoi.');
+  // AUDIT §59 : plus de « frais de port à convenir » — la livraison se choisit et se paie ici ; en main propre, aucune ligne de livraison
+  await expect(pay).not.toContainText('Frais de port à convenir');
+  await expect(pay.getByTestId('quote-shipping')).toHaveCount(0);
   await expect(pay.getByRole('button', { name: /^Payer 231,50/ })).toBeVisible();
 });
 

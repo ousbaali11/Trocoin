@@ -28,6 +28,7 @@ test('achat → disponibilité confirmée → expédition (suivi) → réception
 
   // 1. Achat : message automatique, texte selon le lecteur, visuellement à part des bulles des personnes
   const buyerFirst = buyer.getByTestId('system-message').first();
+  await expect(buyerFirst).toContainText(/Livraison payée : 13,85\s€/); // Colissimo à domicile, colis de 2,5 kg
   await expect(buyerFirst).toContainText('Message automatique · Trocoin');
   await expect(buyerFirst).toContainText('Achat confirmé');
   await expect(buyerFirst).toContainText("Vous recevrez ici, dans cette conversation, les mises à jour sur l'avancement du colis");
@@ -50,18 +51,28 @@ test('achat → disponibilité confirmée → expédition (suivi) → réception
   await expect(buyer.getByTestId('sale-panel')).toContainText("le vendeur prépare l'envoi");
   await expect(buyer.getByTestId('sale-steps').locator('[data-done="true"]')).toHaveCount(2);
   // Même état sur la page de la vente (mêmes routes) : l'action ne s'y propose plus
+  // Livraison payée par l'acheteur (AUDIT §59) : après la confirmation, le bouton de la conversation mène au bon d'envoi
+  await expect(seller.getByTestId('sale-ship')).toHaveText("Générer le bon d'envoi (PDF)");
   await seller.getByTestId('sale-ship').click();
   await expect(seller).toHaveURL(new RegExp(`/compte/transactions/${txId}$`));
   await expect(seller.getByTestId('availability-confirmed')).toBeVisible();
   await expect(seller.getByTestId('confirm-availability')).toHaveCount(0);
 
-  // 3. Expédition déclarée sur la page de la vente (formulaire existant) → message avec numéro et lien de suivi
-  await seller.getByLabel(/Numéro de suivi/).fill('6A12345678901');
+  // 3. Bon d'envoi généré sans rien payer : l'acheteur reçoit aussitôt son numéro de suivi dans la conversation
+  const shipPanel = seller.getByTestId('shipment-panel');
+  await shipPanel.locator('#from-line1').fill('12 rue de la République');
+  await shipPanel.locator('#from-cp').fill('69003');
+  await shipPanel.locator('#from-city').fill('Lyon');
+  await shipPanel.getByTestId('generate-label').click();
+  await expect(seller.getByTestId('shipment-ready')).toBeVisible();
+  const generated = buyer.getByTestId('system-message').filter({ hasText: "Bon d'envoi généré" });
+  await expect(generated).toContainText(/Votre numéro de suivi : SIM\d{10}/);
+  // Puis l'expédition est confirmée sans ressaisie → message « Colis expédié » avec le lien de suivi
   await seller.getByRole('button', { name: "Confirmer l'expédition" }).click();
   await expect(seller.getByText('Expédition enregistrée.')).toBeVisible();
   const shipped = buyer.getByTestId('system-message').filter({ hasText: 'Colis expédié' });
-  await expect(shipped).toContainText('Numéro de suivi : 6A12345678901');
-  await expect(shipped.getByTestId('system-track')).toHaveAttribute('href', 'https://www.laposte.fr/outils/suivre-vos-envois?code=6A12345678901');
+  await expect(shipped).toContainText(/Numéro de suivi : SIM\d{10}/);
+  await expect(shipped.getByTestId('system-track')).toHaveAttribute('href', /^https:\/\/www\.laposte\.fr\/outils\/suivre-vos-envois\?code=SIM\d{10}$/);
   await expect(buyer.getByTestId('sale-track')).toHaveAttribute('href', /laposte\.fr/);
 
   // 4. L'acheteur confirme la réception depuis la conversation (confirmation demandée) ; le vendeur est prévenu, payé

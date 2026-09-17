@@ -28,13 +28,19 @@ export function saleEventText(m: Message, role: "acheteur" | "vendeur", otherNam
       const carrier = meta.deliveryMethod === "colissimo" || meta.deliveryMethod === "mondial_relay" ? DELIVERY_LABELS[meta.deliveryMethod] : null;
       const where = handDelivery ? "Remise en main propre." : pickup ? `Retrait choisi : ${pickup} (${carrier}).` : meta.deliveryMode === "domicile" ? `Livraison à domicile par ${carrier}.` : carrier ? `Envoi par ${carrier}.` : "";
       return buyer
-        ? { icon: "✅", title: "Achat confirmé", body: `Votre paiement de ${formatEuros(num(meta.amount))} est sécurisé : Trocoin le conserve jusqu'à ce que vous confirmiez la réception. Vous recevrez ici, dans cette conversation, les mises à jour sur l'avancement ${handDelivery ? "de la remise" : "du colis"}. ${where}`.trim() }
-        : { icon: "🛒", title: "Nouvelle vente", body: `${otherName} a acheté votre article (${formatEuros(num(meta.price))}) ; le paiement est conservé par Trocoin. Confirmez que l'article est disponible, puis ${handDelivery ? "convenez du rendez-vous" : "expédiez-le"}. ${where}`.trim() };
+        ? { icon: "✅", title: "Achat confirmé", body: `Votre paiement de ${formatEuros(num(meta.amount))} est sécurisé : Trocoin le conserve jusqu'à ce que vous confirmiez la réception. Vous recevrez ici, dans cette conversation, les mises à jour sur l'avancement ${handDelivery ? "de la remise" : "du colis"}. ${where}${num(meta.shipping) ? ` Livraison payée : ${formatEuros(num(meta.shipping))}.` : ""}`.trim() }
+        : { icon: "🛒", title: "Nouvelle vente", body: `${otherName} a acheté votre article (${formatEuros(num(meta.price))}) ; le paiement est conservé par Trocoin. Confirmez que l'article est disponible, puis ${handDelivery ? "convenez du rendez-vous" : num(meta.shipping) ? "générez le bon d'envoi : la livraison est déjà payée par l'acheteur" : "expédiez-le"}. ${where}`.trim() };
     }
     case "disponibilite_confirmee":
       return buyer
         ? { icon: "👍", title: "Article disponible", body: "Le vendeur a confirmé que l'article est disponible et prêt à partir." }
         : { icon: "👍", title: "Disponibilité confirmée", body: "Vous avez confirmé que l'article est disponible : l'acheteur est prévenu." };
+    case "etiquette_generee": {
+      const tracking = str(meta.trackingNumber);
+      return buyer
+        ? { icon: "🏷️", title: "Bon d'envoi généré", body: `Le vendeur a généré le bon d'envoi de votre colis.${tracking ? ` Votre numéro de suivi : ${tracking}.` : ""} Il sera actif dès que le colis aura été déposé.`, trackingUrl: str(meta.trackingUrl) }
+        : { icon: "🏷️", title: "Bon d'envoi prêt", body: `Imprimez le bon d'envoi (PDF), collez-le sur le colis et déposez-le${tracking ? ` (suivi ${tracking})` : ""}. La livraison a été payée par l'acheteur : vous n'avez rien à régler. Confirmez ensuite l'expédition.` };
+    }
     case "expedie": {
       const tracking = str(meta.trackingNumber);
       const until = str(meta.autoConfirmAt);

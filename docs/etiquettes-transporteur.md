@@ -290,3 +290,55 @@ ce que le transporteur propose réellement autour de son adresse.
   le vendeur choisit le point à l'étiquette comme avant.
 - `GET /shipping/diagnostic` (sandbox) gagne `nature_des_points` : noms des champs d'un point, réseaux, répartition par
   nature et exemples, pour vérifier le classement sur des données réelles.
+
+## 10. La livraison est payée par l'acheteur ; le vendeur génère le bon d'envoi sans rien régler (AUDIT §59)
+
+La question laissée ouverte (« qui paie l'étiquette ? ») est tranchée par le propriétaire, sur le modèle de leboncoin :
+**l'acheteur paie la livraison avec son achat**, le vendeur n'avance rien.
+
+### Parcours
+
+1. **Acheteur** — choisit le transporteur (Colissimo ou Mondial Relay), saisit son adresse, puis le lieu de réception
+   parmi ce qui existe vraiment autour de chez lui (domicile, point relais, bureau de poste, consigne). Chaque option
+   affiche **son prix réel** (`domicilePriceCents`, `pickupPriceCents` de `GET /shipping/pickup-options`, cotation du
+   colis de l'annonce). Le récapitulatif ajoute la ligne « Frais de livraison » et le total payé = prix + frais de
+   protection + livraison. Sur la page Stripe : une troisième ligne « Frais de livraison … ».
+2. **Serveur** — à la création de la vente, la livraison est **recotée** (`ShippingService.quoteForPurchase`) et figée :
+   `transactions.shippingFee` (euros) et `shippingQuote` (offre, mode, poids, dimensions). Le garde-fou `expectedTotal`
+   couvre aussi la livraison : si le prix affiché n'est plus le bon, 409 `QUOTE_CHANGED` et nouveau devis, aucun débit.
+   Adresse exigée pour un envoi ; point de retrait exigé pour un retrait ; annonce **sans poids déclaré → envoi non
+   proposé** (aucun prix ferme possible) : la remise en main propre reste possible et le dépôt exige désormais le poids
+   dès que « J'accepte d'expédier » est coché.
+3. **Vendeur** — voit « Livraison payée par l'acheteur : X € ». D'abord **Confirmer que l'article est disponible**, puis
+   **Générer le bon d'envoi (PDF)** : il ne fournit que son adresse d'expéditeur (exigée par le transporteur). Mode, colis,
+   destinataire et point de retrait viennent de la vente et ne se changent pas (`createLabel` ignore tout autre champ).
+   Il imprime, colle, dépose le colis, puis « Confirmer l'expédition » (numéro repris, aucune saisie).
+4. **Acheteur** — reçoit le **numéro de suivi** dès que le bon existe (message automatique « Bon d'envoi généré », fiche
+   d'expédition) ; le **PDF n'est accessible qu'au vendeur** (`label.pdf` → 403 pour l'acheteur).
+
+### Où va l'argent de la livraison
+
+- Il est encaissé avec le reste du paiement et **reste chez Trocoin**, dont le compte Boxtal règle le bon d'envoi. Il
+  n'entre ni dans la commission, ni dans les frais de protection, ni dans le versement au vendeur (toujours prix −
+  commission).
+- **Sans marge** : le prix affiché est celui du prestataire, au centime. (Une marge ou un arrondi serait un réglage
+  d'une ligne ; non retenu sans demande.)
+- Remboursement (annulation avant l'envoi, délai dépassé, décision du médiateur) : **intégral, livraison comprise** —
+  un seul paiement, un seul remboursement. Si le bon d'envoi a déjà été généré, il est annulé chez le prestataire quand
+  celui-ci le permet (`cancelLabelFor`, au mieux) ; sinon son coût reste à la charge de Trocoin.
+
+### Risques assumés, à surveiller
+
+| Risque | Conséquence | Parade en place |
+|---|---|---|
+| Colis réel plus lourd que le poids déclaré | le transporteur peut refacturer l'écart au compte Boxtal de Trocoin | poids exigé au dépôt, affiché au vendeur sur le bon (« colis de N g ») ; écart constaté → journal `WARN` |
+| Prix du bon supérieur au prix payé (tarif qui bouge entre l'achat et la génération) | écart à la charge de Trocoin | journal `WARN` avec les deux montants ; délai d'expédition de 7 jours |
+| Frais Stripe sur la part livraison (≈ 1,5 %) | quelques centimes par vente à la charge de Trocoin | aucun (négligeable ; une marge les couvrirait) |
+| Vendeur qui expédie par ses propres moyens | la livraison payée ne sert pas | la saisie manuelle d'un numéro n'est plus qu'un secours replié, avec avertissement ; cas à régler à la main |
+| Prestataire en panne | pas de prix ferme | l'envoi n'est pas proposé tant que la cotation échoue (la main propre reste possible) |
+
+Ventes antérieures (sans `shippingQuote`) : parcours d'origine inchangé (le vendeur choisit mode, colis et point).
+
+**Avant l'ouverture réelle** : la production utilise encore le **bac à sable Boxtal** (bons d'envoi factices « Test
+Carrier ») et Stripe en mode test. Passer `BOXTAL_ENV=production` avec un compte Boxtal approvisionné est nécessaire
+pour que les bons d'envoi soient valables — décision et clés du ressort du propriétaire.

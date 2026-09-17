@@ -86,7 +86,7 @@ export function SalePanel({ sale, listing, onChanged }: { sale: ConversationSale
           <button className="btn btn-outline btn-sm" disabled={busy} data-testid="sale-ready" onClick={() => run("ship", "Acheteur prévenu.", {})}>Je suis prêt pour la remise</button>
         )}
         {seller && sale.status === "sequestre" && !hand && (
-          <Link href={href} className={`btn btn-sm ${sale.sellerConfirmedAt ? "btn-primary" : "btn-outline"}`} data-testid="sale-ship">{sale.labelReady ? "Confirmer l'expédition" : "Préparer l'envoi (étiquette, suivi)"}</Link>
+          <Link href={href} className={`btn btn-sm ${sale.sellerConfirmedAt ? "btn-primary" : "btn-outline"}`} data-testid="sale-ship">{sale.labelReady ? "Confirmer l'expédition" : sale.shippingPaid ? (sale.sellerConfirmedAt ? "Générer le bon d'envoi (PDF)" : "Bon d'envoi : après la confirmation") : "Préparer l'envoi (étiquette, suivi)"}</Link>
         )}
         {seller && sale.status === "livree" && hand && <Link href={href} className="btn btn-primary btn-sm">Saisir le code de remise</Link>}
         {seller && sale.status === "livree" && !hand && <span className="small muted">En attente de la confirmation de réception par l&apos;acheteur{sale.autoConfirmAt ? ` (acquise d'office le ${formatDateTime(sale.autoConfirmAt)})` : ""}.</span>}

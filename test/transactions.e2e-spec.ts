@@ -4,7 +4,7 @@ import request from 'supertest';
 import { Repository } from 'typeorm';
 import { Notification } from '../src/notifications/notification.entity';
 import { SavedSearchesService } from '../src/saved-searches/saved-searches.service';
-import { createApp, createListing, login, makeAdmin } from './utils';
+import { buyShipped, createApp, createListing, login, makeAdmin } from './utils';
 
 describe('Messagerie, paiement séquestre, avis, signalements, alertes, admin', () => {
   let app: INestApplication;
@@ -72,7 +72,8 @@ describe('Messagerie, paiement séquestre, avis, signalements, alertes, admin', 
     await request(server).post('/transactions').set(seller.auth).send({ listingId: listing.id }).expect(400);
     await request(server).post('/transactions').set(buyer.auth).send({ listingId: 'pas-un-uuid' }).expect(400);
 
-    const created = await request(server).post('/transactions').set(buyer.auth).send({ listingId: listing.id, deliveryMethod: 'colissimo' }).expect(201);
+    const created = { body: await buyShipped(app, buyer, listing.id, 'colissimo') };
+    expect(created.body.transaction.shippingFee).toBe(7.95); // AUDIT §59 : livraison cotée (1 kg, Colissimo domicile), payée par l'acheteur en plus du prix
     const tx = created.body.transaction;
     expect(tx.status).toBe('sequestre');
     expect(tx.amount).toBe(100);

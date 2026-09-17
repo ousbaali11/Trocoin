@@ -123,6 +123,18 @@ export class Transaction {
   @Column({ type: JSON_TYPE, nullable: true })
   pickupPoint?: ChosenPickupPoint | null;
 
+  /**
+   * Frais de livraison payés par l'acheteur avec son achat (AUDIT §59), en euros, figés à la création : prix réel
+   * coté chez le prestataire d'étiquettes pour le colis de l'annonce, le transporteur et le lieu de réception choisis.
+   * Ils restent chez Trocoin, qui règle le bon d'envoi ; ils ne font partie ni de la commission ni du versement au vendeur.
+   */
+  @Column({ type: 'float', default: 0 })
+  shippingFee: number;
+
+  /** Offre cotée à l'achat : le bon d'envoi est généré avec ce mode et ce colis, que le vendeur ne peut pas changer. */
+  @Column({ type: JSON_TYPE, nullable: true })
+  shippingQuote?: { offerCode: string; priceCents: number; mode: DeliveryMode; weightGrams: number; lengthCm?: number; widthCm?: number; heightCm?: number } | null;
+
   /** Le vendeur a confirmé que l'article existe et est prêt à partir (AUDIT §57) ; l'expédition vaut confirmation. */
   @Column({ type: DATE_TYPE, nullable: true })
   sellerConfirmedAt?: Date | null;

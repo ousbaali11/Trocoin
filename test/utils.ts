@@ -86,9 +86,37 @@ export async function createListing(
       city: 'Lyon',
       postalCode: '69003',
       deliveryAvailable: true,
+      weightGrams: 1000, // colis déclaré : sans poids, l'envoi n'est pas proposé à l'achat (AUDIT §59)
       ...overrides,
     });
   if (res.status !== 201) throw new Error(`createListing: ${res.status} ${JSON.stringify(res.body)}`);
+  return res.body;
+}
+
+export const TEST_ADDRESS = { name: 'Alex Acheteur', line1: '5 avenue des Ternes', postalCode: '75017', city: 'Paris' };
+
+/**
+ * Achat avec envoi (AUDIT §59) : adresse, lieu de réception (domicile pour Colissimo, premier point relais pour Mondial
+ * Relay) et frais de livraison cotés, comme le fait le site. `legacy` : la vente est ensuite ramenée à l'état d'une vente
+ * antérieure au paiement de la livraison par l'acheteur (ni frais, ni mode, ni point ; adresse retirée sauf `keepAddress`)
+ * — c'est ce que couvrent les tests du parcours d'étiquette d'origine, toujours en service pour ces ventes-là.
+ */
+export async function buyShipped(app: INestApplication, buyer: TestUser, listingId: string, carrier: 'colissimo' | 'mondial_relay' = 'colissimo', opts: { legacy?: boolean; keepAddress?: boolean; address?: Record<string, unknown> } = {}) {
+  const server = app.getHttpServer();
+  const address = opts.address ?? TEST_ADDRESS;
+  const body: Record<string, unknown> = { listingId, deliveryMethod: carrier, shippingAddress: address, deliveryMode: carrier === 'colissimo' ? 'domicile' : 'point_relais' };
+  if (carrier === 'mondial_relay') {
+    const options = await request(server).get(`/shipping/pickup-options?listingId=${listingId}&postalCode=${(address as any).postalCode}&city=${encodeURIComponent((address as any).city)}`).set(buyer.auth);
+    body.pickupPoint = options.body.carriers.find((c: any) => c.carrier === carrier).points[0];
+  }
+  const res = await request(server).post('/transactions').set(buyer.auth).send(body);
+  if (res.status !== 201) throw new Error(`buyShipped: ${res.status} ${JSON.stringify(res.body)}`);
+  if (opts.legacy) {
+    const { getRepositoryToken } = await import('@nestjs/typeorm');
+    const { Transaction } = await import('../src/payments/transaction.entity');
+    const repo = app.get(getRepositoryToken(Transaction));
+    await repo.update((res.body.transaction ?? res.body).id, { shippingFee: 0, shippingQuote: null, deliveryMode: null, pickupPoint: null, ...(opts.keepAddress ? {} : { shippingAddress: null }) });
+  }
   return res.body;
 }
 

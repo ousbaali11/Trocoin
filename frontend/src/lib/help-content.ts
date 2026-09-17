@@ -213,7 +213,7 @@ Les échanges sont en temps réel quand les deux membres sont connectés, sinon 
 - **Commission vendeur** : {{commission}} retenus sur le versement.
 - Le barème d'une vente est celui en vigueur au moment du paiement ; il ne change plus ensuite.
 - **Remise en main propre** : l'acheteur reçoit un code à 6 chiffres ; le vendeur le saisit au rendez-vous pour libérer les fonds.
-- **Envoi** : le vendeur renseigne le numéro de suivi Colissimo ou Mondial Relay.
+- **Envoi** : l'acheteur choisit Colissimo ou Mondial Relay et le lieu de réception (domicile, point relais, bureau de poste ou consigne, selon son adresse) ; les **frais de livraison**, au tarif du transporteur, s'ajoutent à son paiement. Le vendeur n'avance rien : il confirme que l'article est disponible, génère le **bon d'envoi (PDF)**, le colle sur le colis et le dépose. L'acheteur reçoit le numéro de suivi.
 
 Pendant la phase de test, le paiement est **simulé** (aucune carte n'est débitée) : le parcours complet est testable sans risque.`,
       },

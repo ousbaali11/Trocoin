@@ -170,6 +170,8 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
       }
     }
     if (step === 3 && !form.location.postalCode && !form.location.city) return "Indiquez une ville ou un code postal.";
+    // Envoi accepté (AUDIT §59) : le poids fixe le tarif réel du transporteur, que l'acheteur paie avec son achat
+    if (step === 3 && deliveryAllowed && form.deliveryAvailable && !(Number(form.weightGrams) >= 10)) return "Indiquez le poids du colis (en grammes) : il sert à calculer les frais de livraison payés par l'acheteur.";
     return null;
   };
 
@@ -533,9 +535,9 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
           )}
           {deliveryAllowed && form.deliveryAvailable && (
             <div className="panel" style={{ padding: 14, marginBottom: 16 }} data-testid="parcel-fields">
-              <p className="small" style={{ margin: "0 0 8px" }}><strong>Colis</strong> <span className="muted">(facultatif : sert à calculer le tarif de l&apos;étiquette ; 1 kg et petit colis si vide)</span></p>
+              <p className="small" style={{ margin: "0 0 8px" }}><strong>Colis</strong> <span className="muted">(le poids fixe les frais de livraison, payés par l&apos;acheteur avec son achat : vous n&apos;avancez rien et recevez un bon d&apos;envoi prêt à coller)</span></p>
               <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-                <div className="field" style={{ marginBottom: 0, width: 140 }}><label htmlFor="weightGrams">Poids (g)</label><input id="weightGrams" className="input" inputMode="numeric" placeholder="1000" value={form.weightGrams} onChange={(e) => set("weightGrams", e.target.value.replace(/\D/g, ""))} /></div>
+                <div className="field" style={{ marginBottom: 0, width: 140 }}><label htmlFor="weightGrams">Poids du colis (g) *</label><input id="weightGrams" className="input" inputMode="numeric" placeholder="1000" value={form.weightGrams} onChange={(e) => set("weightGrams", e.target.value.replace(/\D/g, ""))} /></div>
                 <div className="field" style={{ marginBottom: 0, width: 110 }}><label htmlFor="lengthCm">Long. (cm)</label><input id="lengthCm" className="input" inputMode="numeric" placeholder="30" value={form.lengthCm} onChange={(e) => set("lengthCm", e.target.value.replace(/\D/g, ""))} /></div>
                 <div className="field" style={{ marginBottom: 0, width: 110 }}><label htmlFor="widthCm">Larg. (cm)</label><input id="widthCm" className="input" inputMode="numeric" placeholder="20" value={form.widthCm} onChange={(e) => set("widthCm", e.target.value.replace(/\D/g, ""))} /></div>
                 <div className="field" style={{ marginBottom: 0, width: 110 }}><label htmlFor="heightCm">Haut. (cm)</label><input id="heightCm" className="input" inputMode="numeric" placeholder="10" value={form.heightCm} onChange={(e) => set("heightCm", e.target.value.replace(/\D/g, ""))} /></div>

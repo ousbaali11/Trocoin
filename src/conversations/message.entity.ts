@@ -10,6 +10,7 @@ export type MessageType = 'text' | 'image' | 'offer' | 'system';
 export type SystemEvent =
   | 'achat_confirme'
   | 'disponibilite_confirmee'
+  | 'etiquette_generee'
   | 'expedie'
   | 'pret_pour_remise'
   | 'reception_confirmee'

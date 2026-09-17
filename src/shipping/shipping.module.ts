@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ConversationsModule } from '../conversations/conversations.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Listing } from '../listings/listing.entity';
@@ -15,7 +16,7 @@ import { ShippingService } from './shipping.service';
 import { UnconfiguredShippingProvider } from './unconfigured-shipping.provider';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Shipment, Transaction, Listing, User]), ConfigModule],
+  imports: [TypeOrmModule.forFeature([Shipment, Transaction, Listing, User]), ConfigModule, ConversationsModule],
   controllers: [ShippingController, ShippingDiagnosticController, ShippingOptionsController],
   providers: [
     ShippingService,

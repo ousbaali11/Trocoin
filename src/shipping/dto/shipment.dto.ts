@@ -93,10 +93,16 @@ export class QuoteShipmentDto {
   toCity?: string;
 }
 
+/**
+ * Vente dont l'acheteur a payé la livraison (AUDIT §59) : seul l'expéditeur est à fournir — mode, colis, destinataire et
+ * point de retrait viennent de la vente. Ventes antérieures : tous les champs, comme avant.
+ */
 export class CreateShipmentDto {
+  @IsOptional()
   @IsIn(['domicile', 'point_relais'])
   mode: ShippingMode;
 
+  @IsOptional()
   @ValidateNested()
   @Type(() => ParcelDto)
   parcel: ParcelDto;
@@ -105,6 +111,7 @@ export class CreateShipmentDto {
   @Type(() => ShippingAddressDto)
   sender: ShippingAddressDto;
 
+  @IsOptional()
   @ValidateNested()
   @Type(() => ShippingAddressDto)
   recipient: ShippingAddressDto;

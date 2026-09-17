@@ -107,20 +107,60 @@ export function ShipmentPanel({ tx, onChanged }: { tx: Transaction; onChanged: (
 
   const rate = rates?.find((r) => r.mode === mode);
 
+  // Livraison payée par l'acheteur (AUDIT §59) : le vendeur ne paie rien et ne choisit rien — mode, colis, destinataire
+  // et point de retrait viennent de la vente. Il donne son adresse d'expéditeur (exigée par le transporteur) et génère le PDF.
+  const prepaid = !!tx.shippingQuote;
+  const senderOk = senderPhoneOk && sender.name.trim().length >= 2 && sender.line1.trim().length >= 3 && /^\d{5}$/.test(sender.postalCode) && !!sender.city.trim();
+  const generate = async () => {
+    setBusy("etiquette");
+    setError(null);
+    try {
+      await api<Shipment>(`/transactions/${tx.id}/shipment`, { method: "POST", body: { sender: clean(sender) } });
+      await load();
+      onChanged();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : (e as Error).message);
+      await load();
+    } finally {
+      setBusy("");
+    }
+  };
+
   if (shipment === undefined) return <div className="skeleton" style={{ height: 80 }} />;
 
   if (shipment && shipment.status !== "echec") {
     return (
       <div className="panel" style={{ background: "var(--accent-tint)", borderColor: "#c8e5da" }} data-testid="shipment-ready">
-        <p className="eyebrow" style={{ margin: 0 }}>Étiquette prête</p>
+        <p className="eyebrow" style={{ margin: 0 }}>{tx.shippingQuote ? "Bon d'envoi prêt" : "Étiquette prête"}</p>
         <p style={{ margin: "6px 0" }}>
           <strong>{CARRIER[shipment.carrier]}</strong> · {shipment.mode === "domicile" ? "à domicile" : "en point relais"} · {shipment.weightGrams} g{shipment.priceCents ? ` · ${formatEuros(shipment.priceCents / 100)}` : ""}
         </p>
         <p style={{ margin: "6px 0" }}>Numéro de suivi : <strong data-testid="shipment-tracking">{shipment.trackingNumber}</strong>{shipment.trackingUrl && <> · <a href={shipment.trackingUrl} target="_blank" rel="noopener">suivre</a></>}</p>
         <div className="row" style={{ marginTop: 8 }}>
-          <a className="btn btn-dark" href={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"}/transactions/${tx.id}/shipment/label.pdf`} onClick={(e) => { e.preventDefault(); downloadLabel(tx.id); }} data-testid="download-label">Télécharger l&apos;étiquette (PDF)</a>
+          <a className="btn btn-dark" href={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"}/transactions/${tx.id}/shipment/label.pdf`} onClick={(e) => { e.preventDefault(); downloadLabel(tx.id); }} data-testid="download-label">{tx.shippingQuote ? "Télécharger le bon d'envoi (PDF)" : "Télécharger l'étiquette (PDF)"}</a>
         </div>
         <p className="small muted" style={{ margin: "10px 0 0" }}>Imprimez l&apos;étiquette, collez-la sur le colis, puis déposez-le {shipment.mode === "domicile" ? "en bureau de poste" : "au point relais choisi"} et confirmez l&apos;expédition ci-dessous.</p>
+      </div>
+    );
+  }
+
+  if (prepaid) {
+    return (
+      <div className="panel" id="bon-envoi" data-testid="shipment-panel" data-prepaid="true">
+        <p className="eyebrow" style={{ margin: 0 }}>Bon d&apos;envoi</p>
+        <p className="small" style={{ margin: "6px 0 10px" }}>
+          La livraison ({formatEuros(tx.shippingFee ?? 0)}) a été <strong>payée par l&apos;acheteur</strong> : vous n&apos;avez rien à régler. Générez le bon d&apos;envoi, imprimez-le, collez-le sur le colis et déposez-le.
+        </p>
+        <p className="small" style={{ margin: "0 0 10px" }} data-testid="ship-mode-fixed">
+          {CARRIER[tx.deliveryMethod]} · choisi par l&apos;acheteur : <strong>{mode === "domicile" ? "à domicile" : tx.pickupPoint ? `${PICKUP_TYPE_LABELS[tx.pickupPoint.type].toLowerCase()} « ${tx.pickupPoint.name} » (${tx.pickupPoint.postalCode} ${tx.pickupPoint.city})` : "en point de retrait"}</strong> · colis de {tx.shippingQuote!.weightGrams} g
+        </p>
+        {shipment?.status === "echec" && shipment.error && <div className="alert alert-error" role="alert" data-testid="shipment-error">Dernière tentative refusée : {shipment.error}</div>}
+        <AddressFields legend="Votre adresse d'expéditeur (exigée par le transporteur)" prefix="from" value={sender} onChange={setSender} phoneRequired phoneInvalid={!!sender.phone?.trim() && !senderPhoneOk} />
+        <div className="row" style={{ marginTop: 12, alignItems: "center", gap: 10 }}>
+          <button type="button" className="btn btn-dark" disabled={busy !== "" || !tx.sellerConfirmedAt || !senderOk} onClick={generate} data-testid="generate-label">{busy === "etiquette" ? "Génération…" : "Générer le bon d'envoi (PDF)"}</button>
+          {!tx.sellerConfirmedAt && <span className="small muted" data-testid="label-needs-confirmation">Confirmez d&apos;abord que l&apos;article est disponible.</span>}
+        </div>
+        {error && <div className="alert alert-error" role="alert" style={{ marginTop: 10 }} data-testid="shipment-error">{error}</div>}
       </div>
     );
   }

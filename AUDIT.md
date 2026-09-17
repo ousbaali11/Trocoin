@@ -3070,3 +3070,53 @@ bouton Acheter de retour. Annonce et compte temporaires supprimés (204, 204). L
 paiement, la remise en ligne après annulation et la suppression à la réception demandent une vente payée : ils sont
 prouvés par `phase35`, `27-annonce-vendue` et les captures de la pile locale — aucun numéro de carte n'est saisi en
 production.
+
+## 59. Livraison payée par l'acheteur ; le vendeur confirme la disponibilité puis génère le bon d'envoi (PDF) sans rien régler — 17 septembre 2026
+
+Demande du propriétaire (modèle leboncoin) : c'est l'acheteur qui choisit Colissimo ou Mondial Relay et le lieu de
+réception, **les frais de livraison s'ajoutent à la somme qu'il paie** ; le vendeur — qui ne peut pas avancer le port —
+reçoit d'abord un bouton pour confirmer que l'article est disponible, puis un bouton pour générer le **bon d'envoi
+(PDF)** ; l'acheteur, qui a payé ce bon, reçoit **le numéro de suivi seulement**, le PDF va au vendeur seul. Cela
+tranche la question restée ouverte dans `docs/etiquettes-transporteur.md` (« qui paie l'étiquette ? »).
+
+### Ce qui change
+
+- **Acheteur** : chaque option de réception affiche son **prix réel** (cotation du prestataire pour le colis de
+  l'annonce et son adresse) ; le récapitulatif gagne la ligne « Frais de livraison » ; total = prix + protection +
+  livraison ; bouton « Payer <total> » ; troisième ligne sur la page Stripe. La mention « frais de port à convenir
+  avec le vendeur » disparaît.
+- **Serveur** : à la création de la vente la livraison est recotée et figée (`transactions.shippingFee`,
+  `shippingQuote`) ; `expectedTotal` couvre aussi la livraison (409 `QUOTE_CHANGED` sinon, aucun débit) ; adresse
+  exigée pour un envoi, point exigé pour un retrait ; **annonce sans poids déclaré → envoi non proposé** (pas de prix
+  ferme possible), main propre toujours possible ; le dépôt exige le poids dès que l'envoi est accepté.
+- **Vendeur** : panneau « Bon d'envoi » — « La livraison (X €) a été payée par l'acheteur : vous n'avez rien à régler » ;
+  ni tarif à calculer, ni poids, ni point, ni étiquette à acheter. **1. Confirmer la disponibilité → 2. Générer le bon
+  d'envoi (PDF)** (refusé avant la confirmation, 400) ; il ne fournit que son adresse d'expéditeur ; mode, colis,
+  destinataire et point viennent de la vente et ne se changent pas. Puis « Confirmer l'expédition » sans ressaisie. Le
+  bouton de la conversation devient « Générer le bon d'envoi (PDF) ». La saisie manuelle d'un numéro n'est plus qu'un
+  secours replié.
+- **Acheteur, suite** : message automatique « Bon d'envoi généré — votre numéro de suivi : … » dès que le bon existe ;
+  `label.pdf` → 403 pour lui.
+- **Argent** : la livraison reste chez Trocoin, dont le compte chez le prestataire règle le bon ; elle n'entre ni dans
+  la commission ni dans le versement au vendeur (toujours prix − commission). **Sans marge.** Remboursement toujours
+  intégral, livraison comprise ; un bon déjà généré est annulé chez le prestataire quand il le permet.
+
+Choix faits faute d'instruction, à connaître (détail et tableau des risques : `docs/etiquettes-transporteur.md` §10) :
+pas de marge sur le port ; remboursement de la livraison en cas d'annulation ou de litige (le coût d'un bon déjà émis
+reste alors à Trocoin) ; poids obligatoire plutôt qu'un poids par défaut (un colis sous-déclaré serait refacturé à
+Trocoin). Ventes antérieures : parcours d'origine conservé. Migration `1789570000000`.
+
+**Avant l'ouverture réelle** : la production utilise le bac à sable Boxtal (bons factices) et Stripe en mode test ;
+des clés Boxtal de production et un compte approvisionné sont nécessaires pour des bons valables.
+
+### Vérification
+
+- API : `test/phase36` (4 tests : prix par option et annonce sans poids ; total, gel, 409, adresse / point / mode
+  exigés, versement inchangé ; bon d'envoi après confirmation, imposé par la vente, PDF au vendeur seul, numéro de
+  suivi à l'acheteur, message automatique ; annulation et remboursement intégral) ; tests d'origine du parcours
+  d'étiquette rattachés à des ventes « antérieures » (`buyShipped(..., { legacy: true })`) → **203 tests**, 1 ignoré.
+- Navigateur : `17-expedition` réécrite sur le nouveau parcours (prix par option, total 68,99 €, vendeur : confirmation
+  puis bon d'envoi, PDF, acheteur sans PDF ; échec du bon et secours manuel), `26-suivi-messagerie`, `24`, `23-bareme`
+  adaptées → suite complète au vert (125 réussis, 11 ignorés).
+- Captures (pile locale) : options et prix, total avec livraison (bureau et mobile), récapitulatif acheteur, vendeur
+  avant / après confirmation, bon d'envoi prêt (bureau et mobile) et PDF, conversation acheteur avec le numéro de suivi.

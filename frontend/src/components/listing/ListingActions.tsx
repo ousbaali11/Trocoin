@@ -31,9 +31,13 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
   }, [user?.phoneNumber]);
   const setAddr = (k: keyof typeof address, v: string) => setAddress((a) => ({ ...a, [k]: v }));
   // Lieu de réception (AUDIT §57) : domicile, point relais, bureau de poste ou consigne — selon ce que le transporteur propose pour l'adresse
-  const [choice, setChoice] = useState<DeliveryChoice>({ receiveAt: null, point: null, complete: false, pointsUnavailable: false });
+  const [choice, setChoice] = useState<DeliveryChoice>({ receiveAt: null, point: null, complete: false, shippingCents: null, pointsUnavailable: false });
+  // Frais de livraison (AUDIT §59) : tarif réel de l'option choisie, ajouté au total que l'acheteur paie
+  const [optionsNonce, setOptionsNonce] = useState(0);
   const addressOk = delivery === "main_propre" || (choice.complete && address.name.trim().length >= 2 && address.line1.trim().length >= 3 && /^\d{5}$/.test(address.postalCode) && address.city.trim().length >= 1);
   const [busy, setBusy] = useState(false);
+  const shippingEuros = delivery !== "main_propre" && choice.shippingCents !== null ? choice.shippingCents / 100 : 0;
+  const payTotal = Math.round(((quote?.buyerTotal ?? 0) + shippingEuros) * 100) / 100;
   // Numéro du vendeur : jamais dans la page, délivré au clic à un membre connecté (et compté pour le vendeur)
   const [phone, setPhone] = useState<string | null>(null);
   const isOwner = user?.id === listing.userId;
@@ -82,7 +86,7 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
     if (!requireAuth(`/annonces/${listing.id}`)) return;
     setBusy(true);
     try {
-      const res = await api<{ transaction: { id: string }; checkoutUrl?: string }>("/transactions", { method: "POST", body: { listingId: listing.id, deliveryMethod: delivery, expectedTotal: quote?.buyerTotal, ...(delivery !== "main_propre" ? { deliveryMode: choice.receiveAt === "domicile" ? "domicile" : "point_relais", ...(choice.point ? { pickupPoint: { id: choice.point.id, name: choice.point.name, line1: choice.point.line1, postalCode: choice.point.postalCode, city: choice.point.city, type: choice.point.type } } : {}), shippingAddress: { name: address.name.trim(), line1: address.line1.trim(), line2: address.line2.trim() || undefined, postalCode: address.postalCode, city: address.city.trim(), phone: address.phone.trim() || undefined } } : {}) } });
+      const res = await api<{ transaction: { id: string }; checkoutUrl?: string }>("/transactions", { method: "POST", body: { listingId: listing.id, deliveryMethod: delivery, expectedTotal: payTotal, ...(delivery !== "main_propre" ? { deliveryMode: choice.receiveAt === "domicile" ? "domicile" : "point_relais", ...(choice.point ? { pickupPoint: { id: choice.point.id, name: choice.point.name, line1: choice.point.line1, postalCode: choice.point.postalCode, city: choice.point.city, type: choice.point.type } } : {}), shippingAddress: { name: address.name.trim(), line1: address.line1.trim(), line2: address.line2.trim() || undefined, postalCode: address.postalCode, city: address.city.trim(), phone: address.phone.trim() || undefined } } : {}) } });
       if (res.checkoutUrl) {
         // Paiement hébergé : la carte est saisie sur la page sécurisée Stripe, puis retour sur la transaction
         window.location.assign(res.checkoutUrl);
@@ -94,7 +98,12 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
       // Barème ou prix modifié depuis l'affichage : rien n'a été débité, on montre le nouveau total avant tout paiement
       const err = e as ApiError;
       const fresh = err.status === 409 && (err.details as { code?: string; quote?: Partial<Quote> } | undefined)?.code === "QUOTE_CHANGED" ? (err.details as { quote?: Partial<Quote> }).quote : undefined;
-      if (fresh) setQuote((q) => (q ? { ...q, ...fresh } : q));
+      // Le nouveau devis du serveur compte la livraison dans son total : ici le total hors livraison, la livraison est relue à part
+      if (fresh) {
+        const freshShipping = (fresh as { shippingFee?: number }).shippingFee ?? 0;
+        setQuote((q) => (q ? { ...q, ...fresh, buyerTotal: Math.round(((fresh.buyerTotal ?? q.buyerTotal ?? 0) - freshShipping) * 100) / 100 } : q));
+        setOptionsNonce((n) => n + 1);
+      }
       toast(err.message, fresh ? "info" : "error");
     } finally {
       setBusy(false);
@@ -194,18 +203,19 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
                 </div>
               </fieldset>
             )}
-            {delivery !== "main_propre" && <DeliveryChooser listingId={listing.id} carrier={delivery} postalCode={address.postalCode} city={address.city} onChange={setChoice} />}
+            {delivery !== "main_propre" && <DeliveryChooser key={optionsNonce} listingId={listing.id} carrier={delivery} postalCode={address.postalCode} city={address.city} onChange={setChoice} />}
             <table className="table" style={{ marginBottom: 16 }}>
               <tbody>
                 <tr data-testid="quote-price"><td>Prix de l&apos;article</td><td style={{ textAlign: "right" }}>{formatEuros(quote.price)}</td></tr>
                 <tr data-testid="quote-fee"><td>Frais de protection acheteur</td><td style={{ textAlign: "right" }}>{formatEuros(quote.buyerFee)}</td></tr>
-                <tr data-testid="quote-total"><td><strong>Total à payer</strong></td><td style={{ textAlign: "right" }}><strong>{formatEuros(quote.buyerTotal)}</strong></td></tr>
+                {delivery !== "main_propre" && <tr data-testid="quote-shipping"><td>Frais de livraison{delivery === "colissimo" ? " Colissimo" : " Mondial Relay"}</td><td style={{ textAlign: "right" }}>{choice.shippingCents !== null ? formatEuros(shippingEuros) : "à choisir"}</td></tr>}
+                <tr data-testid="quote-total"><td><strong>Total à payer</strong></td><td style={{ textAlign: "right" }}><strong>{formatEuros(payTotal)}</strong></td></tr>
               </tbody>
             </table>
-            <p className="small muted">Frais de port à convenir avec le vendeur pour un envoi.</p>
+            {delivery !== "main_propre" && <p className="small muted">La livraison est payée avec votre achat : le vendeur n&apos;avance rien, il reçoit un bon d&apos;envoi prêt à coller et vous recevez le numéro de suivi.</p>}
             <div className="row" style={{ justifyContent: "flex-end" }}>
               <button className="btn btn-outline" onClick={() => setBuyOpen(false)}>Annuler</button>
-              <button className="btn btn-primary" onClick={buy} disabled={busy || !addressOk}>{busy ? "Paiement…" : `Payer ${formatEuros(quote.buyerTotal)}`}</button>
+              <button className="btn btn-primary" onClick={buy} disabled={busy || !addressOk}>{busy ? "Paiement…" : `Payer ${formatEuros(payTotal)}`}</button>
             </div>
           </>
         )}

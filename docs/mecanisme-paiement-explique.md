@@ -153,3 +153,13 @@ ni d'une IA. Questions à poser à un expert-comptable, ce document en main :
 4. Détention de fonds pour compte de tiers : le recours à Stripe Connect (établissement de paiement
    agréé) suffit-il, ou un statut d'agent de paiement est-il requis ?
 5. Obligations DAC7 (déclaration des revenus des vendeurs au-delà de 30 ventes ou 2 000 € par an).
+
+## Et la livraison ? (AUDIT §59)
+
+Pour un envoi, l'acheteur paie **une troisième ligne** : les frais de livraison, au tarif réel du transporteur pour le
+colis de l'annonce et le lieu de réception qu'il a choisi. Exemple : article à 10,00 €, protection 1,00 €, Mondial Relay
+en point relais 4,49 € → l'acheteur paie **15,49 €** ; le vendeur reçoit toujours **9,20 €** (10,00 € − 8 %) ; Trocoin
+garde 1,80 € (commission + protection) **et** les 4,49 € de livraison, avec lesquels son compte chez le prestataire
+d'étiquettes règle le bon d'envoi. La livraison ne rapporte donc rien à Trocoin (pas de marge) et lui coûte les frais
+Stripe sur cette part (≈ 0,07 €). En cas d'annulation ou de remboursement, tout est rendu à l'acheteur, livraison
+comprise. Détail et risques : `docs/etiquettes-transporteur.md` §10.

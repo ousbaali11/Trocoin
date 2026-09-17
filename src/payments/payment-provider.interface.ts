@@ -40,6 +40,9 @@ export interface CreateCheckoutParams extends CreatePaymentIntentParams {
   /** Détail du total (AUDIT §51) : prix de l'article et frais de protection, affichés sur deux lignes de la page de paiement. */
   priceEuros?: number;
   feeEuros?: number;
+  /** Frais de livraison payés par l'acheteur (AUDIT §59) : troisième ligne de la page de paiement. */
+  shippingEuros?: number;
+  shippingLabel?: string;
   buyerEmail?: string;
   successUrl: string;
   cancelUrl: string;

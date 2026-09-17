@@ -15,7 +15,7 @@ import { PAYMENT_PROVIDER } from '../src/payments/payments.constants';
 import { PaymentsService } from '../src/payments/payments.service';
 import { StripePaymentProvider } from '../src/payments/stripe-payment.provider';
 import { Transaction } from '../src/payments/transaction.entity';
-import { createListing, login } from './utils';
+import { TEST_ADDRESS, createListing, login } from './utils';
 
 /**
  * Phase 13 : paiement hébergé (modèle Stripe Checkout, capture différée) et webhook signé.
@@ -89,13 +89,15 @@ describe('Phase 13 : paiement hébergé (Checkout, capture différée) et webhoo
     const buyer = await login(app);
     const listing = await createListing(app, seller, { price: 38 });
 
-    const created = await request(server).post('/transactions').set(buyer.auth).send({ listingId: listing.id, deliveryMethod: 'colissimo' }).expect(201);
+    const created = await request(server).post('/transactions').set(buyer.auth).send({ listingId: listing.id, deliveryMethod: 'colissimo', deliveryMode: 'domicile', shippingAddress: TEST_ADDRESS }).expect(201);
     expect(created.body.transaction.status).toBe('en_attente');
     expect(created.body.checkoutUrl).toMatch(/^https:\/\/checkout\.example\.test\/pay\/cs_test_/);
     expect(created.body.transaction.checkoutUrl).toBe(created.body.checkoutUrl);
     const sessionId = created.body.checkoutUrl.split('/').pop();
     const params = fake.sessions.get(sessionId)!.params;
-    expect(params.amountEuros).toBe(40.4); // 38 € + 5 % + 0,50 €
+    expect(params.amountEuros).toBe(48.35); // 38 € + 5 % + 0,50 € + 7,95 € de livraison (AUDIT §59)
+    expect(params.shippingEuros).toBe(7.95);
+    expect(params.shippingLabel).toBe('Frais de livraison Colissimo (à domicile)');
     expect(params.applicationFeeEuros).toBe(5.44); // commission 3,04 € + frais 2,40 €
     expect(params.successUrl).toMatch(new RegExp(`/compte/transactions/${created.body.transaction.id}\\?paiement=retour$`));
     // Retour sans payer : une page Trocoin qui explique que rien n'a été débité (AUDIT §57), plus l'annonce avec un message fugitif

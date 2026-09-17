@@ -100,7 +100,7 @@ export default function TransactionPage() {
 
       {paymentResult === "succes" && (
         <div className="alert alert-success" role="status" data-testid="payment-result" data-result="succes">
-          <strong>Paiement réussi.</strong> {formatEuros(tx.amount + tx.buyerFee)} payés : Trocoin conserve votre paiement et ne le verse au vendeur qu&apos;une fois la réception confirmée.
+          <strong>Paiement réussi.</strong> {formatEuros(tx.amount + tx.buyerFee + (tx.shippingFee ?? 0))} payés : Trocoin conserve votre paiement et ne le verse au vendeur qu&apos;une fois la réception confirmée.
           <br />Et maintenant ? Le vendeur confirme que l&apos;article est disponible, puis {tx.deliveryMethod === "main_propre" ? "vous convenez du rendez-vous" : "expédie le colis"}. Chaque étape vous est annoncée dans la conversation.
           {tx.conversationId && (
             <div style={{ marginTop: 10 }}><Link className="btn btn-primary btn-sm" href={`/compte/messages/${tx.conversationId}`}>Ouvrir la conversation</Link></div>
@@ -141,7 +141,8 @@ export default function TransactionPage() {
               {buyer ? (
                 <>
                   <tr><td>Frais de protection acheteur</td><td style={{ textAlign: "right" }}>{formatEuros(tx.buyerFee)}</td></tr>
-                  <tr><td><strong>{tx.status === "en_attente" || unpaidClosed ? "Total à payer" : "Total payé"}</strong></td><td style={{ textAlign: "right" }}><strong>{formatEuros(tx.amount + tx.buyerFee)}</strong></td></tr>
+                  {(tx.shippingFee ?? 0) > 0 && <tr data-testid="recap-shipping"><td>Frais de livraison</td><td style={{ textAlign: "right" }}>{formatEuros(tx.shippingFee)}</td></tr>}
+                  <tr><td><strong>{tx.status === "en_attente" || unpaidClosed ? "Total à payer" : "Total payé"}</strong></td><td style={{ textAlign: "right" }}><strong>{formatEuros(tx.amount + tx.buyerFee + (tx.shippingFee ?? 0))}</strong></td></tr>
                 </>
               ) : (
                 <>
@@ -151,6 +152,7 @@ export default function TransactionPage() {
               )}
             </tbody>
           </table>
+          {!buyer && (tx.shippingFee ?? 0) > 0 && <p className="small muted" style={{ margin: "8px 0 0" }} data-testid="recap-shipping-seller">Livraison payée par l&apos;acheteur : {formatEuros(tx.shippingFee)} — elle règle le bon d&apos;envoi, vous n&apos;avancez rien.</p>}
           <p className="small muted" style={{ margin: "8px 0 0" }}>
             {buyer ? "Vendeur" : "Acheteur"} : {tx.other?.displayName}
             {tx.other && !tx.other.deleted && <> · <Link href={`/vendeurs/${tx.other.id}`}>profil</Link></>}
@@ -208,7 +210,7 @@ export default function TransactionPage() {
         )}
         {tx.status === "sequestre" && !buyer && (
           <div className="stack">
-            <p className="small muted" style={{ margin: 0 }}>Les fonds de l&apos;acheteur sont bloqués. {tx.deliveryMethod === "main_propre" ? "Convenez d'un rendez-vous par messagerie, puis confirmez que vous êtes prêt." : "Expédiez l'article et renseignez le numéro de suivi."}</p>
+            <p className="small muted" style={{ margin: 0 }}>Les fonds de l&apos;acheteur sont bloqués. {tx.deliveryMethod === "main_propre" ? "Convenez d'un rendez-vous par messagerie, puis confirmez que vous êtes prêt." : (tx.shippingQuote ? "Confirmez la disponibilité, générez le bon d'envoi, déposez le colis, puis confirmez l'expédition." : "Expédiez l'article et renseignez le numéro de suivi.")}</p>
             {tx.sellerConfirmedAt ? (
               <p className="small" style={{ margin: 0, color: "var(--accent-dark)" }} data-testid="availability-confirmed">✓ Vous avez confirmé la disponibilité de l&apos;article le {formatDateTime(tx.sellerConfirmedAt)}.</p>
             ) : (
@@ -223,12 +225,22 @@ export default function TransactionPage() {
               </p>
             )}
             {tx.deliveryMethod !== "main_propre" && <ShipmentPanel tx={tx} onChanged={load} />}
-            {tx.deliveryMethod !== "main_propre" && (
+            {/* Livraison payée par l'acheteur (AUDIT §59) : le numéro vient du bon d'envoi ; la saisie à la main n'est qu'un secours */}
+            {tx.deliveryMethod !== "main_propre" && (tx.shippingQuote && !tx.deliveryTrackingNumber ? (
+              <details data-testid="manual-tracking">
+                <summary className="small" style={{ cursor: "pointer" }}>Le bon d&apos;envoi ne peut pas être généré ? Saisir un numéro de suivi à la main</summary>
+                <p className="small muted" style={{ margin: "6px 0" }}>À n&apos;utiliser qu&apos;en dernier recours : la livraison payée par l&apos;acheteur couvre le bon d&apos;envoi Trocoin, pas un envoi réglé par vos soins.</p>
               <div className="field" style={{ maxWidth: 360 }}>
-                <label htmlFor="tracking">Numéro de suivi{tx.deliveryTrackingNumber ? " (rempli par l'étiquette)" : ""}</label>
+                <label htmlFor="tracking">Numéro de suivi{tx.deliveryTrackingNumber ? " (rempli par le bon d'envoi)" : ""}</label>
                 <input id="tracking" className="input" value={tracking} onChange={(e) => setTracking(e.target.value)} placeholder="Ex. 6A12345678901" />
               </div>
-            )}
+              </details>
+            ) : (
+              <div className="field" style={{ maxWidth: 360 }}>
+                <label htmlFor="tracking">Numéro de suivi{tx.deliveryTrackingNumber ? " (rempli par le bon d'envoi)" : ""}</label>
+                <input id="tracking" className="input" value={tracking} onChange={(e) => setTracking(e.target.value)} placeholder="Ex. 6A12345678901" />
+              </div>
+            ))}
             <div className="row">
               <button className="btn btn-primary" disabled={busy || (tx.deliveryMethod !== "main_propre" && (tracking.trim() || tx.deliveryTrackingNumber || "").length < 4)} onClick={() => run(() => api(`/transactions/${tx.id}/ship`, { method: "POST", body: { trackingNumber: tracking.trim() || undefined } }), tx.deliveryMethod === "main_propre" ? "Acheteur prévenu." : "Expédition enregistrée.")}>
                 {tx.deliveryMethod === "main_propre" ? "Je suis prêt pour la remise" : "Confirmer l'expédition"}

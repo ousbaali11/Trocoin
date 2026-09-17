@@ -213,6 +213,8 @@ export class ConversationsService {
       trackingNumber,
       trackingUrl: trackingNumber && tx.deliveryMethod !== 'main_propre' ? shipment?.trackingUrl || carrierTrackingUrl(tx.deliveryMethod, trackingNumber) : null,
       labelReady: shipment?.status === 'etiquette_prete',
+      shippingPaid: !!tx.shippingQuote,
+      shippingFee: tx.shippingFee ?? 0,
     };
   }
 

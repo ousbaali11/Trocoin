@@ -1,6 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { createApp, createListing, login, TestUser } from './utils';
+import { buyShipped, createApp, createListing, login, TestUser } from './utils';
 
 /**
  * Étiquettes transporteur, phase 1 (mode simulation, SHIPPING_PROVIDER=mock) :
@@ -28,7 +28,8 @@ describe('Étiquettes transporteur (simulation)', () => {
     const seller = await login(app);
     const buyer = await login(app);
     const listing = await createListing(app, seller, { price: 120, deliveryAvailable: true, title: 'Enceinte Bluetooth JBL Flip 6' });
-    const created = await request(server).post('/transactions').set(buyer.auth).send({ listingId: listing.id, deliveryMethod }).expect(201);
+    // Parcours d'étiquette d'origine : vente antérieure au paiement de la livraison par l'acheteur (AUDIT §59)
+    const created = { body: deliveryMethod === 'main_propre' ? (await request(server).post('/transactions').set(buyer.auth).send({ listingId: listing.id, deliveryMethod }).expect(201)).body : await buyShipped(app, buyer, listing.id, deliveryMethod, { legacy: true }) };
     const tx = created.body.transaction ?? created.body;
     expect(tx.status).toBe('sequestre');
     return { seller, buyer, listing, txId: tx.id as string };

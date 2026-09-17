@@ -53,7 +53,7 @@ describe('Phase 34 : suivi dans la messagerie, points de retrait, retour de paie
     const convId = inboxSeller[0].id as string;
     let conv = (await request(server).get(`/conversations/${convId}`).set(buyer.auth).expect(200)).body;
     expect(systemOf(conv).map((m) => m.systemEvent)).toEqual(['achat_confirme']);
-    expect(systemOf(conv)[0]).toMatchObject({ transactionId: txId, meta: expect.objectContaining({ amount: 126.5, price: 120, deliveryMethod: 'colissimo', deliveryMode: 'domicile' }) });
+    expect(systemOf(conv)[0]).toMatchObject({ transactionId: txId, meta: expect.objectContaining({ amount: 134.45, shipping: 7.95, price: 120, deliveryMethod: 'colissimo', deliveryMode: 'domicile' }) }); // 120 + 6,50 de protection + 7,95 de livraison
     expect(conv.transaction).toMatchObject({ id: txId, role: 'acheteur', status: 'sequestre', deliveryMode: 'domicile', sellerConfirmedAt: null });
     // La page de la vente pointe vers la conversation
     expect((await request(server).get(`/transactions/${txId}`).set(buyer.auth).expect(200)).body.conversationId).toBe(convId);
@@ -144,7 +144,11 @@ describe('Phase 34 : suivi dans la messagerie, points de retrait, retour de paie
     expect(detail.transaction.pickupPoint).toEqual({ name: locker.name, city: locker.city, type: 'consigne' });
     // Étiquette : le vendeur ne peut ni changer de mode ni de point
     const sender = { name: 'Camille Vendeur', line1: '12 rue de la République', postalCode: '69003', city: 'Lyon', phone: '06 11 22 33 44' };
-    const label = await request(server).post(`/transactions/${tx.id}/shipment`).set(seller.auth).send({ mode: 'domicile', parcel: { weightGrams: 900 }, sender, recipient: address }).expect(201);
+    // Livraison payée par l'acheteur (AUDIT §59) : disponibilité d'abord, puis le vendeur ne fournit que son adresse
+    const early = await request(server).post(`/transactions/${tx.id}/shipment`).set(seller.auth).send({ sender }).expect(400);
+    expect(early.body.message).toMatch(/Confirmez d'abord que l'article est disponible/);
+    await request(server).post(`/transactions/${tx.id}/confirm-availability`).set(seller.auth).expect(200);
+    const label = await request(server).post(`/transactions/${tx.id}/shipment`).set(seller.auth).send({ mode: 'domicile', parcel: { weightGrams: 9000 }, sender, recipient: { ...address, city: 'Ailleurs' } }).expect(201);
     expect(label.body).toMatchObject({ mode: 'point_relais', relayPointId: locker.id, status: 'etiquette_prete' });
   });
 

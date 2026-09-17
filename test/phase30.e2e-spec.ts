@@ -29,7 +29,7 @@ describe('Phase 30 : livraison déclarée sur la fiche (données structurées sa
     const seller = await login(app);
     const handOnly = await createListing(app, seller, { price: 40, deliveryAvailable: false });
     const withWeight = await createListing(app, seller, { price: 40, deliveryAvailable: true, weightGrams: 800 });
-    const noWeight = await createListing(app, seller, { price: 40, deliveryAvailable: true });
+    const noWeight = await createListing(app, seller, { weightGrams: undefined, price: 40, deliveryAvailable: true });
 
     const a = (await request(server).get(`/listings/${handOnly.id}`).expect(200)).body;
     expect(a.delivery).toEqual({ available: false, shipWithinDays: 7, transitDaysMin: 2, transitDaysMax: 4, estimate: null });

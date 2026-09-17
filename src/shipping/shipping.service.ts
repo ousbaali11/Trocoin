@@ -1,6 +1,7 @@
 import { BadGatewayException, BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { ConversationsService } from '../conversations/conversations.service';
 import { Listing } from '../listings/listing.entity';
 import { Transaction } from '../payments/transaction.entity';
 import { User } from '../users/user.entity';
@@ -16,12 +17,17 @@ export interface CarrierPickupOptions {
   label: string;
   domicile: boolean;
   pointRelais: boolean;
+  /** Prix réels cotés pour le colis de l'annonce (AUDIT §59), en centimes TTC : ce que l'acheteur paiera en plus du prix. */
+  domicilePriceCents?: number;
+  pickupPriceCents?: number;
   points: RelayPoint[];
   /** Les points n'ont pas pu être lus (prestataire absent ou en panne) : le vendeur choisira le point à l'étiquette, comme avant. */
   pointsUnavailable?: boolean;
 }
 const CARRIER_LABELS: Record<ShippingCarrier, string> = { colissimo: 'Colissimo', mondial_relay: 'Mondial Relay' };
-const DEFAULT_PARCEL_GRAMS = 1000;
+/** Colis de l'annonce ; sans poids déclaré par le vendeur, aucun prix ferme n'est possible : l'envoi n'est pas proposé (AUDIT §59). */
+export const NO_WEIGHT_MESSAGE = "Le vendeur n'a pas indiqué le poids du colis : l'envoi n'est pas proposé pour cette annonce. Choisissez la remise en main propre ou demandez-lui de compléter son annonce.";
+const parcelOf = (l: Listing) => (l.weightGrams && l.weightGrams > 0 ? { weightGrams: l.weightGrams, lengthCm: l.lengthCm ?? undefined, widthCm: l.widthCm ?? undefined, heightCm: l.heightCm ?? undefined } : null);
 
 /** Ce que voient le vendeur et l'acheteur : jamais le PDF lui-même (route dédiée, vendeur seul). */
 export type ShipmentView = Omit<Shipment, 'labelPdfBase64'> & { labelAvailable: boolean };
@@ -36,6 +42,7 @@ export class ShippingService {
     @InjectRepository(Listing) private readonly listings: Repository<Listing>,
     @InjectRepository(User) private readonly users: Repository<User>,
     @Inject(SHIPPING_PROVIDER) private readonly provider: IShippingProvider,
+    private readonly conversations: ConversationsService,
   ) {}
 
   get providerName(): string {
@@ -59,27 +66,54 @@ export class ShippingService {
    * domicile et/ou retrait — et les points de retrait réels renvoyés par le prestataire (jamais une liste inventée).
    * Un prestataire absent ou en panne ne bloque pas l'achat : les deux modes restent proposés, sans liste de points.
    */
-  async pickupOptions(listingId: string, postalCode: string, city?: string): Promise<{ postalCode: string; carriers: CarrierPickupOptions[] }> {
+  async pickupOptions(listingId: string, postalCode: string, city?: string): Promise<{ postalCode: string; carriers: CarrierPickupOptions[]; unavailableReason?: string }> {
     if (!/^\d{5}$/.test(postalCode)) throw new BadRequestException('Code postal à 5 chiffres requis.');
     const listing = await this.listings.findOne({ where: { id: listingId } });
     if (!listing || !listing.deliveryAvailable) throw new NotFoundException("Cette annonce ne propose pas l'envoi.");
-    const parcel = { weightGrams: listing.weightGrams || DEFAULT_PARCEL_GRAMS, lengthCm: listing.lengthCm ?? undefined, widthCm: listing.widthCm ?? undefined, heightCm: listing.heightCm ?? undefined };
+    const parcel = parcelOf(listing);
+    if (!parcel || !listing.postalCode) return { postalCode, carriers: [], unavailableReason: NO_WEIGHT_MESSAGE };
     const carriers: CarrierPickupOptions[] = [];
     for (const carrier of ['colissimo', 'mondial_relay'] as ShippingCarrier[]) {
       const base = { carrier, label: CARRIER_LABELS[carrier] };
       try {
-        const rates = listing.postalCode ? await this.provider.quote({ carrier, parcel, fromPostalCode: listing.postalCode, toPostalCode: postalCode, fromCity: listing.city ?? undefined, toCity: city }) : [];
-        // Sans cotation possible (annonce sans code postal), on ne retire aucun mode : le vendeur tranchera à l'étiquette
-        const domicile = rates.length === 0 ? true : rates.some((r) => r.mode === 'domicile');
-        const relais = rates.length === 0 ? true : rates.some((r) => r.mode === 'point_relais');
-        const points = relais ? await this.provider.searchRelayPoints(carrier, postalCode, city) : [];
-        carriers.push({ ...base, domicile, pointRelais: relais && points.length > 0, points });
+        const rates = await this.provider.quote({ carrier, parcel, fromPostalCode: listing.postalCode, toPostalCode: postalCode, fromCity: listing.city ?? undefined, toCity: city });
+        const home = rates.find((r) => r.mode === 'domicile');
+        const pickup = rates.find((r) => r.mode === 'point_relais');
+        const points = pickup ? await this.provider.searchRelayPoints(carrier, postalCode, city) : [];
+        carriers.push({ ...base, domicile: !!home, pointRelais: !!pickup && points.length > 0, domicilePriceCents: home?.priceCents, pickupPriceCents: pickup?.priceCents, points });
       } catch (err) {
         this.logger.warn(`Options de retrait ${carrier} indisponibles pour ${postalCode} : ${(err as Error).message}`);
-        carriers.push({ ...base, domicile: true, pointRelais: true, points: [], pointsUnavailable: true });
+        // Sans cotation, pas de prix ferme à faire payer : ce transporteur n'est pas proposé pour l'instant
+        carriers.push({ ...base, domicile: false, pointRelais: false, points: [], pointsUnavailable: true });
       }
     }
     return { postalCode, carriers };
+  }
+
+  /**
+   * Prix ferme de la livraison au moment de l'achat (AUDIT §59) : cotation réelle du colis de l'annonce pour le
+   * transporteur, le mode et l'adresse choisis. C'est ce montant que l'acheteur paie ; le bon d'envoi sera généré avec
+   * exactement ce colis et ce mode.
+   */
+  async quoteForPurchase(listing: Listing, carrier: ShippingCarrier, mode: 'domicile' | 'point_relais', toPostalCode: string, toCity?: string) {
+    const parcel = parcelOf(listing);
+    if (!parcel || !listing.postalCode) throw new BadRequestException(NO_WEIGHT_MESSAGE);
+    const rates = await this.call(() => this.provider.quote({ carrier, parcel, fromPostalCode: listing.postalCode!, toPostalCode, fromCity: listing.city ?? undefined, toCity }));
+    const rate = rates.find((r) => r.mode === mode);
+    if (!rate || !rate.priceCents) throw new BadRequestException(`${CARRIER_LABELS[carrier]} ne propose pas ${mode === 'domicile' ? 'la livraison à domicile' : 'le retrait en point'} pour ce colis et cette adresse.`);
+    return { offerCode: rate.offerCode, priceCents: rate.priceCents, mode, ...parcel };
+  }
+
+  /** Vente annulée avant l'expédition : le bon d'envoi déjà généré est annulé chez le prestataire quand il le permet (au mieux, sans bloquer). */
+  async cancelLabelFor(transactionId: string): Promise<void> {
+    const shipment = await this.shipments.findOne({ where: { transactionId, status: 'etiquette_prete' } });
+    if (!shipment?.providerRef || !this.provider.cancel) return;
+    try {
+      const done = await this.provider.cancel(shipment.providerRef);
+      this.logger.log(`Bon d'envoi ${shipment.providerRef} de la vente annulée ${transactionId} : ${done ? 'annulé chez le prestataire' : 'annulation refusée (à reprendre à la main)'}`);
+    } catch (e) {
+      this.logger.warn(`Bon d'envoi ${shipment.providerRef} non annulé (${(e as Error).message}) : à reprendre à la main`);
+    }
   }
 
   /**
@@ -114,6 +148,19 @@ export class ShippingService {
   async createLabel(transactionId: string, sellerId: string, dto: CreateShipmentDto): Promise<ShipmentView> {
     const tx = await this.sellerTransaction(transactionId, sellerId);
     const carrier = tx.deliveryMethod as ShippingCarrier;
+    // Livraison payée par l'acheteur (AUDIT §59) : le vendeur ne paie rien et ne choisit rien — il confirme la
+    // disponibilité, puis génère le bon d'envoi avec le mode, le colis et le destinataire de la vente.
+    const prepaid = !!tx.shippingQuote;
+    if (prepaid) {
+      if (!tx.sellerConfirmedAt) throw new BadRequestException("Confirmez d'abord que l'article est disponible : le bon d'envoi se génère ensuite.");
+      if (!tx.shippingAddress) throw new BadRequestException("Adresse de livraison de l'acheteur absente : le bon d'envoi ne peut pas être généré.");
+      const q = tx.shippingQuote!;
+      dto.mode = q.mode;
+      dto.parcel = { weightGrams: q.weightGrams, lengthCm: q.lengthCm, widthCm: q.widthCm, heightCm: q.heightCm };
+      dto.recipient = { ...tx.shippingAddress, country: 'FR' } as CreateShipmentDto['recipient'];
+    } else if (!dto.mode || !dto.parcel || !dto.recipient) {
+      throw new BadRequestException('Mode, colis et destinataire requis.');
+    }
     // Choix de l'acheteur au paiement (AUDIT §57) : le mode et le point de retrait ne se changent pas à l'étiquette
     if (tx.deliveryMode) dto.mode = tx.deliveryMode;
     if (tx.deliveryMode === 'point_relais' && tx.pickupPoint?.id) dto.relayPointId = tx.pickupPoint.id;
@@ -189,6 +236,9 @@ export class ShippingService {
       // Le numéro de suivi est repris sur la transaction : « Confirmer l'expédition » n'exige plus de saisie
       tx.deliveryTrackingNumber = label.trackingNumber;
       await this.transactions.save(tx);
+      if (prepaid && label.priceCents > Math.round(tx.shippingFee * 100)) this.logger.warn(`Vente ${tx.id} : bon d'envoi à ${label.priceCents} c pour ${Math.round(tx.shippingFee * 100)} c payés par l'acheteur (écart à la charge de Trocoin)`);
+      // L'acheteur a payé l'envoi : il reçoit le numéro de suivi dès que le bon existe ; le PDF reste au vendeur seul
+      await this.conversations.postSystemEvent({ listingId: tx.listingId, buyerId: tx.buyerId, sellerId: tx.sellerId, actorId: tx.sellerId, transactionId: tx.id, event: 'etiquette_generee', content: `Bon d'envoi généré — suivi ${label.trackingNumber}`, meta: { trackingNumber: label.trackingNumber, trackingUrl: label.trackingUrl, carrier } });
       return this.view(shipment);
     } catch (err) {
       const e = err instanceof ShippingProviderError ? err : new ShippingProviderError(this.provider.name, 'reseau', (err as Error).message);

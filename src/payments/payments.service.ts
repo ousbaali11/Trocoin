@@ -85,8 +85,8 @@ export function computeQuote(price: number, fees: FeeRates = DEFAULT_FEE_RATES) 
 }
 
 /** Devis d'une transaction EXISTANTE : relu sur ses montants figés, jamais recalculé avec le barème du jour. */
-export function quoteOfTransaction(tx: Pick<Transaction, 'amount' | 'commission' | 'buyerFee'>) {
-  return { price: tx.amount, commission: tx.commission, buyerFee: tx.buyerFee, buyerTotal: round2(tx.amount + tx.buyerFee), sellerPayout: round2(tx.amount - tx.commission) };
+export function quoteOfTransaction(tx: Pick<Transaction, 'amount' | 'commission' | 'buyerFee'> & { shippingFee?: number }) {
+  return { price: tx.amount, commission: tx.commission, buyerFee: tx.buyerFee, shippingFee: tx.shippingFee ?? 0, buyerTotal: round2(tx.amount + tx.buyerFee + (tx.shippingFee ?? 0)), sellerPayout: round2(tx.amount - tx.commission) };
 }
 
 @Injectable()
@@ -177,10 +177,29 @@ export class PaymentsService {
     });
     if (active > 0) throw new BadRequestException('Une transaction est déjà en cours sur cette annonce.');
 
+    // Mode d'envoi choisi par l'acheteur (AUDIT §57) : domicile, ou retrait dans un point réel du transporteur
+    // (relais, bureau de poste, consigne), relu chez le prestataire avant tout paiement.
+    let mode: DeliveryMode | null = null;
+    let point: ChosenPickupPoint | null = null;
+    let shippingQuote: Transaction['shippingQuote'] = null;
+    if (deliveryMethod !== 'main_propre') {
+      // Anciens clients sans mode : celui que le transporteur impliquait (Colissimo domicile, Mondial Relay point relais)
+      mode = deliveryMode ?? (pickupPoint ? 'point_relais' : deliveryMethod === 'colissimo' ? 'domicile' : 'point_relais');
+      if (!shippingAddress) throw new BadRequestException('Adresse de livraison requise pour un envoi : elle sert à calculer les frais de livraison.');
+      if (mode === 'point_relais' && !pickupPoint) throw new BadRequestException('Choisissez le point de retrait où recevoir le colis.');
+      // Frais de livraison (AUDIT §59) : prix réel coté pour le colis de l'annonce, payé par l'acheteur avec son achat
+      shippingQuote = await this.shipping.quoteForPurchase(listing, deliveryMethod as ShippingCarrier, mode, shippingAddress.postalCode, shippingAddress.city);
+      if (mode === 'point_relais' && pickupPoint) {
+        const found = await this.shipping.resolvePickupPoint(deliveryMethod as ShippingCarrier, pickupPoint.id, shippingAddress?.postalCode ?? pickupPoint.postalCode, shippingAddress?.city, { ...pickupPoint });
+        point = { id: found.id, name: found.name, line1: found.line1, postalCode: found.postalCode, city: found.city, type: found.type };
+      }
+    }
     // Barème lu UNE fois, à la création : il est figé sur la transaction (montants + taux), un changement
     // ultérieur par l'admin ne la touche plus (AUDIT §51).
     const fees = this.settings.fees();
-    const q = computeQuote(listing.price!, fees);
+    const shippingFee = shippingQuote ? round2(shippingQuote.priceCents / 100) : 0;
+    const base0 = computeQuote(listing.price!, fees);
+    const q = { ...base0, shippingFee, buyerTotal: round2(base0.buyerTotal + shippingFee) };
     // Garde-fou : le total que l'acheteur a vu avant de cliquer doit être celui qu'on va débiter. Si le barème
     // (ou le prix) a changé entre-temps, on refuse et on renvoie le nouveau devis plutôt que de le surprendre.
     if (expectedTotal !== undefined && Math.abs(expectedTotal - q.buyerTotal) > 0.005) {
@@ -191,17 +210,6 @@ export class PaymentsService {
         message: `Le montant à payer a changé depuis son affichage (${q.buyerTotal.toFixed(2).replace('.', ',')} € au lieu de ${expectedTotal.toFixed(2).replace('.', ',')} €). Vérifiez le nouveau total avant de payer.`,
         quote: { ...q, rates: fees },
       });
-    }
-    // Mode d'envoi choisi par l'acheteur (AUDIT §57) : domicile, ou retrait dans un point réel du transporteur
-    // (relais, bureau de poste, consigne), relu chez le prestataire avant tout paiement.
-    let mode: DeliveryMode | null = null;
-    let point: ChosenPickupPoint | null = null;
-    if (deliveryMethod !== 'main_propre') {
-      mode = deliveryMode ?? (pickupPoint ? 'point_relais' : null);
-      if (mode === 'point_relais' && pickupPoint) {
-        const found = await this.shipping.resolvePickupPoint(deliveryMethod as ShippingCarrier, pickupPoint.id, shippingAddress?.postalCode ?? pickupPoint.postalCode, shippingAddress?.city, { ...pickupPoint });
-        point = { id: found.id, name: found.name, line1: found.line1, postalCode: found.postalCode, city: found.city, type: found.type };
-      }
     }
     // Modèle platform : la charge reste sur le solde de Trocoin, le compte du vendeur ne sert qu'au
     // transfert à la confirmation. On vérifie dès l'achat qu'il est prêt (onboarding terminé) pour ne pas
@@ -220,6 +228,8 @@ export class PaymentsService {
       deliveryMethod,
       // Adresse de livraison (envoi) : gardée telle que saisie, jamais exposée en dehors des deux parties
       shippingAddress: deliveryMethod !== 'main_propre' && shippingAddress ? shippingAddress : null,
+      shippingFee,
+      shippingQuote,
       deliveryMode: mode,
       pickupPoint: point,
       handoverCode: deliveryMethod === 'main_propre' ? randomInt(0, 1_000_000).toString().padStart(6, '0') : undefined,
@@ -241,6 +251,8 @@ export class PaymentsService {
           title: listing.title,
           priceEuros: q.price,
           feeEuros: q.buyerFee,
+          shippingEuros: shippingFee || undefined,
+          shippingLabel: shippingFee ? `Frais de livraison ${deliveryMethod === 'colissimo' ? 'Colissimo' : 'Mondial Relay'} (${mode === 'domicile' ? 'à domicile' : 'en point de retrait'})` : undefined,
           buyerEmail: buyer?.email || undefined,
           successUrl: `${site}/compte/transactions/${pending.id}?paiement=retour`,
           // Retour de la page de paiement sans payer (« ← », carte refusée puis abandon) : une page Trocoin qui dit
@@ -590,7 +602,8 @@ export class PaymentsService {
       link: `/compte/transactions/${tx.id}`,
     });
     await this.track(tx, 'achat_confirme', tx.buyerId, 'Achat confirmé : paiement sécurisé, conservé par Trocoin', {
-      amount: round2(tx.amount + tx.buyerFee),
+      amount: round2(tx.amount + tx.buyerFee + (tx.shippingFee ?? 0)),
+      shipping: tx.shippingFee ?? 0,
       price: tx.amount,
       deliveryMethod: tx.deliveryMethod,
       deliveryMode: tx.deliveryMode ?? null,
@@ -875,6 +888,7 @@ export class PaymentsService {
     const tx = await this.getOwned(transactionId, userId);
     if (tx.status !== 'sequestre') throw new BadRequestException('Annulation possible uniquement avant expédition / remise.');
     await this.refundBuyer(tx);
+    await this.shipping.cancelLabelFor(tx.id);
     tx.status = 'annulee';
     tx.resolvedAt = new Date();
     tx.resolutionNote = userId === tx.sellerId ? 'Annulée par le vendeur' : 'Annulée par l\'acheteur';

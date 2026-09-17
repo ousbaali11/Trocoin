@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import { PICKUP_TYPE_LABELS } from "@/lib/format";
+import { formatEuros, PICKUP_TYPE_LABELS } from "@/lib/format";
 import type { CarrierPickupOptions, PickupPoint } from "@/lib/types";
 
 export type Carrier = "colissimo" | "mondial_relay";
@@ -11,13 +11,14 @@ export type ReceiveAt = "domicile" | "relais" | "bureau_consigne";
 export interface DeliveryChoice {
   receiveAt: ReceiveAt | null;
   point: PickupPoint | null;
-  /** Vrai quand le choix permet de payer (mode choisi, et point choisi quand une liste de points existe). */
+  /** Vrai quand le choix permet de payer : mode choisi, prix connu, point choisi pour un retrait. */
   complete: boolean;
-  /** Liste des points indisponible : le vendeur choisira le point à l'étiquette (comportement d'origine). */
+  /** Frais de livraison de l'option choisie, en centimes (AUDIT §59) : ajoutés au total payé par l'acheteur. */
+  shippingCents: number | null;
   pointsUnavailable: boolean;
 }
 
-const EMPTY: DeliveryChoice = { receiveAt: null, point: null, complete: false, pointsUnavailable: false };
+const EMPTY: DeliveryChoice = { receiveAt: null, point: null, complete: false, shippingCents: null, pointsUnavailable: false };
 
 /**
  * Choix du lieu de réception pour un envoi (AUDIT §57) : domicile, point relais, bureau de poste ou consigne
@@ -28,6 +29,7 @@ export function DeliveryChooser({ listingId, carrier, postalCode, city, onChange
   const [options, setOptions] = useState<CarrierPickupOptions[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [reason, setReason] = useState<string | null>(null);
   const [receiveAt, setReceiveAt] = useState<ReceiveAt | null>(null);
   const [pointId, setPointId] = useState<string | null>(null);
   const notify = useRef(onChange);
@@ -46,9 +48,10 @@ export function DeliveryChooser({ listingId, carrier, postalCode, city, onChange
     setLoading(true);
     const timer = setTimeout(async () => {
       try {
-        const res = await api<{ carriers: CarrierPickupOptions[] }>(`/shipping/pickup-options?listingId=${listingId}&postalCode=${postalCode}&city=${encodeURIComponent(city.trim())}`);
+        const res = await api<{ carriers: CarrierPickupOptions[]; unavailableReason?: string }>(`/shipping/pickup-options?listingId=${listingId}&postalCode=${postalCode}&city=${encodeURIComponent(city.trim())}`);
         if (cancelled) return;
         setOptions(res.carriers);
+        setReason(res.unavailableReason ?? null);
         setFailed(false);
       } catch {
         if (cancelled) return;
@@ -66,8 +69,8 @@ export function DeliveryChooser({ listingId, carrier, postalCode, city, onChange
 
   const current = useMemo(() => {
     const found = options?.find((o) => o.carrier === carrier);
-    // Service des options injoignable : on retombe sur les deux modes, sans liste (le vendeur choisit le point à l'étiquette)
-    if (!found && failed) return { carrier, label: "", domicile: true, pointRelais: true, points: [] as PickupPoint[], pointsUnavailable: true };
+    // Sans cotation (service injoignable), pas de prix ferme à faire payer : l'envoi n'est pas proposé pour l'instant
+    if (!found && failed) return { carrier, label: "", domicile: false, pointRelais: false, points: [] as PickupPoint[], pointsUnavailable: true };
     return found ?? null;
   }, [options, carrier, failed]);
   const relais = useMemo(() => (current?.points ?? []).filter((p) => p.type === "relais"), [current]);
@@ -82,7 +85,7 @@ export function DeliveryChooser({ listingId, carrier, postalCode, city, onChange
     setReceiveAt((prev) => {
       if (!current) return null;
       if (prev === "domicile" && current.domicile) return prev;
-      if (prev === "relais" && (relais.length > 0 || unavailable)) return prev;
+      if (prev === "relais" && relais.length > 0) return prev;
       if (prev === "bureau_consigne" && others.length > 0) return prev;
       return null;
     });
@@ -93,33 +96,34 @@ export function DeliveryChooser({ listingId, carrier, postalCode, city, onChange
   const point = shown.find((p) => p.id === pointId) ?? null;
   useEffect(() => {
     if (!current || !receiveAt) return notify.current(EMPTY);
-    const needsPoint = receiveAt !== "domicile" && !unavailable;
-    notify.current({ receiveAt, point, complete: !needsPoint || !!point, pointsUnavailable: unavailable });
+    const cents = (receiveAt === "domicile" ? current.domicilePriceCents : current.pickupPriceCents) ?? null;
+    notify.current({ receiveAt, point, complete: cents !== null && (receiveAt === "domicile" || !!point), shippingCents: cents, pointsUnavailable: unavailable });
   }, [current, receiveAt, point, unavailable]);
 
   if (!ready) return <p className="small muted" style={{ margin: "0 0 12px" }} data-testid="delivery-options-wait">Indiquez votre code postal et votre ville : les options de réception proposées par le transporteur s&apos;afficheront ici.</p>;
   if (loading && !current) return <p className="small muted" role="status" style={{ margin: "0 0 12px" }} data-testid="delivery-options-loading">Recherche des options de réception autour de {postalCode}…</p>;
+  if (reason) return <p className="alert alert-info" style={{ margin: "0 0 12px" }} data-testid="delivery-unavailable">{reason}</p>;
   if (!current) return null;
+  const homePrice = typeof current.domicilePriceCents === "number" ? ` — ${formatEuros(current.domicilePriceCents / 100)}` : "";
+  const pickupPrice = typeof current.pickupPriceCents === "number" ? ` — ${formatEuros(current.pickupPriceCents / 100)}` : "";
 
   const otherLabel = hasBureau && hasConsigne ? "En bureau de poste ou consigne automatique (locker)" : hasBureau ? "En bureau de poste" : "En consigne automatique (locker)";
-  const nothing = !current.domicile && relais.length === 0 && others.length === 0 && !unavailable;
+  const nothing = !current.domicile && relais.length === 0 && others.length === 0;
 
   return (
     <fieldset className="field" style={{ border: 0, padding: 0, margin: "0 0 12px" }} data-testid="delivery-options" aria-busy={loading}>
       <legend className="label">Où souhaitez-vous recevoir le colis ?</legend>
-      {nothing && <p className="alert alert-error" style={{ margin: 0 }}>Ce transporteur ne dessert pas cette adresse. Choisissez l&apos;autre transporteur ou la remise en main propre.</p>}
+      {nothing && <p className="alert alert-error" style={{ margin: 0 }} data-testid="carrier-unavailable">{unavailable ? "Le tarif de ce transporteur est momentanément indisponible." : "Ce transporteur ne dessert pas cette adresse."} Choisissez l&apos;autre transporteur ou la remise en main propre.</p>}
       {current.domicile && (
-        <label className="checkbox"><input type="radio" name="receive-at" checked={receiveAt === "domicile"} onChange={() => setReceiveAt("domicile")} /> À domicile, à l&apos;adresse ci-dessus</label>
+        <label className="checkbox"><input type="radio" name="receive-at" checked={receiveAt === "domicile"} onChange={() => setReceiveAt("domicile")} /> À domicile, à l&apos;adresse ci-dessus<strong>{homePrice}</strong></label>
       )}
-      {(relais.length > 0 || unavailable) && (
-        <label className="checkbox"><input type="radio" name="receive-at" checked={receiveAt === "relais"} onChange={() => setReceiveAt("relais")} /> En point relais{relais.length > 0 ? ` (${relais.length} à proximité)` : ""}</label>
+      {relais.length > 0 && (
+        <label className="checkbox"><input type="radio" name="receive-at" checked={receiveAt === "relais"} onChange={() => setReceiveAt("relais")} /> En point relais ({relais.length} à proximité)<strong>{pickupPrice}</strong></label>
       )}
       {others.length > 0 && (
-        <label className="checkbox"><input type="radio" name="receive-at" checked={receiveAt === "bureau_consigne"} onChange={() => setReceiveAt("bureau_consigne")} /> {otherLabel} ({others.length} à proximité)</label>
+        <label className="checkbox"><input type="radio" name="receive-at" checked={receiveAt === "bureau_consigne"} onChange={() => setReceiveAt("bureau_consigne")} /> {otherLabel} ({others.length} à proximité)<strong>{pickupPrice}</strong></label>
       )}
-      {receiveAt === "relais" && unavailable && (
-        <p className="small muted" style={{ margin: "6px 0 0" }} data-testid="pickup-unavailable">La liste des points est momentanément indisponible : le vendeur choisira le point le plus proche de votre adresse et vous l&apos;indiquera dans la conversation.</p>
-      )}
+      <p className="small muted" style={{ margin: "6px 0 0" }}>Tarif du transporteur pour le colis déclaré par le vendeur, ajouté à votre paiement. Le vendeur reçoit le bon d&apos;envoi ; vous recevez le numéro de suivi.</p>
       {shown.length > 0 && (
         <div role="radiogroup" aria-label="Points de retrait proposés par le transporteur" data-testid="pickup-points" style={{ marginTop: 8, maxHeight: 230, overflowY: "auto", border: "1px solid var(--line)", borderRadius: 10 }}>
           {shown.map((p, i) => (

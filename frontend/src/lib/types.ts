@@ -270,6 +270,7 @@ export interface Message {
 export type SystemEvent =
   | "achat_confirme"
   | "disponibilite_confirmee"
+  | "etiquette_generee"
   | "expedie"
   | "pret_pour_remise"
   | "reception_confirmee"
@@ -297,6 +298,9 @@ export interface CarrierPickupOptions {
   label: string;
   domicile: boolean;
   pointRelais: boolean;
+  /** Prix réels cotés pour le colis de l'annonce, en centimes TTC (AUDIT §59). */
+  domicilePriceCents?: number;
+  pickupPriceCents?: number;
   points: PickupPoint[];
   pointsUnavailable?: boolean;
 }
@@ -317,6 +321,8 @@ export interface ConversationSale {
   trackingNumber?: string | null;
   trackingUrl?: string | null;
   labelReady?: boolean;
+  /** La livraison a été payée par l'acheteur : le vendeur génère le bon d'envoi sans rien régler. */
+  shippingPaid?: boolean;
 }
 
 export interface ConversationDetail extends Omit<ConversationSummary, "lastMessage" | "unreadCount"> {
@@ -358,6 +364,10 @@ export interface Transaction {
   /** Choix de l'acheteur au paiement (AUDIT §57) : domicile ou point de retrait, et le point choisi. */
   deliveryMode?: "domicile" | "point_relais" | null;
   pickupPoint?: { id: string; name: string; line1: string; postalCode: string; city: string; type: PickupPointType } | null;
+  /** Frais de livraison payés par l'acheteur avec son achat (AUDIT §59), en euros ; 0 en main propre et sur les ventes antérieures. */
+  shippingFee?: number;
+  /** Offre cotée à l'achat : présente quand la livraison a été payée par l'acheteur (le vendeur n'a qu'à générer le bon d'envoi). */
+  shippingQuote?: { offerCode: string; priceCents: number; mode: "domicile" | "point_relais"; weightGrams: number } | null;
   /** Le vendeur a confirmé que l'article est disponible et prêt à partir. */
   sellerConfirmedAt?: string | null;
   /** Conversation de l'annonce entre l'acheteur et le vendeur (suivi de la vente). */
