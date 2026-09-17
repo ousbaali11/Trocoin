@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { readSeed } from './helpers';
+import { api, readSeed } from './helpers';
 
 /**
  * Référencement : sitemap et robots cohérents, titres et descriptions propres à chaque page,
@@ -74,4 +74,48 @@ test('JSON-LD de l\'annonce : Product complet et fil d\'Ariane ; accueil : WebSi
   const site = home.find((d: { '@type': string }) => d['@type'] === 'WebSite');
   expect(site.potentialAction.target.urlTemplate).toMatch(/\/recherche\?q=\{search_term_string\}$/);
   expect(home.find((d: { '@type': string }) => d['@type'] === 'Organization')).toBeTruthy();
+});
+
+test("JSON-LD de l'annonce : livraison et politique de retour réelles, visibles sur la page ; jamais de GTIN, marque, avis ou note fabriqués (AUDIT §52)", async ({ page }) => {
+  const token = (await api<{ accessToken: string }>('/auth/login', { method: 'POST', body: { identifier: seed.seller.email, password: seed.seller.password } })).accessToken;
+  const base = { description: 'Article en très bon état, remis propre et complet, visible sur rendez-vous.', categorySlug: 'ameublement', price: 40, priceType: 'fixe', condition: 'tres_bon_etat', city: 'Lyon', postalCode: '69003', latitude: 45.76, longitude: 4.85 };
+  const stamp = Date.now().toString().slice(-5);
+  const shipped = await api<{ id: string }>('/listings', { method: 'POST', token, body: { ...base, title: `Lampe de bureau articulée ${stamp}`, deliveryAvailable: true, weightGrams: 800 } });
+  const handOnly = await api<{ id: string }>('/listings', { method: 'POST', token, body: { ...base, title: `Armoire normande massive ${stamp}`, deliveryAvailable: false } });
+  const productOf = async (id: string) => {
+    await page.goto(`/annonces/${id}`);
+    const blocks = await page.locator('script[type="application/ld+json"]').allTextContents();
+    return blocks.flatMap((b) => { const j = JSON.parse(b); return Array.isArray(j) ? j : [j]; }).find((d) => d['@type'] === 'Product');
+  };
+  try {
+    // Annonce livrable, poids déclaré : destination, délais réels (7 jours pour expédier, 2 à 4 jours de transport), fourchette estimée
+    const a = await productOf(shipped.id);
+    expect(a.offers.shippingDetails).toEqual({
+      '@type': 'OfferShippingDetails',
+      shippingDestination: { '@type': 'DefinedRegion', addressCountry: 'FR' },
+      deliveryTime: { '@type': 'ShippingDeliveryTime', handlingTime: { '@type': 'QuantitativeValue', minValue: 0, maxValue: 7, unitCode: 'DAY' }, transitTime: { '@type': 'QuantitativeValue', minValue: 2, maxValue: 4, unitCode: 'DAY' } },
+      shippingRate: { '@type': 'MonetaryAmount', currency: 'EUR', minValue: 5.49, maxValue: 7.95 },
+    });
+    expect(a.offers.availableDeliveryMethod).toEqual(['https://schema.org/OnSitePickup', 'https://schema.org/ParcelService']);
+    expect(a.offers.hasMerchantReturnPolicy).toEqual({ '@type': 'MerchantReturnPolicy', applicableCountry: 'FR', returnPolicyCategory: 'https://schema.org/MerchantReturnNotPermitted' });
+    const blockA = page.getByTestId('delivery-returns');
+    await expect(blockA).toContainText('Le vendeur expédie sous 7 jours après le paiement, puis comptez 2 à 4 jours de transport');
+    await expect(blockA).toContainText(/Envoi estimé entre 5,49\s€ et 7,95\s€ d'après le poids déclaré \(800 g\)/);
+    await expect(blockA).toContainText('Vente entre particuliers : pas de droit de retour ni de rétractation');
+
+    // Remise en main propre seule : « pas d'expédition » explicite, aucun coût ni délai
+    const b = await productOf(handOnly.id);
+    expect(b.offers.shippingDetails).toEqual({ '@type': 'OfferShippingDetails', doesNotShip: true, shippingDestination: { '@type': 'DefinedRegion', addressCountry: 'FR' } });
+    expect(b.offers.availableDeliveryMethod).toBe('https://schema.org/OnSitePickup');
+    expect(b.offers.hasMerchantReturnPolicy.returnPolicyCategory).toBe('https://schema.org/MerchantReturnNotPermitted');
+    await expect(page.getByTestId('delivery-returns')).toContainText("Remise en main propre uniquement : ce vendeur n'expédie pas cet article");
+
+    // Champs volontairement absents : rien n'est fabriqué pour faire taire une alerte
+    for (const product of [a, b]) {
+      const json = JSON.stringify(product);
+      for (const key of ['gtin', 'gtin8', 'gtin12', 'gtin13', 'gtin14', 'mpn', 'brand', 'review', 'aggregateRating']) expect(json).not.toContain(`"${key}"`);
+    }
+  } finally {
+    for (const l of [shipped, handOnly]) await api(`/listings/${l.id}`, { method: 'DELETE', token }).catch(() => undefined);
+  }
 });

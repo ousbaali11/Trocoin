@@ -18,7 +18,7 @@ l'utilisateur ; ce document tient l'état technique de ce que Google explorera s
 | 9 | Titres et descriptions uniques : pages de catégorie | en place | `<title>` « {Catégorie} : annonces d'occasion ({Famille}) », description propre à la catégorie, canonique `/recherche?category={slug}` ; recherches par mot-clé en `noindex` |
 | 10 | Titres et descriptions uniques : fiches d'annonces | en place, longueur ajustée | `<title>` « {titre} — {prix} », description = 155 premiers caractères de l'annonce, canonique `/annonces/{id}` ; **ajouté** : titre coupé à 60 caractères avec « … » (les titres vont jusqu'à 150) |
 | 11 | Titres et descriptions : autres pages | en place | accueil, aide (par article), pages légales, profils vendeurs (« {nom} — n annonces ») ; scénario `10-seo` vérifie l'unicité titre + description sur 10 pages |
-| 12 | Données structurées : `Product` + `Offer` sur les fiches | en place | nom, description, images, catégorie, prix EUR, disponibilité (`InStock` / `SoldOut`), état (`NewCondition` / `UsedCondition`), vendeur |
+| 12 | Données structurées : `Product` + `Offer` sur les fiches | en place, complété le 17/09/2026 | nom, description, images, catégorie, prix EUR, disponibilité (`InStock` / `SoldOut`), état (`NewCondition` / `UsedCondition`), vendeur, **`shippingDetails`** et **`hasMerchantReturnPolicy`** réels ; `gtin`, `brand`, `review`, `aggregateRating` volontairement absents (voir « Alertes Search Console sur les données structurées ») |
 | 13 | Données structurées : `BreadcrumbList` sur les fiches | en place | Accueil › Famille › Catégorie › Annonce |
 | 14 | Données structurées : `BreadcrumbList` sur les pages de catégorie | ajouté | Accueil › Famille (› Sous-catégorie), rendu côté serveur sur `/recherche?category=…`, cohérent avec le fil d'Ariane affiché |
 | 15 | Données structurées : `Organization` (et `WebSite`) sur l'accueil | en place | nom, URL, logo ; `WebSite` avec l'action de recherche |
@@ -67,3 +67,38 @@ Mis à jour le 16 septembre 2026.
 Ce qui aide, hors code : des pages citées ailleurs (annuaires, presse, partenaires), un profil
 officiel par réseau social utilisé réellement (à ajouter ensuite en `sameAs`), et la propriété
 vérifiée dans Search Console pour suivre les requêtes sur la marque.
+
+## Alertes Search Console sur les données structurées `Product` (17 septembre 2026, AUDIT §52)
+
+Google a signalé par e-mail des champs manquants dans le balisage `Product` / `Offer` des fiches. Ce sont des
+alertes **non critiques** : les pages restent indexées et éligibles. Règle suivie : ne publier que ce qui est
+vrai et visible sur la page ; ne jamais fabriquer une donnée pour faire disparaître une alerte. Le balisage est
+construit par `frontend/src/lib/listing-jsonld.ts` ; la page affiche le même contenu dans l'encart « Livraison
+et retours ».
+
+### Champs corrigés
+
+| Champ | Ce qui est publié | D'où vient la donnée |
+|---|---|---|
+| `offers.shippingDetails`, annonce en **remise en main propre seule** | `{"@type":"OfferShippingDetails","doesNotShip":true,"shippingDestination":{"@type":"DefinedRegion","addressCountry":"FR"}}` et `availableDeliveryMethod: OnSitePickup` | la case « Livraison possible » non cochée par le vendeur |
+| `offers.shippingDetails`, annonce **livrable** | destination `FR` ; `deliveryTime` : `handlingTime` 0 à 7 jours, `transitTime` 2 à 4 jours ; `availableDeliveryMethod: [OnSitePickup, ParcelService]` | règles réelles de la plateforme : le vendeur a 7 jours pour expédier (séquestre, `ESCROW_SHIP_DEADLINE_DAYS`), transport Colissimo (2 jours) ou Mondial Relay (4 jours) |
+| `shippingRate`, annonce livrable **dont le vendeur a déclaré le poids** | `{"@type":"MonetaryAmount","currency":"EUR","minValue":…,"maxValue":…}` : fourchette entre l'offre la moins chère et la plus chère pour ce poids | grille indicative des transporteurs proposés (`src/shipping/indicative-rates.ts`) appliquée au poids déclaré ; la page dit « Envoi estimé entre … et …, à convenir avec le vendeur » |
+| `shippingRate`, annonce livrable **sans poids déclaré** | **absent** | le coût n'est pas connu (« frais d'envoi à convenir avec le vendeur ») : aucune valeur n'est inventée. L'alerte « shippingRate manquant » peut donc subsister sur ces fiches, et c'est assumé. |
+| `offers.hasMerchantReturnPolicy`, vendeur **particulier** | `{"@type":"MerchantReturnPolicy","applicableCountry":"FR","returnPolicyCategory":"https://schema.org/MerchantReturnNotPermitted"}` | vraie politique : pas de droit de retour ni de rétractation entre particuliers (la page le dit, et rappelle le litige possible avec le paiement sécurisé) |
+| `offers.hasMerchantReturnPolicy`, vendeur **professionnel** | **absent** | ses propres conditions et le droit de rétractation légal de 14 jours s'appliquent ; Trocoin ne connaît pas sa politique et ne la déclare pas à sa place |
+| Familles qui ne sont pas des biens (immobilier, emploi, services, vacances) | ni `shippingDetails` ni `hasMerchantReturnPolicy` | une offre d'emploi ou une location ne s'expédie pas et ne se « retourne » pas : ces champs n'ont pas de sens |
+
+### Champs laissés vides volontairement
+
+| Champ réclamé | Décision | Pourquoi |
+|---|---|---|
+| Identifiant global : `gtin`, `gtin8/12/13/14`, `mpn`, `brand` | **laissé vide, définitivement** | Trocoin est une place de marché d'occasion entre particuliers : chaque annonce est un objet unique, sans code-barres normalisé, souvent sans marque identifiable (meuble ancien, lot de vêtements, vélo d'occasion). Le champ ne s'applique pas structurellement, comme sur les sites comparables de petites annonces. Inventer un GTIN ou une marque serait une fausse donnée produit, contraire aux consignes de Google sur les données structurées. `sku` porte l'identifiant interne de l'annonce, ce qui est exact. |
+| `review`, `aggregateRating` | **laissé vide tant qu'il n'existe pas d'avis par article** | Trocoin n'a pas de notation par article : seulement une réputation **par vendeur** (avis reçus après une vente, taux de réponse), affichée sur son profil. Publier une note ou un nombre d'avis sur un `Product` reviendrait à attribuer à l'article des avis qui portent sur une personne, ou à en fabriquer : Google traite cela comme du contenu trompeur (action manuelle possible). Si des avis par article existent un jour, le champ sera rempli avec ces vraies données, pas avant. |
+
+Un test navigateur (`e2e/10-seo.spec.ts`) vérifie le balisage des deux cas de livraison et échoue si l'une des
+clés `gtin*`, `mpn`, `brand`, `review` ou `aggregateRating` apparaît dans le `Product`.
+
+Après déploiement : dans Search Console → Améliorations → « Extraits de produits » / « Fiches de marchand »,
+lancer « Valider la correction » sur les alertes `shippingDetails` et `hasMerchantReturnPolicy`. Les alertes sur
+l'identifiant global et les avis resteront affichées comme « améliorations facultatives » : c'est attendu.
+

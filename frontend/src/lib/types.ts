@@ -110,6 +110,8 @@ export interface ListingPhoto {
 }
 
 export interface ListingDetail extends Omit<ListingCard, "coverUrl" | "photosCount" | "seller" | "isBoosted" | "isUrgent"> {
+  /** Livraison telle que déclarée (AUDIT §52) : délais réels de la plateforme, coût estimé seulement si le poids est déclaré. */
+  delivery?: { available: boolean; shipWithinDays: number; transitDaysMin: number; transitDaysMax: number; estimate: { minCents: number; maxCents: number; weightGrams: number } | null };
   photos: ListingPhoto[];
   category: { id: number; slug: string; name: string } | null;
   rootCategory: { id: number; slug: string; name: string } | null;

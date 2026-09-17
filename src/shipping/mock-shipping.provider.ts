@@ -13,6 +13,7 @@ import {
   ShippingRate,
   TrackingInfo,
 } from './shipping-provider.interface';
+import { INDICATIVE_GRID, TRANSIT_DAYS } from './indicative-rates';
 
 /**
  * Fournisseur simulé : tarifs indicatifs par tranche de poids (ordre de grandeur des grilles
@@ -24,12 +25,7 @@ import {
  *   SHIPPING_MOCK_FAIL=adresse     → l'adresse du destinataire est refusée
  *   code postal destinataire 99999 → adresse invalide, quelle que soit la variable
  */
-const GRID: Record<`${ShippingCarrier}:${ShippingMode}`, Array<[maxGrams: number, cents: number]>> = {
-  'colissimo:domicile': [[250, 495], [500, 645], [750, 725], [1000, 795], [2000, 895], [5000, 1385], [10000, 2035], [30000, 2965]],
-  'colissimo:point_relais': [[250, 445], [500, 595], [750, 665], [1000, 735], [2000, 825], [5000, 1285], [10000, 1890], [30000, 2750]],
-  'mondial_relay:point_relais': [[500, 449], [1000, 549], [2000, 699], [3000, 799], [5000, 999], [10000, 1299], [30000, 1999]],
-  'mondial_relay:domicile': [],
-};
+const GRID = INDICATIVE_GRID;
 
 const CARRIER_LABEL: Record<ShippingCarrier, string> = { colissimo: 'Colissimo', mondial_relay: 'Mondial Relay' };
 
@@ -49,7 +45,7 @@ export class MockShippingProvider implements IShippingProvider {
         carrier: input.carrier,
         mode,
         priceCents: row[1],
-        deliveryDays: input.carrier === 'colissimo' ? 2 : 4,
+        deliveryDays: TRANSIT_DAYS[input.carrier],
         offerCode: `SIM-${input.carrier.toUpperCase()}-${mode.toUpperCase()}`,
         label: `${CARRIER_LABEL[input.carrier]} ${mode === 'domicile' ? 'à domicile' : 'en point relais'}`,
       });

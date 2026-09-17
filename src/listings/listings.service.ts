@@ -18,6 +18,8 @@ import { deleteUploadedFile } from '../common/upload/image-upload';
 import { GRANDES_VILLES, NB_SUGGESTIONS, NB_VILLES } from './discover-data';
 import { Favorite } from '../favorites/favorite.entity';
 import { Transaction } from '../payments/transaction.entity';
+import { ESCROW_SHIP_DEADLINE_DAYS } from '../payments/payments.service';
+import { estimateShipping, TRANSIT_DAYS } from '../shipping/indicative-rates';
 import { SettingsService } from '../settings/settings.service';
 import { ShopsService } from '../shops/shops.service';
 import { User } from '../users/user.entity';
@@ -580,6 +582,16 @@ export class ListingsService {
       // Fil d'Ariane « Région › Département › Ville » (dérivé du code postal, jamais de l'adresse exacte)
       location: adminLocationFromPostalCode(listing.postalCode),
       // « Voir le numéro » proposé (le numéro lui-même n'est délivré que par POST /listings/:id/phone, connecté)
+      // Livraison telle que déclarée (AUDIT §52) : sert à l'encart « Livraison et retours » et aux données structurées.
+      // Délais = règles réelles (N jours pour expédier, transport des transporteurs proposés) ; coût estimé seulement si
+      // le vendeur a déclaré le poids du colis, sinon rien (« à convenir ») : aucune valeur inventée.
+      delivery: {
+        available: !!listing.deliveryAvailable,
+        shipWithinDays: ESCROW_SHIP_DEADLINE_DAYS,
+        transitDaysMin: Math.min(...Object.values(TRANSIT_DAYS)),
+        transitDaysMax: Math.max(...Object.values(TRANSIT_DAYS)),
+        estimate: listing.deliveryAvailable ? estimateShipping(listing.weightGrams) : null,
+      },
       phoneAvailable: listing.status === 'en_ligne' && !!sellerUser && !sellerUser.deletedAt && !sellerUser.isDemoAccount && sellerUser.phonePublic && isFrenchMobileNumber(sellerUser.phoneNumber),
     };
   }

@@ -3,7 +3,8 @@ import Link from "next/link";
 import { cache } from "react";
 import { notFound } from "next/navigation";
 import { api, ApiError, mediaUrl, SITE_URL } from "@/lib/api";
-import { CONDITION_LABELS, daysAgo, formatDate, formatPrice } from "@/lib/format";
+import { CONDITION_LABELS, daysAgo, formatDate, formatEuros, formatPrice } from "@/lib/format";
+import { buildProductJsonLd, isGoodsListing } from "@/lib/listing-jsonld";
 import type { ListingCard as ListingCardType, ListingDetail, PublicProfile } from "@/lib/types";
 import { ListingCard } from "@/components/ui/ListingCard";
 import { ListingActions } from "@/components/listing/ListingActions";
@@ -87,26 +88,8 @@ export default async function ListingPage({ params }: { params: Promise<{ id: st
   crumbs.push({ name: listing.title });
 
   const jsonLd = [
-    {
-      "@context": "https://schema.org",
-      "@type": "Product",
-      name: listing.title,
-      description: listing.description.slice(0, 5000),
-      sku: listing.id,
-      url: pageUrl,
-      image: listing.photos.map((p) => mediaUrl(p.url)),
-      ...(listing.category ? { category: listing.category.name } : {}),
-      offers: {
-        "@type": "Offer",
-        url: pageUrl,
-        priceCurrency: "EUR",
-        price: listing.price ?? 0,
-        availability: listing.status === "en_ligne" ? "https://schema.org/InStock" : "https://schema.org/SoldOut",
-        itemCondition: listing.condition === "neuf" ? "https://schema.org/NewCondition" : "https://schema.org/UsedCondition",
-        areaServed: "FR",
-        ...(listing.seller ? { seller: { "@type": listing.seller.accountType === "professionnel" ? "Organization" : "Person", name: listing.seller.accountType === "professionnel" && listing.seller.shopName ? listing.seller.shopName : listing.seller.displayName } } : {}),
-      },
-    },
+    // Product + Offer, avec livraison et politique de retour réelles (AUDIT §52) : lib/listing-jsonld.ts
+    buildProductJsonLd(listing, pageUrl, listing.photos.map((p) => mediaUrl(p.url)).filter((u): u is string => !!u)),
     {
       "@context": "https://schema.org",
       "@type": "BreadcrumbList",
@@ -192,6 +175,33 @@ export default async function ListingPage({ params }: { params: Promise<{ id: st
             <h2 className="h3">Description</h2>
             <ExpandableText text={listing.description} />
           </section>
+
+          {/* Livraison et retours : ce que disent aussi les données structurées (même source, rien d'inventé) */}
+          {isGoodsListing(listing) && (
+            <section className="panel" style={{ marginTop: 20 }} data-testid="delivery-returns">
+              <h2 className="h3">Livraison et retours</h2>
+              <ul className="small" style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 6 }}>
+                {listing.delivery?.available ? (
+                  <>
+                    <li>Livraison possible en France (Colissimo à domicile ou Mondial Relay en point relais), ou remise en main propre.</li>
+                    <li>Le vendeur expédie sous {listing.delivery.shipWithinDays} jours après le paiement, puis comptez {listing.delivery.transitDaysMin} à {listing.delivery.transitDaysMax} jours de transport.</li>
+                    <li>
+                      {listing.delivery.estimate
+                        ? `Envoi estimé entre ${formatEuros(listing.delivery.estimate.minCents / 100)} et ${formatEuros(listing.delivery.estimate.maxCents / 100)} d'après le poids déclaré (${new Intl.NumberFormat("fr-FR").format(listing.delivery.estimate.weightGrams)} g), à convenir avec le vendeur.`
+                        : "Frais d'envoi à convenir avec le vendeur."}
+                    </li>
+                  </>
+                ) : (
+                  <li>Remise en main propre uniquement : ce vendeur n&apos;expédie pas cet article.</li>
+                )}
+                {listing.seller?.accountType === "professionnel" ? (
+                  <li>Vendeur professionnel : ses conditions de retour s&apos;appliquent (droit de rétractation légal de 14 jours pour un achat à distance).</li>
+                ) : (
+                  <li>Vente entre particuliers : pas de droit de retour ni de rétractation. Avec le paiement sécurisé, vous pouvez ouvrir un litige si l&apos;article n&apos;arrive pas ou n&apos;est pas conforme à l&apos;annonce.</li>
+                )}
+              </ul>
+            </section>
+          )}
 
           {typeof listing.latitude === "number" && typeof listing.longitude === "number" && (
             <section className="panel" style={{ marginTop: 20 }}>
