@@ -11,12 +11,13 @@ import {
 import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomInt } from 'crypto';
-import { In, IsNull, LessThan, MoreThan, Not, Repository } from 'typeorm';
+import { Between, In, IsNull, LessThan, MoreThan, Not, Repository } from 'typeorm';
 import { resolveSiteUrl } from '../config/env.validation';
 import { Listing } from '../listings/listing.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ConversationsService } from '../conversations/conversations.service';
 import { SystemEvent } from '../conversations/message.entity';
+import { RetentionService } from '../retention/retention.service';
 import { DEFAULT_FEE_RATES, FeeRates, SettingsService } from '../settings/settings.service';
 import { Shipment } from '../shipping/shipment.entity';
 import { ShippingCarrier } from '../shipping/shipping-provider.interface';
@@ -102,6 +103,7 @@ export class PaymentsService {
     private settings: SettingsService,
     private conversations: ConversationsService,
     private shipping: ShippingService,
+    private retention: RetentionService,
   ) {}
 
   /** Devis affiché avant validation : prix, frais acheteur, total, commission vendeur. */
@@ -475,7 +477,7 @@ export class PaymentsService {
               : `Le paiement de « ${title} » a été encaissé avant l'expiration de l'autorisation bancaire et versé au vendeur. Un problème ? Vous pouvez ouvrir un litige jusqu'au ${frDate(tx.disputeAllowedUntil!)}.`;
             for (const uid of [tx.buyerId, tx.sellerId]) await this.notifications.notify(uid, { type: 'transaction', title: tx.status === 'litige' ? 'Fonds mis en sécurité' : 'Paiement encaissé', body, link });
           } else {
-            // Ni expédié ni remis avant l'échéance : l'acheteur récupère son argent, l'annonce reste en ligne
+            // Ni expédié ni remis avant l'échéance : l'acheteur récupère son argent ; l'annonce reste « vendue », au vendeur de la remettre en ligne
             await this.refundBuyer(tx);
             tx.status = 'annulee';
             tx.resolvedAt = now;
@@ -483,8 +485,8 @@ export class PaymentsService {
             tx.resolutionNote = tx.deliveryMethod === 'main_propre' ? 'Remise non confirmée avant l\'échéance : vente annulée, acheteur remboursé' : 'Article non expédié avant l\'échéance : vente annulée, acheteur remboursé';
             await this.transactionsRepo.save(tx);
             result.cancelled += 1;
-            await this.notifications.notify(tx.buyerId, { type: 'transaction', title: 'Achat annulé, remboursement intégral', body: `« ${title} » n'a pas été ${tx.deliveryMethod === 'main_propre' ? 'remis' : 'expédié'} dans le délai : votre paiement est libéré. L'annonce reste disponible si vous souhaitez racheter.`, link });
-            await this.notifications.notify(tx.sellerId, { type: 'transaction', title: 'Vente annulée (délai dépassé)', body: `« ${title} » n'a pas été ${tx.deliveryMethod === 'main_propre' ? 'remis (code non saisi)' : 'expédié'} avant l'échéance du paiement : l'acheteur est remboursé, votre annonce reste en ligne.`, link });
+            await this.notifications.notify(tx.buyerId, { type: 'transaction', title: 'Achat annulé, remboursement intégral', body: `« ${title} » n'a pas été ${tx.deliveryMethod === 'main_propre' ? 'remis' : 'expédié'} dans le délai : votre paiement est libéré.`, link });
+            await this.notifications.notify(tx.sellerId, { type: 'transaction', title: 'Vente annulée (délai dépassé)', body: `« ${title} » n'a pas été ${tx.deliveryMethod === 'main_propre' ? 'remis (code non saisi)' : 'expédié'} avant l'échéance du paiement : l'acheteur est remboursé. Votre annonce est restée marquée « Vendue » : remettez-la en ligne depuis Mes annonces si l'article est toujours à vendre.`, link });
             await this.track(tx, 'vente_annulee', tx.sellerId, 'Vente annulée (délai dépassé) : acheteur remboursé', { by: 'delai' });
           }
           continue;
@@ -521,6 +523,14 @@ export class PaymentsService {
         this.logger.error(`Virement en attente ${tx.id} : ${(e as Error).message}`);
       }
     }
+    // 4. Réception présumée (AUDIT §58) : l'acheteur garde quelques jours pour ouvrir un litige ; l'annonce, restée
+    // « vendue », n'est supprimée qu'à la fin de cette fenêtre — et seulement si le vendeur ne l'a pas remise en ligne
+    // après un remboursement. Fenêtre de rattrapage de 3 jours : la tâche passe toutes les 15 minutes.
+    const closed = await this.transactionsRepo.find({ where: { status: 'confirme', autoResolution: Not(IsNull()), disputeAllowedUntil: Between(new Date(now.getTime() - 3 * DAY_MS), now) }, take: 200 });
+    for (const tx of closed) {
+      const listing = await this.listingsRepo.findOne({ where: { id: tx.listingId, status: 'vendue' } });
+      if (listing) await this.removeSoldListing(tx);
+    }
     if (result.confirmed || result.captured || result.cancelled || result.transferred) this.logger.log(`Échéances du séquestre : ${JSON.stringify(result)}`);
     return result;
   }
@@ -547,7 +557,31 @@ export class PaymentsService {
     return items;
   }
 
+  /**
+   * Article payé (AUDIT §58) : l'annonce passe « vendue » — elle sort des résultats et n'est plus achetable, mais elle
+   * reste là : si la vente est annulée ou remboursée, le vendeur la remet en ligne d'un clic (ce n'est pas
+   * automatique, il a pu vendre l'objet ailleurs entre-temps). Elle est supprimée une fois l'article reçu.
+   */
+  private async markListingSold(tx: Transaction) {
+    await this.listingsRepo.update({ id: tx.listingId, status: In(['en_ligne', 'expiree']) }, { status: 'vendue' });
+  }
+
+  /**
+   * Article reçu par l'acheteur : la vente est définitive, l'annonce est supprimée comme le ferait le vendeur
+   * (photos, favoris, historique ; la vente payée garde sa trace comptable et le titre de l'annonce). Un échec de
+   * suppression ne remet jamais en cause la confirmation ni le virement.
+   */
+  private async removeSoldListing(tx: Transaction) {
+    try {
+      const listing = await this.listingsRepo.findOne({ where: { id: tx.listingId } });
+      if (listing) await this.retention.purgeListing(listing);
+    } catch (e) {
+      this.logger.error(`Transaction ${tx.id} : suppression de l'annonce vendue ${tx.listingId} impossible (${(e as Error).message})`);
+    }
+  }
+
   private async notifySellerPaid(tx: Transaction, title?: string) {
+    await this.markListingSold(tx);
     const t = title ?? (await this.listingsRepo.findOne({ where: { id: tx.listingId } }))?.title ?? 'votre annonce';
     await this.notifications.notify(tx.sellerId, {
       type: 'transaction',
@@ -801,7 +835,7 @@ export class PaymentsService {
     tx.status = 'confirme';
     tx.confirmedAt = new Date();
     const saved = await this.transactionsRepo.save(tx);
-    await this.listingsRepo.update({ id: tx.listingId, status: In(['en_ligne', 'expiree']) }, { status: 'vendue' });
+    await this.removeSoldListing(saved);
     await this.notifications.notify(tx.sellerId, {
       type: 'transaction',
       title: 'Vente confirmée',
@@ -825,7 +859,7 @@ export class PaymentsService {
     tx.status = 'confirme';
     tx.confirmedAt = new Date();
     const saved = await this.transactionsRepo.save(tx);
-    await this.listingsRepo.update({ id: tx.listingId, status: In(['en_ligne', 'expiree']) }, { status: 'vendue' });
+    await this.removeSoldListing(saved);
     await this.notifications.notify(tx.buyerId, {
       type: 'transaction',
       title: 'Remise confirmée',
@@ -849,7 +883,7 @@ export class PaymentsService {
     await this.notifications.notify(otherId, {
       type: 'transaction',
       title: 'Transaction annulée',
-      body: 'La transaction a été annulée avant envoi. L\'acheteur est intégralement remboursé.',
+      body: otherId === tx.sellerId ? "L'acheteur a annulé son achat avant l'envoi : il est intégralement remboursé. Votre annonce est restée marquée « Vendue » : remettez-la en ligne depuis Mes annonces si l'article est toujours à vendre." : "Le vendeur a annulé la vente avant l'envoi : vous êtes intégralement remboursé.",
       link: `/compte/transactions/${tx.id}`,
     });
     await this.track(saved, 'vente_annulee', userId, 'Vente annulée : acheteur remboursé', { by: userId === tx.sellerId ? 'vendeur' : 'acheteur' });
@@ -913,13 +947,13 @@ export class PaymentsService {
       // de Trocoin, après annulation du virement s'il a déjà eu lieu)
       await this.refundBuyer(tx);
       tx.status = 'rembourse';
-      if (tx.confirmedAt) await this.listingsRepo.update({ id: tx.listingId, status: 'vendue' }, { status: 'en_ligne' });
+      // L'annonce reste « vendue » : le vendeur la remet en ligne lui-même s'il a récupéré l'article (AUDIT §58)
     } else {
       // Ancien modèle : déjà capturé si l'échéance est passée ; modèle platform : capture si besoin puis virement
       if (this.isPlatform(tx) || !tx.confirmedAt) await this.settle(tx);
       tx.status = 'confirme';
       tx.confirmedAt = tx.confirmedAt ?? new Date();
-      await this.listingsRepo.update({ id: tx.listingId, status: In(['en_ligne', 'expiree']) }, { status: 'vendue' });
+      await this.removeSoldListing(tx);
     }
     tx.resolutionNote = note;
     tx.resolvedAt = new Date();

@@ -101,12 +101,13 @@ test('contact, messagerie temps réel, achat, réception confirmée, avis', asyn
   await review.getByRole('button', { name: "Publier l'avis" }).click();
   await expect(buyer.getByText('Vous avez laissé un avis (5/5).')).toBeVisible();
 
-  // --- Le vendeur voit l'avis reçu et l'annonce est passée « Vendue »
+  // --- Le vendeur voit l'avis reçu ; l'article reçu, l'annonce a été supprimée automatiquement (AUDIT §58)
   await seller.goto('/compte/avis');
   await expect(seller.getByRole('tab', { name: 'Reçus (1)' })).toBeVisible();
   await expect(seller.getByText('Remise rapide, console impeccable.')).toBeVisible();
-  await seller.goto(`/annonces/${listing.id}`);
-  await expect(seller.getByText('Cette annonce a trouvé preneur.')).toBeVisible();
+  const gone = await seller.goto(`/annonces/${listing.id}`);
+  expect(gone?.status()).toBe(404);
+  await expect(seller.getByText("L'annonce a peut-être été retirée ou vendue.")).toBeVisible();
 
   await buyerCtx.close();
   await sellerCtx.close();

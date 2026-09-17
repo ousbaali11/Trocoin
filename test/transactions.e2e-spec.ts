@@ -82,8 +82,8 @@ describe('Messagerie, paiement séquestre, avis, signalements, alertes, admin', 
 
     // double vente impossible
     const dup = await request(server).post('/transactions').set(stranger.auth).send({ listingId: listing.id });
-    expect(dup.status).toBe(400);
-    expect(dup.body.message).toMatch(/déjà en cours/);
+    expect(dup.status).toBe(404); // AUDIT §58 : l'annonce est « vendue » dès le paiement, elle n'est plus achetable
+    expect(dup.body.message).toMatch(/plus disponible/);
 
     await request(server).get(`/transactions/${tx.id}`).set(stranger.auth).expect(403);
     await request(server).post(`/transactions/${tx.id}/confirm-delivery`).set(seller.auth).expect(403);
@@ -96,8 +96,8 @@ describe('Messagerie, paiement séquestre, avis, signalements, alertes, admin', 
     await request(server).post(`/transactions/${tx.id}/review`).set(buyer.auth).send({ rating: 5 }).expect(400); // pas encore confirmée
     const confirmed = await request(server).post(`/transactions/${tx.id}/confirm-delivery`).set(buyer.auth).expect(201);
     expect(confirmed.body.status).toBe('confirme');
-    const sold = await request(server).get(`/listings/${listing.id}`).expect(200);
-    expect(sold.body.status).toBe('vendue');
+    await request(server).get(`/listings/${listing.id}`).expect(404); // AUDIT §58 : article reçu → annonce supprimée automatiquement
+    expect((await request(server).get(`/transactions/${tx.id}`).set(seller.auth).expect(200)).body.listingTitle).toBeTruthy();
 
     await request(server).post(`/transactions/${tx.id}/review`).set(buyer.auth).send({ rating: 7 }).expect(400);
     await request(server).post(`/transactions/${tx.id}/review`).set(stranger.auth).send({ rating: 5 }).expect(403);

@@ -293,10 +293,14 @@ export default function TransactionPage() {
             {!tx.paidAt
               ? (buyer ? "Paiement non finalisé : rien n'a été débité. L'annonce reste disponible si vous souhaitez racheter." : "Le paiement n'a pas été finalisé par l'acheteur : rien n'a été encaissé, votre annonce reste en ligne.")
               : tx.capturedAt || tx.confirmedAt
-                ? (buyer ? "Vous avez été remboursé intégralement (délai bancaire de quelques jours)." : "L'acheteur a été remboursé.")
-                : (buyer ? "L'autorisation bancaire a été libérée : rien n'a été débité." : "L'autorisation de paiement de l'acheteur a été libérée : rien n'a été débité.")}
+                ? (buyer ? "Vous avez été remboursé intégralement (délai bancaire de quelques jours)." : "L'acheteur a été remboursé. Votre annonce est restée marquée « Vendue » : remettez-la en ligne si l'article est toujours à vendre.")
+                : (buyer ? "L'autorisation bancaire a été libérée : rien n'a été débité." : "L'autorisation de paiement de l'acheteur a été libérée : rien n'a été débité. Votre annonce est restée marquée « Vendue » : remettez-la en ligne si l'article est toujours à vendre.")}
           </p>
         )}
+        {!buyer && ["rembourse", "annulee"].includes(tx.status) && !!tx.paidAt && tx.listing?.status === "vendue" && (
+          <button className="btn btn-primary" style={{ marginTop: 10 }} disabled={busy} data-testid="relist" onClick={() => run(() => api(`/listings/${tx.listingId}`, { method: "PATCH", body: { status: "en_ligne" } }), "Annonce remise en ligne.")}>Remettre l&apos;annonce en ligne</button>
+        )}
+        {tx.status === "confirme" && !tx.listing && <p className="small muted" style={{ margin: "10px 0 0" }} data-testid="listing-removed">L&apos;annonce a été supprimée automatiquement : la vente est terminée.</p>}
       </section>
 
       <Modal open={disputeOpen} onClose={() => setDisputeOpen(false)} title="Ouvrir un litige">

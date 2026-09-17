@@ -116,7 +116,7 @@ describe('Phase 24 : séquestre sur le solde de la plateforme (capture rapide, v
     const seen = forTx(before, t.providerPaymentId!);
     expect(seen).toHaveLength(2);
     expect(seen[1]).toMatch(new RegExp(`^transfer ${t.providerPaymentId} 92 acct_`)); // 100 € − 8 % de commission
-    expect((await request(server).get(`/listings/${listing.id}`).expect(200)).body.status).toBe('vendue');
+    expect((await request(server).get(`/listings/${listing.id}`)).status).toBe(404); // AUDIT §58 : article reçu → annonce supprimée automatiquement
     const sellerView = await request(server).get(`/transactions/${tx.id}`).set(seller.auth).expect(200);
     expect(sellerView.body.transferredAt).toBe(new Date(done.transferredAt!).toISOString());
     expect(sellerView.body.transferId).toBeUndefined();
@@ -171,7 +171,7 @@ describe('Phase 24 : séquestre sur le solde de la plateforme (capture rapide, v
     const done = await stored(tx.id);
     expect(done.status).toBe('rembourse');
     expect(done.transferId).toBeNull();
-    expect((await request(server).get(`/listings/${listing.id}`).expect(200)).body.status).toBe('en_ligne');
+    expect((await request(server).get(`/listings/${listing.id}`).expect(200)).body.status).toBe('vendue'); // AUDIT §58 : l'annonce payée reste « vendue », le vendeur la remet en ligne lui-même
   });
 
   it('remboursement après virement : réception présumée 7 jours après l\'expédition (au-delà de l\'ancienne autorisation) → virement ; litige dans la fenêtre → virement annulé puis acheteur remboursé', async () => {
@@ -224,7 +224,7 @@ describe('Phase 24 : séquestre sur le solde de la plateforme (capture rapide, v
     expect(done.status).toBe('annulee');
     expect(done.autoResolution).toBe('annulation_echeance');
     expect(forTx(before, t.providerPaymentId!)).toEqual([`capture ${t.providerPaymentId}`, `refund ${t.providerPaymentId}`]);
-    expect((await request(server).get(`/listings/${listing.id}`).expect(200)).body.status).toBe('en_ligne');
+    expect((await request(server).get(`/listings/${listing.id}`).expect(200)).body.status).toBe('vendue'); // AUDIT §58 : l'annonce payée reste « vendue », le vendeur la remet en ligne lui-même
     expect(await titlesFor(buyer.id)).toContain('Achat annulé, remboursement intégral');
 
     // Remise en main propre : le vendeur se déclare prêt mais le code n'est jamais saisi → annulation à l'échéance

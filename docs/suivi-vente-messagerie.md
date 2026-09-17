@@ -77,3 +77,19 @@ La confirmation de disponibilité est une étape d'**information** : elle rassur
   seul à l'expiration de la session ; dans les deux cas il arrive sur la page ci-dessus, jamais sur une page vide.
 - Tests : le fournisseur simulé sait jouer une page de paiement hors du site (`/dev/mock-checkout/:id`, hors
   production uniquement) avec les mêmes adresses de retour — `e2e/25-retour-paiement.spec.ts`.
+
+## Que devient l'annonce pendant la vente ? (AUDIT §58)
+
+| Moment | Annonce | Pour l'acheteur / le public | Pour le vendeur |
+|---|---|---|---|
+| Paiement reçu (fonds bloqués) | passe **« Vendue »** | badge « Vendu », plus de bouton Acheter ni de contact, sortie des résultats ; la page reste consultable | badge « Vendu » ; ne peut pas la remettre en ligne tant que la vente court (le même objet serait payable deux fois) |
+| Vente annulée ou remboursée (acheteur, vendeur, délai, médiateur) | **reste « Vendue »** | — | invité à la **remettre en ligne d'un clic** : conversation, page de la vente, ou Mes annonces |
+| Article reçu : réception confirmée, code de remise saisi, fonds libérés par le médiateur | **supprimée automatiquement** | page 404, la vente et la conversation gardent leur trace (titre conservé) | idem ; message « votre annonce a été supprimée automatiquement » |
+| Réception présumée (acheteur silencieux) | reste « Vendue » pendant la fenêtre de litige, **supprimée à sa clôture** | il peut encore ouvrir un litige | si l'acheteur est remboursé, il peut la remettre en ligne — elle n'est alors pas supprimée |
+
+Pourquoi la remise en ligne n'est pas automatique après une annulation : entre le paiement et l'annulation, le vendeur
+a pu vendre ou donner l'objet ailleurs ; une annonce qui reviendrait seule en ligne pourrait être payée pour un objet
+qui n'existe plus. Un clic suffit, et le vendeur est prévenu par notification et dans la conversation.
+
+La suppression est celle que ferait le vendeur (`RetentionService.purgeListing`) : photos, favoris et historique
+effacés ; la vente payée garde montants, dates et titre de l'annonce ; les avis restent possibles.

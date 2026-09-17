@@ -365,6 +365,11 @@ export class ListingsService {
         if (!['brouillon', 'desactivee', 'expiree', 'en_ligne', 'vendue'].includes(from)) {
           throw new BadRequestException(`Impossible de publier depuis le statut "${from}".`);
         }
+        // Vente payée en cours (AUDIT §58) : l'annonce est « vendue » et le reste tant que la vente n'est ni terminée ni
+        // annulée — sinon le même objet pourrait être payé deux fois. Après une annulation, le vendeur la remet en ligne.
+        if (from === 'vendue' && (await this.transactionsRepo.count({ where: { listingId: listing.id, status: In(['sequestre', 'livree', 'litige']) } })) > 0) {
+          throw new BadRequestException("Une vente est en cours sur cette annonce : elle ne peut pas être remise en ligne tant que la vente n'est pas terminée ou annulée.");
+        }
         if (from !== 'en_ligne') {
           await this.assertPhone(listing.userId);
           await this.assertQuota(listing.userId);

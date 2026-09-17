@@ -125,7 +125,7 @@ export default async function ListingPage({ params }: { params: Promise<{ id: st
 
       {listing.status !== "en_ligne" && (
         <div className={`alert ${listing.status === "vendue" ? "alert-success" : "alert-info"}`}>
-          {listing.status === "vendue" && "Cette annonce a trouvé preneur. Découvrez des annonces similaires ci-dessous."}
+          {listing.status === "vendue" && (isOwner ? "Vendu : votre article a été acheté. L'annonce n'apparaît plus dans les résultats ; elle sera supprimée automatiquement quand l'acheteur aura reçu l'article. Si la vente est annulée, vous pourrez la remettre en ligne depuis Mes annonces." : "Vendu : cet article a trouvé preneur et n'est plus disponible à l'achat. Découvrez des annonces similaires ci-dessous.")}
           {listing.status === "expiree" && "Cette annonce a expiré."}
           {listing.status === "en_attente" && `Votre annonce est en cours de vérification par notre équipe. ${listing.moderationReason || ""}`}
           {listing.status === "refusee" && `Annonce refusée : ${listing.moderationReason || "non conforme aux règles de diffusion."}`}
@@ -139,6 +139,7 @@ export default async function ListingPage({ params }: { params: Promise<{ id: st
           <PhotoGallery photos={listing.photos} title={listing.title} listingId={listing.id} favoritesCount={listing.favoritesCount} showActions={!isOwner} />
 
           <div className={styles.head}>
+            {listing.status === "vendue" && <span className="pill pill-dark" data-testid="sold-badge" style={{ marginBottom: 6, display: "inline-block" }}>Vendu</span>}
             <h1>{listing.title}</h1>
             <p className={styles.summary} data-testid="listing-summary">
               <span>{listing.city || "France"}{listing.postalCode ? ` (${listing.postalCode})` : ""}</span>

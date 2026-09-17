@@ -133,6 +133,7 @@ Une annonce contenant des termes sensibles passe en **vérification manuelle** a
         body: `Une annonce reste en ligne **sans limite de durée**, jusqu'à ce que vous la mettiez en pause, la marquiez vendue ou la supprimiez. Depuis **Mes annonces**, pour chaque annonce :
 - **Modifier** le titre, la description, le prix, les critères, la localisation, et **ajouter** des photos ;
 - **Mettre en pause** (invisible, réactivable) ou **marquer vendue** ;
+- quand un acheteur **paie en ligne**, l'annonce passe d'elle-même à « Vendue » (plus de bouton Acheter, elle sort des résultats) ; si la vente est annulée, vous la remettez en ligne d'un clic ; quand l'acheteur a reçu l'article, elle est **supprimée automatiquement** ;
 - **Remettre en ligne** une annonce en pause, ou la **renouveler** pour la faire remonter dans les résultats ;
 - **Dupliquer** pour repartir d'un brouillon identique ;
 - **Mettre en avant** (tête des résultats pendant 7 jours) ou activer le macaron **Urgent** ;

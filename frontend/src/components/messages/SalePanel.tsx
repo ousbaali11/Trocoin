@@ -14,7 +14,7 @@ import type { ConversationSale } from "@/lib/types";
  * en un geste vivent ici (disponibilité, prêt pour la remise, réception) ; ce qui demande un formulaire — étiquette,
  * numéro de suivi, code de remise, litige, avis — reste sur la page de la vente, vers laquelle le panneau renvoie.
  */
-export function SalePanel({ sale, onChanged }: { sale: ConversationSale; onChanged: () => void }) {
+export function SalePanel({ sale, listing, onChanged }: { sale: ConversationSale; listing?: { id: string; status: string } | null; onChanged: () => void }) {
   const { toast } = useToast();
   const confirm = useConfirm();
   const [busy, setBusy] = useState(false);
@@ -36,6 +36,21 @@ export function SalePanel({ sale, onChanged }: { sale: ConversationSale; onChang
     }
   };
 
+  // Vente annulée ou remboursée (AUDIT §58) : l'annonce est restée « vendue » ; le vendeur la remet en ligne s'il a toujours l'article
+  const canRelist = seller && ["annulee", "rembourse"].includes(sale.status) && listing?.status === "vendue";
+  const relist = async () => {
+    if (!listing) return;
+    setBusy(true);
+    try {
+      await api(`/listings/${listing.id}`, { method: "PATCH", body: { status: "en_ligne" } });
+      toast("Annonce remise en ligne.", "success");
+      onChanged();
+    } catch (e) {
+      toast((e as Error).message, "error");
+    } finally {
+      setBusy(false);
+    }
+  };
   const open = sale.status === "sequestre" || sale.status === "livree";
   const steps: Array<{ label: string; done: boolean }> = [
     { label: "Payé", done: true },
@@ -92,6 +107,12 @@ export function SalePanel({ sale, onChanged }: { sale: ConversationSale; onChang
         )}
         {!seller && sale.status === "livree" && <Link href={href} className="small" style={{ color: "var(--brick)" }}>Un problème ?</Link>}
         {sale.status === "confirme" && <Link href={href} className="btn btn-outline btn-sm">Laisser un avis</Link>}
+        {canRelist && (
+          <>
+            <span className="small muted">Vente annulée : votre annonce est restée marquée « Vendue ».</span>
+            <button className="btn btn-primary btn-sm" disabled={busy} data-testid="sale-relist" onClick={relist}>Remettre l&apos;annonce en ligne</button>
+          </>
+        )}
       </div>
     </section>
   );

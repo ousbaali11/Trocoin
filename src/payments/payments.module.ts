@@ -5,6 +5,7 @@ import { Listing } from '../listings/listing.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { UsersModule } from '../users/users.module';
 import { ConversationsModule } from '../conversations/conversations.module';
+import { RetentionModule } from '../retention/retention.module';
 import { ShippingModule } from '../shipping/shipping.module';
 import { MockCheckoutController } from './mock-checkout.controller';
 import { DisabledPaymentProvider } from './disabled-payment.provider';
@@ -18,7 +19,7 @@ import { Shipment } from '../shipping/shipment.entity';
 import { Transaction } from './transaction.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Transaction, Listing, Shipment]), ConfigModule, UsersModule, NotificationsModule, ConversationsModule, ShippingModule],
+  imports: [TypeOrmModule.forFeature([Transaction, Listing, Shipment]), ConfigModule, UsersModule, NotificationsModule, ConversationsModule, ShippingModule, RetentionModule],
   controllers: [PaymentsController, MockCheckoutController],
   providers: [
     PaymentsService,

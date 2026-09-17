@@ -105,6 +105,7 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
     return (
       <div className="card stack">
         <strong>C&apos;est votre annonce</strong>
+        {listing.status === "vendue" && <span className="pill pill-dark" style={{ alignSelf: "flex-start" }}>Vendu</span>}
         <Link href={`/compte/annonces/${listing.id}/modifier`} className="btn btn-primary btn-block">Modifier l&apos;annonce</Link>
         <Link href="/compte/annonces" className="btn btn-outline btn-block">Gérer mes annonces</Link>
         <ShareMenu title={listing.title} text="Regarde cette annonce sur Trocoin" compact />
@@ -141,7 +142,7 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
           )}
         </>
       ) : (
-        <p className="muted" style={{ margin: 0 }}>Cette annonce n&apos;est plus disponible.</p>
+        <p className="muted" style={{ margin: 0 }} data-testid="listing-unavailable">{listing.status === "vendue" ? "Article vendu : il n'est plus disponible à l'achat." : "Cette annonce n'est plus disponible."}</p>
       )}
       <div className="row" style={{ justifyContent: "space-between" }}>
         <FavoriteButton listingId={listing.id} />

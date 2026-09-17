@@ -116,7 +116,7 @@ describe('Phase 22 : échéances du séquestre (expiration de l\'autorisation ba
     await request(server).post(`/admin/transactions/${tx.id}/resolve`).set(admin.auth).send({ decision: 'rembourser', note: 'Colis vide confirmé par photos.' }).expect(201);
     expect(calls.slice(refundCalls).filter((c) => c.endsWith(done.providerPaymentId!))).toEqual([`refund ${done.providerPaymentId}`]);
     expect((await txRepo.findOne({ where: { id: tx.id } }))!.status).toBe('rembourse');
-    expect((await request(server).get(`/listings/${listing.id}`).expect(200)).body.status).toBe('en_ligne');
+    expect((await request(server).get(`/listings/${listing.id}`).expect(200)).body.status).toBe('vendue'); // AUDIT §58 : l'annonce payée reste « vendue », le vendeur la remet en ligne lui-même
     // Une fois la fenêtre passée, plus de litige possible
     const { tx: late } = await buy('colissimo', 20);
     await txRepo.update(late.id, { status: 'confirme', confirmedAt: new Date(), autoResolution: 'reception_presumee', disputeAllowedUntil: new Date(Date.now() - 1000) });
@@ -156,7 +156,7 @@ describe('Phase 22 : échéances du séquestre (expiration de l\'autorisation ba
     expect(done.status).toBe('annulee');
     expect(done.autoResolution).toBe('annulation_echeance');
     expect(calls.slice(before).filter((c) => c.endsWith(done.providerPaymentId!))).toEqual([`refund ${done.providerPaymentId}`]);
-    expect((await request(server).get(`/listings/${listing.id}`).expect(200)).body.status).toBe('en_ligne');
+    expect((await request(server).get(`/listings/${listing.id}`).expect(200)).body.status).toBe('vendue'); // AUDIT §58 : l'annonce payée reste « vendue », le vendeur la remet en ligne lui-même
     expect(await titlesFor(buyer.id)).toContain('Achat annulé, remboursement intégral');
     expect(await titlesFor(seller.id)).toContain('Vente annulée (délai dépassé)');
     // Plus rien à faire ensuite (idempotent)

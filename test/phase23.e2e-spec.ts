@@ -92,7 +92,7 @@ describe('Phase 23 : droits admin — suppressions définitives, transactions, j
     const a = await buy(30);
     await request(server).post(`/admin/transactions/${a.tx.id}/resolve`).set(admin.auth).send({ decision: 'annuler', note: 'Vendeur injoignable depuis 5 jours' }).expect(201);
     expect((await request(server).get(`/transactions/${a.tx.id}`).set(buyer.auth)).body.status).toBe('annulee');
-    expect((await request(server).get(`/listings/${a.listing.id}`)).body.status).toBe('en_ligne');
+    expect((await request(server).get(`/listings/${a.listing.id}`)).body.status).toBe('vendue'); // AUDIT §58 : l'annonce payée reste « vendue », le vendeur la remet en ligne lui-même
     expect(await audit.findOne({ where: { action: 'transaction.cancel', targetId: a.tx.id } })).toBeTruthy();
 
     // Forcer la capture d'une vente expédiée (acheteur de mauvaise foi) : vendeur payé
@@ -100,7 +100,7 @@ describe('Phase 23 : droits admin — suppressions définitives, transactions, j
     await request(server).post(`/transactions/${b.tx.id}/ship`).set(seller.auth).send({ trackingNumber: '6A00000000009' }).expect(201);
     await request(server).post(`/admin/transactions/${b.tx.id}/resolve`).set(admin.auth).send({ decision: 'liberer', note: 'Preuve de livraison fournie par le transporteur' }).expect(201);
     expect((await request(server).get(`/transactions/${b.tx.id}`).set(seller.auth)).body.status).toBe('confirme');
-    expect((await request(server).get(`/listings/${b.listing.id}`)).body.status).toBe('vendue');
+    expect((await request(server).get(`/listings/${b.listing.id}`)).status).toBe(404); // AUDIT §58 : fonds libérés = vente définitive, annonce supprimée
     expect(await audit.findOne({ where: { action: 'transaction.force_capture', targetId: b.tx.id } })).toBeTruthy();
 
     // Forcer un remboursement d'une vente expédiée (colis vide avéré)

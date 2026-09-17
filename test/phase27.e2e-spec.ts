@@ -128,12 +128,14 @@ describe('Phase 27 : autorisations sur les ressources (balayage IDOR)', () => {
     }
     await request(server).get('/admin/stats').set(admin.auth).expect(200);
     expect((await request(server).get(`/transactions/${txId}`).set(buyer.auth).expect(200)).body.status).toBe('livree');
-    expect((await request(server).get(`/listings/${listingId}`).expect(200)).body.status).toBe('en_ligne');
+    expect((await request(server).get(`/listings/${listingId}`).expect(200)).body.status).toBe('vendue'); // AUDIT §58 : payée, donc « vendue » ; aucune route admin refusée ne l'a modifiée
   });
 
   it('numéro du vendeur : réservé aux connectés (le throttling, désactivé dans les tests, est posé sur la route : 30 / heure)', async () => {
-    await request(server).post(`/listings/${listingId}/phone`).expect(401);
-    const first = await request(server).post(`/listings/${listingId}/phone`).set(stranger.auth);
+    // Annonce en ligne (celle du balayage est « vendue » depuis son paiement : son numéro n'est plus communiqué)
+    const online = (await createListing(app, seller, { title: 'Casque de vélo de test', price: 25 })).id;
+    await request(server).post(`/listings/${online}/phone`).expect(401);
+    const first = await request(server).post(`/listings/${online}/phone`).set(stranger.auth);
     expect([200, 201]).toContain(first.status);
     const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'src', 'listings', 'listings.controller.ts'), 'utf8');
     expect(src).toMatch(/@Throttle\(\{ default: \{ limit: 30, ttl: 3_600_000 \} \}\)\s*\n\s*@Post\(':id\/phone'\)/);

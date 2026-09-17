@@ -115,9 +115,11 @@ describe('Phase 26 : suppression réelle, trace comptable anonymisée, journal T
     const listing = await createListing(app, seller, { title: 'Casque audio sans fil', price: 70, deliveryAvailable: true });
     const tx = await buy(seller, buyer, listing.id);
     await request(server).post(`/transactions/${tx.id}/ship`).set(seller.auth).send({ trackingNumber: '6A00000000301' }).expect(201);
-    await request(server).post(`/transactions/${tx.id}/confirm-delivery`).set(buyer.auth).expect(201);
+    // AUDIT §58 : à la réception, l'annonce est supprimée d'office ; l'admin la supprime donc ici pendant la vente,
+    // puis l'acheteur confirme — la trace comptable est la même dans les deux cas
     const res = await request(server).delete(`/admin/listings/${listing.id}`).set(admin.auth).send(HARD).expect(200);
     expect(res.body).toEqual({ deleted: true, keptTransactions: 1 });
+    await request(server).post(`/transactions/${tx.id}/confirm-delivery`).set(buyer.auth).expect(201);
     expect(await listings.findOne({ where: { id: listing.id } })).toBeNull();
     const kept = (await txRepo.findOne({ where: { id: tx.id } }))!;
     expect(kept.status).toBe('confirme');
@@ -143,11 +145,12 @@ describe('Phase 26 : suppression réelle, trace comptable anonymisée, journal T
     const other = await createListing(app, buyer, { title: 'Lampe de chevet' });
     const tx = await buy(seller, buyer, listing.id);
     await request(server).post(`/transactions/${tx.id}/ship`).set(seller.auth).send({ trackingNumber: '6A00000000302' }).expect(201);
+    await request(server).post(`/listings/${listing.id}/favorite`).set(buyer.auth).expect(201);
+    const conv = await request(server).post('/conversations').set(buyer.auth).send({ listingId: listing.id, message: 'Merci pour la platine !' }).expect(201);
     await request(server).post(`/transactions/${tx.id}/confirm-delivery`).set(buyer.auth).expect(201);
     await request(server).post(`/transactions/${tx.id}/review`).set(buyer.auth).send({ rating: 5, comment: 'Vendeur parfait' }).expect(201);
     await request(server).post(`/transactions/${tx.id}/review`).set(seller.auth).send({ rating: 4, comment: 'Acheteur sérieux' }).expect(201);
-    await request(server).post(`/listings/${listing.id}/favorite`).set(buyer.auth).expect(201);
-    const conv = await request(server).post('/conversations').set(buyer.auth).send({ listingId: listing.id, message: 'Merci pour la platine !' }).expect(201);
+    // (favori et conversation : posés plus haut, avant la réception — AUDIT §58)
     expect(await notifications.count({ where: { userId: buyer.id } })).toBeGreaterThanOrEqual(1);
 
     const res = await request(server).delete(`/admin/users/${buyer.id}`).set(admin.auth).send({ reason: 'Compte frauduleux (usurpation d\'identité)', confirm: 'SUPPRIMER' }).expect(200);

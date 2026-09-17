@@ -18,8 +18,10 @@ test('sélection, tout sélectionner, suppression confirmée, annulation ; l\'au
   const buyerToken = await token(seed.buyer.email, seed.buyer.password);
   const sellerToken = await token(seed.seller.email, seed.seller.password);
   const created: string[] = [];
-  for (const key of ['vtt', 'ps5', 'poussette'] as const) {
-    const c = await api<{ id: string }>('/conversations', { method: 'POST', body: { listingId: seed.listings[key].id, message: `Bonjour, toujours disponible ? (${key})` }, token: buyerToken });
+  // La PlayStation du seed est achetée puis reçue dans 05-achat : son annonce est supprimée (AUDIT §58) ; on en publie une autre
+  const extra = await api<{ id: string }>('/listings', { method: 'POST', token: sellerToken, body: { title: 'Console rétro avec deux manettes', description: 'Console rétro en bon état, vendue avec deux manettes et ses câbles, testée avant la vente.', categorySlug: 'consoles-jeux-video', price: 60, priceType: 'fixe', condition: 'bon_etat', city: 'Lyon', postalCode: '69003', attributes: { plateforme: 'Autre' } } });
+  for (const [key, listingId] of [['vtt', seed.listings.vtt.id], ['console', extra.id], ['poussette', seed.listings.poussette.id]] as const) {
+    const c = await api<{ id: string }>('/conversations', { method: 'POST', body: { listingId, message: `Bonjour, toujours disponible ? (${key})` }, token: buyerToken });
     created.push(c.id);
   }
   const sellerBefore = (await api<Array<{ id: string }>>('/conversations', { token: sellerToken })).map((c) => c.id);

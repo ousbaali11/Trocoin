@@ -38,7 +38,7 @@ cd frontend && npm install && cp .env.example .env.local && npm run dev -- -p 30
 ## Tests
 
 ```bash
-npm test                 # 194 tests e2e (API, supertest)
+npm test                 # 199 tests e2e (API, supertest)
 npm run e2e:build        # construit l'API (dist/) et le front (next build) pour les tests navigateur
 npm run e2e              # 115 scénarios Playwright dans Chromium (desktop 1280 px + mobile 375 px) : parcours, accessibilité (axe) site + back-office, clavier, SEO
 node scripts/charge.js --api https://api.trocoin.fr --front https://www.trocoin.fr --vus 10 --minutes 3   # test de charge léger (lectures publiques)

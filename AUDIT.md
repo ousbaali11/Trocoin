@@ -3023,3 +3023,41 @@ Production 1.29.0 (CI verte sur `cbcb921`, migration jouée sur PostgreSQL, `/he
 
 1.29.1 : pour un paiement non finalisé, la page de la vente dit « Total à payer » et « Achat commencé, paiement non
 finalisé » (elle affichait « Total payé » / « Paiement sécurisé » à côté de « rien n'a été débité »).
+
+## 58. Annonce « Vendue » dès le paiement, remise en ligne après annulation, suppression automatique à la réception — 17 septembre 2026
+
+Constat : pendant toute une vente payée, l'annonce restait « en ligne » — visible dans les résultats, avec son bouton
+« Acheter » (un second achat était refusé, mais seulement après le clic). Elle ne passait « vendue » qu'à la réception,
+et n'était jamais retirée.
+
+Règle demandée par le propriétaire, mise en place :
+
+| Moment | Annonce |
+|---|---|
+| Paiement reçu (immédiat, retour de la page hébergée ou webhook) | **« Vendue »** : badge « Vendu », plus de bouton Acheter ni de contact, sortie des résultats, page toujours consultable ; devis et achat → 404 |
+| Vente annulée ou remboursée (acheteur, vendeur, délai dépassé, médiateur, fournisseur de paiement) | **reste « Vendue »** ; le vendeur la **remet en ligne d'un clic** (conversation, page de la vente, Mes annonces), prévenu par notification et message automatique |
+| Article reçu : réception confirmée, code de remise validé, fonds libérés par le médiateur | **supprimée automatiquement** (`RetentionService.purgeListing`, comme une suppression par le vendeur : la vente payée garde montants, dates et titre ; conversation et avis restent possibles) |
+| Réception présumée (acheteur silencieux) | reste « Vendue » pendant la fenêtre de litige de l'acheteur, **supprimée à sa clôture** par la tâche périodique — sauf si, l'acheteur ayant été remboursé, le vendeur l'a remise en ligne |
+
+Deux choix à connaître :
+- **La remise en ligne n'est pas automatique** après une annulation (avant, l'annonce n'avait jamais quitté les
+  résultats) : entre le paiement et l'annulation, le vendeur a pu céder l'objet ailleurs ; une annonce qui reviendrait
+  seule pourrait être payée pour un objet qui n'existe plus. Conforme à la demande (« le vendeur peut remettre »).
+- **Garde-fou** : tant qu'une vente payée court (fonds bloqués, expédiée, litige), `PATCH /listings/:id {status:
+  en_ligne}` répond 400 — sinon le même objet pourrait être payé deux fois.
+- Le remboursement décidé après une réception présumée ne remet plus l'annonce en ligne d'office (même règle).
+
+Migration `1789560000000` : les annonces des ventes en cours au déploiement passent « vendue ». Textes mis à jour
+(notifications, messages automatiques, page de la vente, aide en ligne) ; `docs/suivi-vente-messagerie.md` complété.
+
+### Vérification
+
+- API : `test/phase35` (5 tests : vendue / hors résultats / non rachetable / non remise en ligne pendant la vente ;
+  annulation puis remise en ligne par le vendeur seul ; suppression à la réception avec trace, conversation et avis ;
+  code de remise ; réception présumée, fenêtre de litige, remboursement et remise en ligne) ; 13 attentes d'anciens
+  tests alignées sur la nouvelle règle (phases 22, 23, 24, 26, 27, transactions) → **199 tests**, 1 ignoré.
+- Navigateur : `27-annonce-vendue` (bureau et mobile) ; `05-achat` (annonce supprimée après réception → 404) et
+  `13-messagerie` adaptées → **125 réussis, 11 ignorés, 0 échec**.
+- Captures (pile locale) : avant achat, « Vendu » (visiteur bureau et mobile, vendeur), annulation avec bouton
+  « Remettre l'annonce en ligne » (conversation bureau et mobile, page de la vente), après remise en ligne, annonce
+  supprimée (404, page de la vente, conversation).

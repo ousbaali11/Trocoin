@@ -258,7 +258,7 @@ export default function ConversationPage() {
         </div>
       </header>
 
-      {conv.transaction && <SalePanel sale={conv.transaction} onChanged={load} />}
+      {conv.transaction && <SalePanel sale={conv.transaction} listing={conv.listing} onChanged={load} />}
 
       <div ref={listRef} role="log" aria-live="polite" aria-label="Messages de la conversation" style={{ flex: 1, minHeight: 200, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 8, background: "var(--bg)" }}>
         {messages.length === 0 && <p className="muted small" style={{ textAlign: "center" }}>Début de la conversation. Restez courtois et ne partagez pas vos coordonnées bancaires.</p>}

@@ -50,7 +50,7 @@ export function saleEventText(m: Message, role: "acheteur" | "vendeur", otherNam
     case "reception_confirmee":
       return buyer
         ? { icon: "🎉", title: "Réception confirmée", body: "Vous avez confirmé avoir bien reçu l'article : le vendeur est payé. Merci ! Pensez à laisser un avis." }
-        : { icon: "🎉", title: "Réception confirmée par l'acheteur", body: paidOut ? `${otherName} a confirmé avoir bien reçu le colis : le virement${payout ? ` de ${formatEuros(payout)}` : ""} vers votre compte de versement est déclenché.` : `${otherName} a confirmé avoir bien reçu le colis. Le virement${payout ? ` de ${formatEuros(payout)}` : ""} attend votre compte de versement : configurez-le dans « Mes paiements » pour recevoir les fonds.` };
+        : { icon: "🎉", title: "Réception confirmée par l'acheteur", body: paidOut ? `${otherName} a confirmé avoir bien reçu le colis : le virement${payout ? ` de ${formatEuros(payout)}` : ""} vers votre compte de versement est déclenché. La vente est terminée : votre annonce a été supprimée automatiquement.` : `${otherName} a confirmé avoir bien reçu le colis. Votre annonce a été supprimée automatiquement. Le virement${payout ? ` de ${formatEuros(payout)}` : ""} attend votre compte de versement : configurez-le dans « Mes paiements » pour recevoir les fonds.` };
     case "remise_validee":
       return buyer
         ? { icon: "🎉", title: "Remise validée", body: "Le vendeur a saisi votre code de remise : la vente est terminée. Pensez à laisser un avis." }
@@ -61,7 +61,7 @@ export function saleEventText(m: Message, role: "acheteur" | "vendeur", otherNam
         : { icon: "⏱️", title: "Réception considérée acquise", body: `L'acheteur n'a rien signalé dans le délai : la vente est confirmée${payout ? ` et le virement de ${formatEuros(payout)} est déclenché` : ""}.` };
     case "vente_annulee": {
       const by = meta.by === "delai" ? "Le délai d'expédition est dépassé" : meta.by === "vendeur" ? (buyer ? "Le vendeur a annulé la vente" : "Vous avez annulé la vente") : buyer ? "Vous avez annulé votre achat" : "L'acheteur a annulé son achat";
-      return { icon: "↩️", title: "Vente annulée", body: `${by} : ${buyer ? "vous êtes intégralement remboursé, frais compris" : "l'acheteur est intégralement remboursé, votre annonce reste en ligne"}.` };
+      return { icon: "↩️", title: "Vente annulée", body: `${by} : ${buyer ? "vous êtes intégralement remboursé, frais compris" : "l'acheteur est intégralement remboursé. Votre annonce est restée marquée « Vendue » : remettez-la en ligne d'un clic si l'article est toujours à vendre"}.` };
     }
     case "litige_ouvert":
       return { icon: "⚠️", title: "Litige ouvert", body: "Un médiateur Trocoin examine le dossier ; les fonds restent bloqués jusqu'à sa décision. Vous pouvez continuer à échanger ici pour trouver un accord." };
