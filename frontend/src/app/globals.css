@@ -974,3 +974,14 @@ h2 {
     --header-h: 57px;
   }
 }
+
+/* Tuile « + Ajouter des photos » du dépôt (AUDIT §55) : survol et focus clavier (le champ fichier est hors écran) */
+.add-photo-tile:hover {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+  color: var(--accent-dark);
+}
+.add-photo-tile:focus-within {
+  outline: 3px solid #7cc4ad;
+  outline-offset: 2px;
+}

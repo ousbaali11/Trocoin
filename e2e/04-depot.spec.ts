@@ -50,7 +50,14 @@ test('voiture : critères obligatoires, deux photos, localisation par code posta
 
   // Étape 3 : photos
   await expect(page.getByRole('heading', { name: 'Ajoutez des photos' })).toBeVisible();
+  // Tuile d'ajout en tête de grille, comme sur leboncoin (AUDIT §55) : plus de lien « Faire → » pour les photos ici
+  await expect(page.getByTestId('add-photos')).toContainText("Ajouter jusqu'à 10 photos");
+  await expect(page.getByTestId('completeness-photos')).toHaveCount(0);
+  await expect(page.getByText('Cliquez pour choisir des photos')).toHaveCount(0);
   await addPhotos(page, seed.photos);
+  await expect(page.getByTestId('add-photos')).toContainText('Ajouter des photos (8 possibles)');
+  // La tuile est la première de la grille
+  expect(await page.getByRole('list', { name: "Photos de l'annonce" }).getByRole('listitem').first().getAttribute('data-testid')).toBe('add-photos');
   await expect(page.getByText('À envoyer')).toHaveCount(2);
   await page.getByRole('button', { name: 'Continuer' }).click();
 

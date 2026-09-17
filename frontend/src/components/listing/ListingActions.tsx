@@ -24,6 +24,10 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
   const [delivery, setDelivery] = useState<"main_propre" | "colissimo" | "mondial_relay">("main_propre");
   // Adresse de livraison pour un envoi : vue du vendeur seul, transmise au transporteur, jamais publique
   const [address, setAddress] = useState({ name: "", line1: "", line2: "", postalCode: "", city: "", phone: "" });
+  // Téléphone pour le livreur (AUDIT §55) : prérempli avec celui du compte, le transporteur l'exige pour l'étiquette
+  useEffect(() => {
+    if (user?.phoneNumber) setAddress((a) => (a.phone ? a : { ...a, phone: formatPhone(user.phoneNumber!) }));
+  }, [user?.phoneNumber]);
   const setAddr = (k: keyof typeof address, v: string) => setAddress((a) => ({ ...a, [k]: v }));
   const addressOk = delivery === "main_propre" || (address.name.trim().length >= 2 && address.line1.trim().length >= 3 && /^\d{5}$/.test(address.postalCode) && address.city.trim().length >= 1);
   const [busy, setBusy] = useState(false);
@@ -182,7 +186,7 @@ export function ListingActions({ listing }: { listing: ListingDetail }) {
                   <div className="field" style={{ gridColumn: "1 / -1", marginBottom: 0 }}><label htmlFor="addr-line2">Complément (facultatif)</label><input id="addr-line2" className="input" autoComplete="address-line2" placeholder="Bâtiment, étage, digicode" value={address.line2} onChange={(e) => setAddr("line2", e.target.value)} /></div>
                   <div className="field" style={{ marginBottom: 0 }}><label htmlFor="addr-cp">Code postal</label><input id="addr-cp" className="input" inputMode="numeric" autoComplete="postal-code" maxLength={5} value={address.postalCode} onChange={(e) => setAddr("postalCode", e.target.value.replace(/\D/g, ""))} /></div>
                   <div className="field" style={{ marginBottom: 0 }}><label htmlFor="addr-city">Ville</label><input id="addr-city" className="input" autoComplete="address-level2" value={address.city} onChange={(e) => setAddr("city", e.target.value)} /></div>
-                  <div className="field" style={{ gridColumn: "1 / -1", marginBottom: 0 }}><label htmlFor="addr-phone">Téléphone (facultatif, pour le livreur)</label><input id="addr-phone" className="input" type="tel" autoComplete="tel" value={address.phone} onChange={(e) => setAddr("phone", e.target.value)} /></div>
+                  <div className="field" style={{ gridColumn: "1 / -1", marginBottom: 0 }}><label htmlFor="addr-phone">Téléphone (pour le livreur)</label><input id="addr-phone" className="input" type="tel" autoComplete="tel" value={address.phone} onChange={(e) => setAddr("phone", e.target.value)} /></div>
                 </div>
               </fieldset>
             )}

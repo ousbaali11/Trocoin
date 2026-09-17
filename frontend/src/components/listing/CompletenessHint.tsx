@@ -71,7 +71,7 @@ export function completenessChecks({ photosCount, description, price, priceType,
   return checks;
 }
 
-export function CompletenessHint({ onAction, ...props }: Parameters<typeof completenessChecks>[0] & { onAction?: (action: CompletenessAction) => void }) {
+export function CompletenessHint({ onAction, hideActions, ...props }: Parameters<typeof completenessChecks>[0] & { onAction?: (action: CompletenessAction) => void; /** Points affichés sans lien « Faire → » (l'action est déjà sous les yeux, ex. la tuile d'ajout de photos). */ hideActions?: CompletenessAction[] }) {
   const checks = completenessChecks(props);
   const done = checks.filter((c) => c.ok).length;
   const all = done === checks.length;
@@ -91,7 +91,7 @@ export function CompletenessHint({ onAction, ...props }: Parameters<typeof compl
         {checks.map((c) => (
           <li key={c.action} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "4px 0", color: c.ok ? "var(--accent-dark)" : "var(--ink-soft)" }}>
             <span>{c.ok ? "✓" : "○"} {c.ok ? c.label : c.todo}</span>
-            {!c.ok && onAction && (
+            {!c.ok && onAction && !hideActions?.includes(c.action) && (
               <button type="button" className="btn btn-ghost btn-sm" style={{ minHeight: 30, padding: "2px 10px" }} onClick={() => onAction(c.action)} data-testid={`completeness-${c.action}`}>
                 Faire →
               </button>

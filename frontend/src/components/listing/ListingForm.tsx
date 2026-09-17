@@ -473,20 +473,26 @@ export function ListingForm({ existing }: { existing?: ListingDetail }) {
       {step === 2 && (
         <div>
           <h2>Ajoutez des photos</h2>
-          <CompletenessHint photosCount={photos.length + pending.length} description={form.description} price={form.price} priceType={form.priceType} attributes={form.attributes} schema={schema} onAction={completenessAction} />
+          <CompletenessHint photosCount={photos.length + pending.length} description={form.description} price={form.price} priceType={form.priceType} attributes={form.attributes} schema={schema} onAction={completenessAction} hideActions={["photos"]} />
           <p className="muted">Jusqu&apos;à {MAX_PHOTOS} photos (JPEG, PNG, WEBP, 8 Mo max). Un recadrage vous est proposé à l&apos;ajout. La première est la photo de couverture : <strong>glissez-déposez</strong> pour réorganiser.</p>
           {lockedCount > 0 && (
             <p className="alert alert-info" data-testid="locked-photos-note" style={{ marginBottom: 12 }}>
               🔒 Les {lockedCount > 1 ? `${lockedCount} photos` : "photo"} de l&apos;annonce publiée {lockedCount > 1 ? "restent" : "reste"} en place : {lockedCount > 1 ? "elles ne peuvent" : "elle ne peut"} plus être retirée{lockedCount > 1 ? "s" : ""}, remplacée{lockedCount > 1 ? "s" : ""} ni déplacée{lockedCount > 1 ? "s" : ""} (protection contre la tromperie). Vous pouvez toujours <strong>ajouter</strong> des photos : elles viennent à la suite et restent retirables.
             </p>
           )}
-          <label className="card" style={{ display: "grid", placeItems: "center", padding: 32, borderStyle: "dashed", cursor: "pointer", marginBottom: 16 }}
-            onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); addFiles(e.dataTransfer.files); }}>
-            {/* Le champ fichier reste accessible au clavier (rendu hors écran, pas masqué) */}
-            <input type="file" accept="image/jpeg,image/png,image/webp" multiple className="sr-only" aria-label="Choisir des photos" onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
-            <span><strong>Cliquez pour choisir des photos</strong> ou glissez-les ici</span>
-          </label>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10 }} role="list" aria-label="Photos de l'annonce">
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10 }} role="list" aria-label="Photos de l'annonce"
+            onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) e.preventDefault(); }} onDrop={(e) => { if (e.dataTransfer.files.length) { e.preventDefault(); addFiles(e.dataTransfer.files); } }}>
+            {/* Tuile d'ajout, en tête de grille comme sur leboncoin (AUDIT §55) : un « + » et le nombre de photos possibles.
+                Le champ fichier reste accessible au clavier (rendu hors écran, pas masqué) ; on peut aussi glisser des fichiers sur la grille. */}
+            {photos.length + pending.length < MAX_PHOTOS && (
+              <div role="listitem" data-testid="add-photos" style={{ display: "grid" }}>
+              <label className="add-photo-tile" style={{ display: "grid", placeItems: "center", alignContent: "center", gap: 8, minHeight: 150, padding: 10, textAlign: "center", border: "1.5px dashed var(--ink-muted)", borderRadius: 8, background: "var(--white)", cursor: "pointer", fontWeight: 600, lineHeight: 1.25 }}>
+                <input type="file" accept="image/jpeg,image/png,image/webp" multiple className="sr-only" aria-label="Choisir des photos" onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
+                <span aria-hidden="true" style={{ width: 44, height: 44, borderRadius: "50%", background: "var(--accent)", color: "var(--white)", display: "grid", placeItems: "center", fontSize: "1.7rem", fontWeight: 700, lineHeight: 1 }}>+</span>
+                <span>{photos.length + pending.length === 0 ? `Ajouter jusqu'à ${MAX_PHOTOS} photos` : `Ajouter des photos (${MAX_PHOTOS - photos.length - pending.length} possible${MAX_PHOTOS - photos.length - pending.length > 1 ? "s" : ""})`}</span>
+              </label>
+              </div>
+            )}
             {photos.map((p, i) => (
               <PhotoTile key={p.id} src={mediaUrl(p.url)!} cover={i === 0} position={i + 1} locked={!!p.lockedAt} onRemove={() => removePhoto(p)} onMove={(d) => moveTile("photos", i, d)} {...tileProps("photos", i)} draggable={!p.lockedAt} />
             ))}
@@ -620,7 +626,8 @@ function PhotoTile({ src, cover, pendingLabel, dragging, position, locked, onCro
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={src} alt={`Photo ${position}${cover ? " (couverture)" : ""}`} style={{ width: "100%", aspectRatio: "4/3", objectFit: "cover", pointerEvents: "none" }} />
       {cover && <span className="pill pill-accent" style={{ position: "absolute", top: 6, left: 6 }}>Couverture</span>}
-      {pendingLabel && <span className="pill" style={{ position: "absolute", top: 6, right: 6 }}>{pendingLabel}</span>}
+      {/* Sous « Couverture » sur la première tuile : les deux pastilles se chevauchaient sur une tuile étroite (AUDIT §55) */}
+      {pendingLabel && <span className="pill" style={cover ? { position: "absolute", top: 36, left: 6 } : { position: "absolute", top: 6, right: 6 }}>{pendingLabel}</span>}
       {locked ? (
         <div className="small muted" style={{ padding: "8px 6px", background: "var(--ivory-warm)" }} data-testid="locked-photo" title="Photo de l'annonce publiée : ni retirable, ni remplaçable, ni déplaçable">🔒 Verrouillée</div>
       ) : (

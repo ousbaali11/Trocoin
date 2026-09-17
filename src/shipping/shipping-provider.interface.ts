@@ -111,7 +111,8 @@ export class ShippingProviderError extends Error {
     public readonly code: 'adresse_invalide' | 'transporteur_indisponible' | 'etiquette_impossible' | 'non_configure' | 'reseau',
     public readonly reason: string,
   ) {
-    super(`Étiquette non générée (${provider}) : ${reason}`);
+    // Message lu par le vendeur : pas de nom de prestataire ni de détail technique (AUDIT §55), ils restent dans `provider` et le journal
+    super(`Étiquette non générée : ${reason}`);
   }
 }
 

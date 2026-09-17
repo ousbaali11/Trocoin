@@ -77,6 +77,38 @@ function modeOf(deliveryTypeCode: string, deliveryTypeLabel: string): ShippingMo
   return /pickup|point|relais|relay/i.test(`${deliveryTypeCode} ${deliveryTypeLabel}`) ? 'point_relais' : 'domicile';
 }
 
+/**
+ * Refus de validation de Boxtal (HTTP 400 / 422) traduit en une phrase pour le vendeur (AUDIT §55). Le corps est de la
+ * forme { errors: [{ code, parameters: [{ code, field, message, value }] }] } ; chaque champ refusé devient un motif
+ * lisible (« numéro de téléphone de l'expéditeur invalide »). Jamais de JSON brut à l'écran.
+ */
+export function describeBoxtalRefusal(text: string): string {
+  const reasons = new Set<string>();
+  try {
+    const body = JSON.parse(text) as { errors?: Array<{ code?: string; message?: string; parameters?: Array<{ code?: string; field?: string; message?: string }> }> };
+    for (const err of body.errors ?? []) {
+      const params = err.parameters?.length ? err.parameters : [{ code: err.code, field: '', message: err.message }];
+      for (const prm of params) {
+        const field = prm.field ?? '';
+        const who = /fromAddress|sender|shipper/i.test(field) ? "de l'expéditeur" : /toAddress|recipient|receiver/i.test(field) ? 'du destinataire' : '';
+        const kind = String(prm.code ?? '') + ' ' + field;
+        if (/phone/i.test(kind)) reasons.add(('numéro de téléphone ' + who).trim() + ' manquant ou invalide');
+        else if (/zip|postal/i.test(kind)) reasons.add(('code postal ' + who).trim() + ' non reconnu');
+        else if (/city/i.test(kind)) reasons.add(('ville ' + who).trim() + ' non reconnue pour ce code postal');
+        else if (/street|address|line/i.test(kind)) reasons.add(('adresse ' + who).trim() + ' incomplète ou non reconnue');
+        else if (/email/i.test(kind)) reasons.add(('adresse e-mail ' + who).trim() + ' invalide');
+        else if (/weight|dimension|length|width|height|package/i.test(kind)) reasons.add('poids ou dimensions du colis refusés');
+        else if (/pickupPoint|dropOff|parcelPoint|relay/i.test(kind)) reasons.add('point relais refusé : choisissez-en un autre');
+        else if (/ShippingOfferCode|offer/i.test(kind)) reasons.add("cette offre n'est pas disponible pour ce colis");
+      }
+    }
+  } catch {
+    /* corps non JSON : message générique ci-dessous */
+  }
+  if (reasons.size === 0) return "le transporteur a refusé la demande. Vérifiez les adresses, les téléphones et le colis, puis réessayez, ou saisissez votre numéro de suivi à la main.";
+  return 'le transporteur a refusé la demande : ' + [...reasons].join(' ; ') + '. Corrigez puis réessayez.';
+}
+
 export class BoxtalShippingProvider implements IShippingProvider {
   readonly name = 'boxtal';
   private readonly logger = new Logger('Shipping(boxtal)');
@@ -165,7 +197,9 @@ export class BoxtalShippingProvider implements IShippingProvider {
     if (status === 401 || status === 403) return new ShippingProviderError('boxtal', 'non_configure', `accès v3 refusé (HTTP ${status}) ${short}`);
     if (status === 400 || status === 422) {
       const code = /address|postal|city|street|adresse|zip/i.test(short) ? 'adresse_invalide' : 'etiquette_impossible';
-      return new ShippingProviderError('boxtal', code, `demande refusée (HTTP ${status}) ${short}`);
+      // Le refus technique (JSON de Boxtal) va au journal ; le vendeur lit une phrase (AUDIT §55)
+      this.logger.warn(`Demande refusée par Boxtal (HTTP ${status}) : ${short}`);
+      return new ShippingProviderError('boxtal', code, describeBoxtalRefusal(text));
     }
     if (status >= 500) return new ShippingProviderError('boxtal', 'transporteur_indisponible', `Boxtal indisponible (HTTP ${status})`);
     return new ShippingProviderError('boxtal', fallback, `HTTP ${status} ${short}`);

@@ -3,7 +3,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { formatEuros } from "@/lib/format";
+import { formatEuros, formatPhone } from "@/lib/format";
+
+/** Téléphone français à 10 chiffres (fixe ou mobile), écrit avec ou sans espaces, points, +33 ou 0033. */
+const isFrenchPhone = (raw?: string | null): boolean => {
+  if (!raw) return false;
+  let d = raw.replace(/[^0-9+]/g, "");
+  if (d.startsWith("0033")) d = `+33${d.slice(4)}`;
+  if (d.startsWith("+33")) d = `0${d.slice(3)}`;
+  return /^0[1-9][0-9]{8}$/.test(d);
+};
 import type { DeliveryAddress, RelayPoint, Shipment, ShippingMode, ShippingRate, Transaction } from "@/lib/types";
 
 const CARRIER: Record<string, string> = { colissimo: "Colissimo", mondial_relay: "Mondial Relay" };
@@ -28,13 +37,13 @@ export function ShipmentPanel({ tx, onChanged }: { tx: Transaction; onChanged: (
       })
       .catch(() => undefined);
   }, [tx.listingId]);
-  const [sender, setSender] = useState<DeliveryAddress>({ name: user ? `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || user.displayName : "", line1: "", line2: "", postalCode: user?.postalCode ?? "", city: user?.city ?? "", phone: "" });
+  const [sender, setSender] = useState<DeliveryAddress>({ name: user ? `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || user.displayName : "", line1: "", line2: "", postalCode: user?.postalCode ?? "", city: user?.city ?? "", phone: isFrenchPhone(user?.phoneNumber) ? formatPhone(user!.phoneNumber!) : "" });
   const [recipient, setRecipient] = useState<DeliveryAddress>(tx.shippingAddress ?? { name: tx.other?.displayName ?? "", line1: "", line2: "", postalCode: "", city: "", phone: "" });
   const [rates, setRates] = useState<ShippingRate[] | null>(null);
   const [points, setPoints] = useState<RelayPoint[]>([]);
   const [relayPointId, setRelayPointId] = useState("");
   const [busy, setBusy] = useState<"" | "tarifs" | "etiquette">("");
-  const [addressesOpen, setAddressesOpen] = useState(() => !tx.shippingAddress || !(user?.postalCode && user?.city));
+  const [addressesOpen, setAddressesOpen] = useState(() => !tx.shippingAddress || !(user?.postalCode && user?.city) || !isFrenchPhone(user?.phoneNumber));
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -54,7 +63,11 @@ export function ShipmentPanel({ tx, onChanged }: { tx: Transaction; onChanged: (
     ...(dims.w ? { widthCm: Number(dims.w) } : {}),
     ...(dims.h ? { heightCm: Number(dims.h) } : {}),
   });
-  const addressesOk = sender.line1.trim().length >= 3 && /^\d{5}$/.test(sender.postalCode) && sender.city.trim() && recipient.name.trim().length >= 2 && recipient.line1.trim().length >= 3 && /^\d{5}$/.test(recipient.postalCode) && recipient.city.trim();
+  // Téléphones (AUDIT §55) : exigés par le transporteur. Celui de l'expéditeur est repris du compte ; celui du
+  // destinataire est facultatif ici (à défaut, l'API transmet au transporteur celui de l'acheteur, sans l'afficher).
+  const senderPhoneOk = isFrenchPhone(sender.phone);
+  const recipientPhoneOk = !recipient.phone?.trim() || isFrenchPhone(recipient.phone);
+  const addressesOk = senderPhoneOk && recipientPhoneOk && sender.line1.trim().length >= 3 && /^\d{5}$/.test(sender.postalCode) && sender.city.trim() && recipient.name.trim().length >= 2 && recipient.line1.trim().length >= 3 && /^\d{5}$/.test(recipient.postalCode) && recipient.city.trim();
 
   const getRates = async () => {
     setBusy("tarifs");
@@ -138,8 +151,8 @@ export function ShipmentPanel({ tx, onChanged }: { tx: Transaction; onChanged: (
       <details style={{ marginTop: 12 }} open={addressesOpen} onToggle={(e) => setAddressesOpen((e.currentTarget as HTMLDetailsElement).open)}>
         <summary className="small" style={{ cursor: "pointer" }}>Adresses (expéditeur et destinataire)</summary>
         <div className="row" style={{ gap: 16, flexWrap: "wrap", alignItems: "flex-start", marginTop: 8 }}>
-          <AddressFields legend="Expéditeur (vous)" prefix="from" value={sender} onChange={setSender} />
-          <AddressFields legend="Destinataire (acheteur)" prefix="to" value={recipient} onChange={setRecipient} />
+          <AddressFields legend="Expéditeur (vous)" prefix="from" value={sender} onChange={setSender} phoneRequired phoneInvalid={!!sender.phone?.trim() && !senderPhoneOk} />
+          <AddressFields legend="Destinataire (acheteur)" prefix="to" value={recipient} onChange={setRecipient} phoneInvalid={!recipientPhoneOk} />
         </div>
       </details>
 
@@ -190,7 +203,7 @@ async function downloadLabel(txId: string) {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
-function AddressFields({ legend, prefix, value, onChange }: { legend: string; prefix: string; value: DeliveryAddress; onChange: (a: DeliveryAddress) => void }) {
+function AddressFields({ legend, prefix, value, onChange, phoneRequired, phoneInvalid }: { legend: string; prefix: string; value: DeliveryAddress; onChange: (a: DeliveryAddress) => void; phoneRequired?: boolean; phoneInvalid?: boolean }) {
   const set = (k: keyof DeliveryAddress, v: string) => onChange({ ...value, [k]: v });
   return (
     <fieldset style={{ border: 0, padding: 0, margin: 0, flex: "1 1 260px" }}>
@@ -201,7 +214,11 @@ function AddressFields({ legend, prefix, value, onChange }: { legend: string; pr
         <div className="field" style={{ marginBottom: 6, width: 120 }}><label htmlFor={`${prefix}-cp`}>Code postal</label><input id={`${prefix}-cp`} className="input" inputMode="numeric" maxLength={5} value={value.postalCode} onChange={(e) => set("postalCode", e.target.value.replace(/\D/g, ""))} /></div>
         <div className="field" style={{ marginBottom: 6, flex: 1 }}><label htmlFor={`${prefix}-city`}>Ville</label><input id={`${prefix}-city`} className="input" value={value.city} onChange={(e) => set("city", e.target.value)} /></div>
       </div>
-      <div className="field" style={{ marginBottom: 0 }}><label htmlFor={`${prefix}-phone`}>Téléphone</label><input id={`${prefix}-phone`} className="input" type="tel" value={value.phone ?? ""} onChange={(e) => set("phone", e.target.value)} /></div>
+      <div className="field" style={{ marginBottom: 0 }}>
+        <label htmlFor={`${prefix}-phone`}>Téléphone{phoneRequired ? " *" : " (facultatif)"}</label>
+        <input id={`${prefix}-phone`} className="input" type="tel" inputMode="tel" autoComplete="tel" placeholder="06 12 34 56 78" value={value.phone ?? ""} onChange={(e) => set("phone", e.target.value)} aria-invalid={phoneInvalid ? true : undefined} aria-describedby={`${prefix}-phone-hint`} />
+        <span className={phoneInvalid ? "error-text" : "hint"} id={`${prefix}-phone-hint`} data-testid={`${prefix}-phone-hint`}>{phoneInvalid ? "Numéro à 10 chiffres attendu, par exemple 06 12 34 56 78." : phoneRequired ? "Exigé par le transporteur pour générer l'étiquette." : "À défaut, le numéro du compte de l'acheteur est transmis au transporteur (il ne vous est pas affiché)."}</span>
+      </div>
     </fieldset>
   );
 }

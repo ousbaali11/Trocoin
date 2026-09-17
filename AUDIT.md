@@ -2813,3 +2813,48 @@ un second tap ou « Fermer » le replie, une autre famille le remplace ; une fam
   les 6 sous-catégories ; tap sur « Motos » → `/recherche?category=motos` (capture). Annonce et compte
   temporaires supprimés (204).
 - 1.27.1 : l'indication « 🔒 Verrouillée » passe dans le pied de la tuile (elle chevauchait « Couverture »).
+
+## 55. Étiquette : message d'erreur brut du transporteur ; dépôt : tuile « + Ajouter des photos » — 17 septembre 2026
+
+Demande (captures) : (1) à l'achat d'une étiquette, un bloc rouge affichait le JSON de Boxtal (« demande refusée
+(HTTP 422) {"timestamp":…,"ValidationException.PhoneNumber","field":"shipment.fromAddress.contact.phone"… ») ;
+(2) à l'étape Photos du dépôt, un bouton d'ajout de photos comme sur leboncoin à la place du lien « Faire → »,
+sur bureau et sur mobile.
+
+### 1. Étiquette
+
+- **Cause** : le champ Téléphone de l'expéditeur était vide (facultatif dans le formulaire, jamais prérempli) alors
+  que le transporteur l'exige pour les deux parties ; le refus de validation remontait tel quel à l'écran.
+- **Avant tout appel au transporteur** (`ShippingService.createLabel`) : un numéro saisi mais invalide → 400
+  `telephone_invalide` avec une phrase claire ; sans saisie, l'expéditeur reprend le numéro de son compte, le
+  destinataire celui de son adresse de livraison puis celui de son compte — ce dernier n'est transmis qu'au
+  transporteur, jamais enregistré ni montré au vendeur ; aucun numéro disponible → 400 `telephone_requis` qui dit
+  quoi faire. Numéros normalisés (`src/shipping/phone.ts` : espaces, points, +33, 0033).
+- **Refus du transporteur** : `describeBoxtalRefusal` traduit le JSON de validation en une phrase (« le
+  transporteur a refusé la demande : numéro de téléphone de l'expéditeur manquant ou invalide ; … Corrigez puis
+  réessayez. ») ; téléphone, code postal, ville, adresse, e-mail, colis, point relais, offre. Le détail technique
+  part au journal du serveur. Le message ne cite plus le prestataire (« Étiquette non générée : … »).
+- **Formulaire du vendeur** : téléphone de l'expéditeur prérempli avec celui du compte, marqué obligatoire, aide
+  « Exigé par le transporteur », message rouge sous le champ si le numéro n'a pas 10 chiffres et bouton « Calculer
+  le tarif » inactif ; téléphone du destinataire facultatif avec l'explication du repli. Les adresses s'ouvrent
+  d'elles-mêmes si le numéro du compte est inexploitable. À l'achat, le téléphone de l'acheteur est prérempli.
+
+### 2. Étape Photos du dépôt
+
+La grande zone « Cliquez pour choisir des photos » est remplacée par une **tuile en tête de grille**, comme sur
+leboncoin : cadre en pointillés, pastille « + », « Ajouter jusqu'à 10 photos » puis « Ajouter des photos (n
+possibles) » ; elle disparaît à 10 photos. Le glisser-déposer de fichiers reste possible sur la grille, le champ
+fichier reste atteignable au clavier (focus visible sur la tuile). Sur cette étape, la checklist « Fiche
+complète » n'affiche plus de lien « Faire → » pour les photos (la tuile est juste dessous) ; le lien vers les
+critères manquants est conservé car il ramène à une autre étape. Corrigé au passage : les pastilles « Couverture »
+et « À envoyer » se chevauchaient sur la première tuile.
+
+### Vérification
+
+- API : `test/phase32` (4 tests : normalisation des numéros, traduction du refus avec le corps exact reçu en
+  production, repli sur les comptes sans fuite du numéro de l'acheteur, refus clairs) → **186 tests**.
+- Navigateur : `04-depot` (tuile première de la grille, libellés, plus de lien « Faire » pour les photos),
+  `17-expedition`, `05-achat`, `15-experience`, `07-accessibilite` (axe : 0 violation après avoir porté le rôle
+  `listitem` par un conteneur et non par le `label`), `08-clavier`, `11-marges-mobile` : tous réussis.
+- Captures (pile locale) : étape Photos bureau et mobile (vide, puis deux photos), panneau d'expédition avec
+  téléphone prérempli puis invalide. L'achat réel d'une étiquette n'est pas rejoué en production (il est payant).

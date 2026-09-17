@@ -6,6 +6,7 @@ import { Transaction } from '../payments/transaction.entity';
 import { User } from '../users/user.entity';
 import { CreateShipmentDto, QuoteShipmentDto } from './dto/shipment.dto';
 import { Shipment } from './shipment.entity';
+import { normalizeFrenchPhone } from './phone';
 import { IShippingProvider, RelayPoint, ShippingCarrier, ShippingProviderError, ShippingRate, TrackingInfo } from './shipping-provider.interface';
 import { SHIPPING_PROVIDER } from './shipping.constants';
 
@@ -59,6 +60,27 @@ export class ShippingService {
     if (existing && existing.status !== 'echec') throw new ConflictException('Une étiquette existe déjà pour cette vente.');
     const listing = await this.listings.findOne({ where: { id: tx.listingId } });
 
+    // Téléphones (AUDIT §55) : les transporteurs les exigent pour les deux parties. On les règle AVANT tout appel au
+    // prestataire, avec un message clair, au lieu de laisser remonter son refus technique. À défaut de saisie :
+    // l'expéditeur reprend le numéro de son compte ; le destinataire celui de son adresse de livraison, puis celui
+    // de son compte — ce dernier n'est transmis qu'au transporteur, jamais enregistré ni montré au vendeur.
+    const [sellerUser, buyerUser] = await Promise.all([this.users.findOne({ where: { id: tx.sellerId } }), this.users.findOne({ where: { id: tx.buyerId } })]);
+    if (dto.sender.phone?.trim() && !normalizeFrenchPhone(dto.sender.phone)) {
+      throw new BadRequestException({ message: "Le numéro de téléphone de l'expéditeur n'est pas valide : 10 chiffres, par exemple 06 12 34 56 78.", code: 'telephone_invalide', field: 'sender.phone' });
+    }
+    if (dto.recipient.phone?.trim() && !normalizeFrenchPhone(dto.recipient.phone)) {
+      throw new BadRequestException({ message: "Le numéro de téléphone du destinataire n'est pas valide : 10 chiffres, par exemple 06 12 34 56 78.", code: 'telephone_invalide', field: 'recipient.phone' });
+    }
+    const senderPhone = normalizeFrenchPhone(dto.sender.phone) ?? normalizeFrenchPhone(sellerUser?.phoneNumber);
+    if (!senderPhone) {
+      throw new BadRequestException({ message: "Indiquez votre numéro de téléphone (expéditeur) : le transporteur l'exige pour générer l'étiquette.", code: 'telephone_requis', field: 'sender.phone' });
+    }
+    const recipientShownPhone = normalizeFrenchPhone(dto.recipient.phone) ?? normalizeFrenchPhone(tx.shippingAddress?.phone);
+    const recipientCarrierPhone = recipientShownPhone ?? normalizeFrenchPhone(buyerUser?.phoneNumber);
+    if (!recipientCarrierPhone) {
+      throw new BadRequestException({ message: "Indiquez le numéro de téléphone du destinataire : le transporteur l'exige pour générer l'étiquette. Demandez-le à l'acheteur par la messagerie.", code: 'telephone_requis', field: 'recipient.phone' });
+    }
+
     const shipment = existing ?? this.shipments.create({ transactionId, listingId: tx.listingId, sellerId: tx.sellerId, buyerId: tx.buyerId });
     Object.assign(shipment, {
       provider: this.provider.name,
@@ -69,8 +91,8 @@ export class ShippingService {
       lengthCm: dto.parcel.lengthCm,
       widthCm: dto.parcel.widthCm,
       heightCm: dto.parcel.heightCm,
-      sender: { ...dto.sender, country: dto.sender.country || 'FR' },
-      recipient: { ...dto.recipient, country: dto.recipient.country || 'FR' },
+      sender: { ...dto.sender, phone: senderPhone, country: dto.sender.country || 'FR' },
+      recipient: { ...dto.recipient, phone: recipientShownPhone ?? undefined, country: dto.recipient.country || 'FR' },
       relayPointId: dto.relayPointId,
       error: null,
     });
@@ -86,7 +108,7 @@ export class ShippingService {
         offerCode: rate.offerCode,
         parcel: dto.parcel,
         sender: shipment.sender,
-        recipient: shipment.recipient,
+        recipient: { ...shipment.recipient, phone: recipientCarrierPhone },
         relayPointId: dto.relayPointId,
         reference: tx.id,
         contentDescription: listing?.title || 'Objet vendu sur Trocoin',
