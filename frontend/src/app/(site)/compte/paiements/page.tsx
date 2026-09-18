@@ -6,7 +6,7 @@ import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast-context";
 import { LoadError } from "@/components/ui/LoadError";
-import { DEFAULT_FEE_RATES, formatBuyerFeeFormula, formatPercent, type FeeRates } from "@/lib/format";
+
 
 interface StripeStatus {
   connected: boolean;
@@ -23,11 +23,7 @@ function PaiementsInner() {
   const [failed, setFailed] = useState(false);
   // Refus du prestataire de paiement : le message reste à l'écran (un toast disparaît avant d'être lu)
   const [startError, setStartError] = useState<{ message: string; reason?: string } | null>(null);
-  // Barème en vigueur (réglé par l'admin) : jamais de chiffre écrit en dur
-  const [fees, setFees] = useState<FeeRates>(DEFAULT_FEE_RATES);
-  useEffect(() => {
-    api<{ fees?: FeeRates }>("/settings/public").then((s) => s.fees && setFees(s.fees)).catch(() => null);
-  }, []);
+
 
   const loadStatus = useCallback(
     () => { setFailed(false); return api<StripeStatus>("/users/me/stripe-status").then((s) => { setStatus(s); refresh(); }).catch(() => setFailed(true)); },
@@ -70,7 +66,7 @@ function PaiementsInner() {
       <h1>Paiements</h1>
       <section className="panel">
         <h2 className="h3">Recevoir mes paiements</h2>
-        <p className="muted">Pour encaisser les ventes réalisées avec le paiement sécurisé, configurez votre compte de versement auprès de notre prestataire de paiement (Stripe). Vos coordonnées bancaires ne transitent jamais par Trocoin.</p>
+        <p className="muted">Pour encaisser les ventes réalisées avec le paiement sécurisé, configurez votre compte de versement auprès de notre prestataire de paiement. Vos coordonnées bancaires ne transitent jamais par Trocoin.</p>
         {status === null ? (failed ? <LoadError message="Impossible de lire l'état de votre compte de versement." onRetry={loadStatus} /> : <div className="skeleton" style={{ height: 40, width: 260 }} />) : status.onboardingComplete ? (
           <div className="alert alert-success" style={{ margin: 0 }}>Compte de versement actif : vos ventes vous sont versées automatiquement après confirmation de réception.</div>
         ) : status.connected ? (
@@ -90,16 +86,10 @@ function PaiementsInner() {
             {startError.reason && <span className="small" style={{ display: "block", marginTop: 6, opacity: 0.85 }}>Détail technique (mode test) : {startError.reason}</span>}
           </div>
         )}
-        {status?.mode === "mock" && <p className="small muted" style={{ marginTop: 12 }}>Environnement de démonstration : le parcours Stripe est simulé (aucune clé configurée).</p>}
+        {status?.mode === "mock" && <p className="small muted" style={{ marginTop: 12 }}>Environnement de démonstration : le parcours de versement est simulé.</p>}
       </section>
       <section className="panel" style={{ marginTop: 16 }}>
-        <h2 className="h3">Comment sont calculés les frais ?</h2>
-        <ul className="small">
-          <li>Acheteur : frais de protection de {formatBuyerFeeFormula(fees)}, affichés séparément du prix avant paiement.</li>
-          <li>Vendeur : commission de {formatPercent(fees.commissionPercent)} retenue sur le versement.</li>
-          <li>Le barème appliqué à une vente est celui en vigueur au moment du paiement : il ne change plus ensuite.</li>
-          <li>Aucun frais sur les remises en main propre payées hors plateforme — mais aucune protection non plus.</li>
-        </ul>
+        <h2 className="h3">Bon à savoir</h2>
         {user?.accountType === "particulier" && <p className="small muted" style={{ margin: 0 }}>Au-delà de 30 ventes ou 2 000 € par an, la réglementation européenne (DAC7) nous oblige à déclarer vos revenus : nous vous demanderons alors des informations complémentaires.</p>}
       </section>
     </div>

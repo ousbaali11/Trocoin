@@ -90,11 +90,31 @@ export class ConversationsGateway implements OnGatewayInit, OnGatewayConnection,
       return;
     }
     client.join(userRoom(userId));
+    this.online.set(userId, (this.online.get(userId) ?? 0) + 1);
     this.logger.log(`Client connecté : user ${userId}`);
   }
 
+  /** Sockets ouverts par membre (AUDIT §62) : « en ligne » = au moins un onglet connecté, sans heure de dernière visite. */
+  private readonly online = new Map<string, number>();
+  /** Conversations ouvertes par chaque membre (tous onglets) : prévenues quand il se déconnecte, d'où qu'il parte. */
+  private readonly roomsOf = new Map<string, Set<string>>();
+  isOnline(userId: string): boolean {
+    return (this.online.get(userId) ?? 0) > 0;
+  }
+
   handleDisconnect(client: Socket) {
-    this.logger.log(`Client déconnecté : ${client.data?.userId ?? 'inconnu'}`);
+    const userId = client.data?.userId as string | undefined;
+    if (userId) {
+      const left = (this.online.get(userId) ?? 1) - 1;
+      if (left > 0) this.online.set(userId, left);
+      else {
+        this.online.delete(userId);
+        // Dernier onglet fermé : les conversations que ce socket avait ouvertes voient la pastille passer à « absent »
+        for (const room of this.roomsOf.get(userId) ?? []) this.server.to(room).emit('presence', { userId, online: false });
+        this.roomsOf.delete(userId);
+      }
+    }
+    this.logger.log(`Client déconnecté : ${userId ?? 'inconnu'}`);
   }
 
   @SubscribeMessage('join')
@@ -105,7 +125,11 @@ export class ConversationsGateway implements OnGatewayInit, OnGatewayConnection,
     try {
       await this.conversationsService.assertMember(data.conversationId, client.data.userId);
       client.join(roomName(data.conversationId));
-      return { ok: true, conversationId: data.conversationId };
+      client.to(roomName(data.conversationId)).emit('presence', { userId: client.data.userId, online: true });
+      if (!this.roomsOf.has(client.data.userId)) this.roomsOf.set(client.data.userId, new Set());
+      this.roomsOf.get(client.data.userId)!.add(roomName(data.conversationId));
+      const peerId = await this.conversationsService.peerOf(data.conversationId, client.data.userId);
+      return { ok: true, conversationId: data.conversationId, peerOnline: !!peerId && this.isOnline(peerId) };
     } catch (err) {
       return { ok: false, message: (err as Error).message };
     }

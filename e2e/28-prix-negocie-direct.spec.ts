@@ -24,8 +24,9 @@ test('proposition acceptée en direct → « Payer » au prix négocié ; répon
   const seller = await sellerCtx.newPage();
   await loginAs(buyer, seed.buyer, `/compte/messages/${conv.id}`);
   await loginAs(seller, seed.seller, `/compte/messages/${conv.id}`);
-  await expect(buyer.getByText('en direct')).toBeVisible();
-  await expect(seller.getByText('en direct')).toBeVisible();
+  // Chacun voit l'autre connecté (pastille verte, AUDIT §62) : les deux sockets sont dans la conversation
+  await expect(buyer.getByTestId('conv-avatar')).toHaveAttribute('data-online', 'true');
+  await expect(seller.getByTestId('conv-avatar')).toHaveAttribute('data-online', 'true');
 
   // Bloc A : réponses rapides repliées par défaut, commande large ; bloc B : retour dessiné (40 px, nom accessible)
   const quick = buyer.getByTestId('quick-replies');

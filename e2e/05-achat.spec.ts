@@ -43,7 +43,8 @@ test('contact, messagerie temps réel, achat, réception confirmée, avis', asyn
   await seller.mouse.click(box.x + box.width - 6, box.y + box.height - 6);
   await expect(seller).toHaveURL(conversationUrl);
   await expect(seller.getByText('Bonjour, la console est-elle toujours disponible ?')).toBeVisible();
-  await expect(seller.getByText('● en direct')).toBeVisible();
+  // Présence (AUDIT §62) : l'acheteur a la conversation ouverte → pastille verte chez le vendeur
+  await expect(seller.getByTestId('conv-avatar')).toHaveAttribute('data-online', 'true');
 
   // --- « Vu » : le vendeur a affiché la conversation → l'acheteur le voit en temps réel, avec l'heure
   await expect(buyer.getByTestId('read-status')).toHaveText(/· Vu à \d{2}:\d{2}/, { timeout: 15_000 });

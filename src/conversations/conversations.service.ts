@@ -152,6 +152,13 @@ export class ConversationsService {
     return conversation;
   }
 
+  /** L'autre membre de la conversation (pastille de présence, AUDIT §62). */
+  async peerOf(conversationId: string, userId: string): Promise<string | null> {
+    const c = await this.conversationsRepo.findOne({ where: { id: conversationId } });
+    if (!c) return null;
+    return c.buyerId === userId ? c.sellerId : c.sellerId === userId ? c.buyerId : null;
+  }
+
   async assertMember(conversationId: string, userId: string): Promise<Conversation> {
     const conversation = await this.conversationsRepo.findOne({ where: { id: conversationId } });
     if (!conversation) throw new NotFoundException('Conversation introuvable.');

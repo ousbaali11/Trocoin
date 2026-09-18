@@ -201,7 +201,7 @@ export default function TransactionPage() {
         {tx.status === "en_attente" && (
           <div className="alert" data-testid="pending-payment" role="status">
             <strong>Paiement en attente.</strong>{" "}
-            {buyer ? "Terminez le paiement sur la page sécurisée Stripe : cette page se mettra à jour automatiquement. Trocoin conserve le paiement et ne le verse au vendeur qu'une fois la réception confirmée." : "L'acheteur n'a pas encore finalisé son paiement."}
+            {buyer ? "Terminez le paiement sur la page sécurisée : cette page se mettra à jour automatiquement. Trocoin conserve le paiement et ne le verse au vendeur qu'une fois la réception confirmée." : "L'acheteur n'a pas encore finalisé son paiement."}
             {buyer && tx.checkoutUrl && (
               <div style={{ marginTop: 10 }}>
                 <a className="btn btn-primary" href={tx.checkoutUrl}>Reprendre le paiement</a>

@@ -164,7 +164,7 @@ export default function MessagesPage() {
             const checked = selected.has(c.id);
             const inner = (
               <>
-                <div style={{ aspectRatio: "1", background: "var(--ivory-warm)", borderRadius: 6, overflow: "hidden" }}>
+                <div style={{ aspectRatio: "1", background: "var(--ivory-warm)", borderRadius: "50%", overflow: "hidden" }}>
                   {c.listing?.coverUrl && (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={mediaUrl(c.listing.coverUrl)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />

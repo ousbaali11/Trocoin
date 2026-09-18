@@ -1317,6 +1317,43 @@ main:not(.admin-main) .alert a:not(.btn) {
 main:not(.admin-main) p a:not(.btn):not(.pill):hover {
   text-decoration-thickness: 2px;
 }
+/* Avatar rond de la conversation avec pastille de présence (AUDIT §62) : vert = connecté, orange = absent */
+.conv-avatar {
+  position: relative;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.15rem;
+  flex-shrink: 0;
+  overflow: visible;
+}
+.conv-avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.conv-presence {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #e8963a;
+  border: 2px solid var(--white);
+  box-shadow: 0 0 0 1px rgba(31, 41, 51, 0.08);
+}
+.conv-avatar[data-online="true"] .conv-presence {
+  background: #22c55e;
+}
+
 /* Phrases prêtes à envoyer (réponses rapides, suggestions de message) : ce sont des phrases, pas des étiquettes —
    plus de capitales ni d'interlettrage (AUDIT §60), texte compact sur deux lignes au besoin, hauteur tactile. */
 .pill-phrase {

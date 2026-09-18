@@ -95,7 +95,7 @@ export default function FormulePage() {
           );
         })}
       </div>
-      {!free && <p className="small muted" style={{ marginTop: 12 }}>Le prélèvement réel (Stripe ou PayPal) sera branché à l&apos;ouverture de la monétisation ; pour l&apos;instant la souscription est enregistrée sans paiement.</p>}
+      {!free && <p className="small muted" style={{ marginTop: 12 }}>Le prélèvement réel sera branché à l&apos;ouverture de la monétisation ; pour l&apos;instant la souscription est enregistrée sans paiement.</p>}
     </div>
   );
 }

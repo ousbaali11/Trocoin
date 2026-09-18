@@ -150,7 +150,7 @@ export class StripeConnectService {
     if (!seller?.stripeAccountId) return undefined;
     if (this.mode === 'stripe' && !seller.stripeOnboardingComplete) {
       throw new BadRequestException(
-        "Le vendeur n'a pas terminé la configuration de ses paiements. Contactez-le ou payez en main propre.",
+        "Le vendeur n'a pas terminé la configuration de son compte de versement. Contactez-le ou payez en main propre.",
       );
     }
     return seller.stripeAccountId;

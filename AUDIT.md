@@ -3346,3 +3346,11 @@ nombre de points affichés 10 ms après avoir coché le transporteur, liste en 5
 cotation d'un colis pour une destination dépend du prestataire (5 à 9 s en bac à sable) ; elle ne se voit que si
 l'acheteur ouvre la fenêtre dans les secondes qui suivent son arrivée sur une fiche jamais cotée. Compte et annonce
 temporaires supprimés.
+
+## 62. Page Paiements sans barème ni nom du prestataire ; avatar rond et pastille de présence dans la conversation — 18 septembre 2026
+
+Demande du propriétaire, livrée **sans passage des suites locales** (crédit limité ; la CI reste le garde-fou) :
+
+- Page « Paiements » : le bloc « Comment sont calculés les frais ? » est retiré (le barème ne doit pas être exposé), le bloc DAC7 est gardé sous « Bon à savoir » ; le nom du prestataire de paiement n'apparaît plus nulle part dans les textes du site (page Paiements, Formule, page de la vente, message d'un vendeur sans compte de versement). Les identifiants techniques (routes, variables) sont inchangés.
+- Conversation : la vignette carrée de l'annonce laisse place à l'**avatar rond** de l'autre membre (photo ou initiale) avec une **pastille** en haut à droite — **verte** s'il est connecté, **orange** sinon, jamais d'heure de dernière visite. Présence tenue par la passerelle (sockets ouverts par membre ; `peerOnline` dans l'accusé de `join`, évènement `presence` à l'entrée dans la conversation et à la fermeture du dernier onglet). L'indicateur « ● en direct » disparaît de l'en-tête (« différé » n'apparaît qu'en cas de coupure). Vignettes de la boîte de réception arrondies.
+- Specs `05` et `28` : l'attente de « en direct » devient l'attente de la pastille verte.

@@ -24,6 +24,8 @@ export default function ConversationPage() {
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [live, setLive] = useState(false);
+  // Présence de l'autre membre : vert = connecté, orange = absent (jamais d'heure de dernière visite)
+  const [peerOnline, setPeerOnline] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportReason, setReportReason] = useState("harcelement");
   const [reportDetails, setReportDetails] = useState("");
@@ -83,8 +85,9 @@ export default function ConversationPage() {
       inboxTimer = setTimeout(load, 250);
     };
     socket.on("connect", () => {
-      socket.emit("join", { conversationId: id }, (ack: { ok: boolean }) => {
+      socket.emit("join", { conversationId: id }, (ack: { ok: boolean; peerOnline?: boolean }) => {
         liveRef.current = !!ack?.ok;
+        setPeerOnline(!!ack?.peerOnline);
         setLive(liveRef.current);
         // (Re)connexion : tout ce qui est arrivé pendant la coupure est relu d'un coup
         load();
@@ -114,6 +117,9 @@ export default function ConversationPage() {
       setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, ...m } : x)));
     });
     // Accusé de lecture du destinataire : mes messages passent « Vu »
+    socket.on("presence", (e: { userId: string; online: boolean }) => {
+      if (e.userId !== user?.id) setPeerOnline(e.online);
+    });
     socket.on("read", (e: { conversationId: string; readerId: string; readAt: string }) => {
       if (e.conversationId !== id || e.readerId === user?.id) return;
       setMessages((prev) => prev.map((m) => (m.senderId === user?.id && !m.readAt ? { ...m, readAt: e.readAt } : m)));
@@ -285,19 +291,20 @@ export default function ConversationPage() {
       <h1 className="sr-only">Conversation avec {conv.other?.displayName ?? "un membre"}{conv.listing ? ` à propos de ${conv.listing.title}` : ""}</h1>
       <header className="conv-header" style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", padding: "12px 16px", borderBottom: "1px solid var(--line-soft)" }}>
         <BackLink href="/compte/messages" label="Retour aux messages" />
-        {conv.listing && (
-          <Link href={`/annonces/${conv.listing.id}`} aria-label={`Voir l'annonce ${conv.listing.title}`} style={{ width: 44, height: 44, borderRadius: 6, overflow: "hidden", background: "var(--ivory-warm)", flexShrink: 0 }}>
-            {conv.listing.coverUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={mediaUrl(conv.listing.coverUrl)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-            )}
-          </Link>
-        )}
+        <div className="conv-avatar" data-testid="conv-avatar" data-online={peerOnline ? "true" : "false"} title={peerOnline ? "En ligne" : "Absent"}>
+          {conv.other?.avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={mediaUrl(conv.other.avatarUrl)} alt="" />
+          ) : (
+            <span aria-hidden="true">{(conv.other?.displayName ?? "?").trim().charAt(0).toUpperCase()}</span>
+          )}
+          <span className="conv-presence" role="img" aria-label={peerOnline ? "En ligne" : "Absent"} />
+        </div>
         <div style={{ minWidth: 160, flex: 1 }}>
           <div className="row" style={{ gap: 8 }}>
             <strong style={{ whiteSpace: "nowrap" }}>{conv.other?.displayName}</strong>
             {conv.other && !conv.other.deleted && <Link href={`/vendeurs/${conv.other.id}`} className="small">Profil</Link>}
-            <span className="small muted" title={live ? "Connexion temps réel active" : "Mode différé"}><span aria-hidden="true">{live ? "● " : "○ "}</span>{live ? "en direct" : "différé"}</span>
+            {!live && <span className="small muted" title="Connexion temps réel interrompue : relecture régulière">différé</span>}
           </div>
           {conv.listing ? (
             <Link href={`/annonces/${conv.listing.id}`} className="small muted" style={{ display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
