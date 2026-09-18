@@ -45,7 +45,7 @@
     "sharp": "^0.35.4",
     "socket.io": "^4.7.5",
     "sqlite3": "^6.0.1",
-    "stripe": "^16.9.0",
+    "stripe": "^22.6.2",
     "typeorm": "^0.3.31"
   },
   "devDependencies": {
