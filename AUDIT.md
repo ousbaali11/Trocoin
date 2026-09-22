@@ -3564,3 +3564,14 @@ endpoints répartis entre deux environnements Stripe isolés). Vérification 1.3
   générait trois. L'endpoint `trocoin_wb_test` n'envoie donc rien à cette URL : à vérifier côté Stripe (URL exacte, portée
   « comptes connectés », évènement `account.updated`, activé) — un « envoi d'évènement de test » depuis sa fiche doit
   apparaître dans `/health.stripeWebhooks` (`accepted`, `lastType`). Comptes temporaires supprimés (204).
+
+**CLOS — 22 septembre 2026, 1.38.4.** Cause finale trouvée par le propriétaire : deux destinations Stripe presque homonymes dans le
+même environnement de test ; la première écoutait `v2.core.account.updated` (nouveau format d'évènement, version d'API
+`2026-06-24.dahlia`, non reconnu par le code), la bonne (`we_1UITNQ5YWLqgMw96vR9lw2bA`, `account.updated` classique, portée
+« comptes connectés ») a reçu un nouveau secret, posé sur Render ; l'autre a été désactivée. Preuve : `/health` → secrets
+présents et bien formés ; formulaire rejoué (compte temporaire, mobile) → **`account.updated` reçu, signature vérifiée
+(`accepted: 1, rejected: 0, lastType: account.updated`), appliqué au compte : `payout.webhookAt` daté 9 s après l'envoi du
+formulaire, page jamais rechargée**. Compte temporaire supprimé. Le webhook plateforme (nouvelle URL) était déjà clos.
+Pour mémoire : le format `v2.core.account.updated` (« thin events », API v2) n'est pas pris en charge ; il ne le sera que
+si Stripe retire l'évènement classique `account.updated` — rien d'urgent, les destinations « classiques » restent prises en
+charge pour les comptes existants.
