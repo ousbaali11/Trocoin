@@ -94,6 +94,7 @@ export class Transaction {
   @Column({ type: 'varchar', default: 'main_propre' })
   deliveryMethod: DeliveryMethod;
 
+  @Index()
   @Column({ nullable: true })
   providerPaymentId?: string;
 

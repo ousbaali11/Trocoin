@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Fraunces, Public_Sans } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
@@ -18,6 +18,9 @@ export const metadata: Metadata = {
   openGraph: { siteName: "Trocoin", locale: "fr_FR", type: "website" },
   robots: { index: true, follow: true },
 };
+
+/** Couleur de la barre du navigateur mobile (AUDIT §69, avec le manifeste). */
+export const viewport: Viewport = { themeColor: "#0f7b5f" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

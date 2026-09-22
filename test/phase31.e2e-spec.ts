@@ -50,7 +50,7 @@ describe('Phase 31 : annonces sans expiration, verrous anti-fraude après public
     const p1 = (await upload(draft.id, user.auth).expect(201)).body[0];
     const p2 = (await upload(draft.id, user.auth, 'b.png').expect(201)).body[0];
     expect(p1.lockedAt ?? null).toBeNull();
-    await request(server).patch(`/listings/${draft.id}`).set(user.auth).send({ categorySlug: 'informatique', attributes: { marque: 'Lenovo' } }).expect(200);
+    await request(server).patch(`/listings/${draft.id}`).set(user.auth).send({ categorySlug: 'informatique', attributes: { marque: 'Lenovo', type_produit: 'Ordinateur portable' } }).expect(200); // AUDIT §69 : la publication exige les attributs obligatoires
     await request(server).patch(`/listings/${draft.id}/photos/order`).set(user.auth).send({ photoIds: [p2.id, p1.id] }).expect(200);
     await request(server).delete(`/listings/${draft.id}/photos/${p1.id}`).set(user.auth).expect(204);
 

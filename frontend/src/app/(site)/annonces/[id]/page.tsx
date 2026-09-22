@@ -17,6 +17,7 @@ import { ExpandableText } from "@/components/listing/ExpandableText";
 import { ReportListingButton } from "@/components/listing/ReportListingButton";
 import { CardCarousel } from "@/components/listing/CardCarousel";
 import { ViewedMarker } from "@/components/listing/ViewedMarker";
+import { SoldBanner } from "@/components/listing/SoldBanner";
 import { ApproxMapDynamic } from "@/components/ui/DynamicMap";
 import styles from "./listing.module.css";
 
@@ -123,9 +124,9 @@ export default async function ListingPage({ params }: { params: Promise<{ id: st
         </ol>
       </nav>
 
-      {listing.status !== "en_ligne" && (
-        <div className={`alert ${listing.status === "vendue" ? "alert-success" : "alert-info"}`}>
-          {listing.status === "vendue" && (isOwner ? "Vendu : votre article a été acheté. L'annonce n'apparaît plus dans les résultats ; elle sera supprimée automatiquement quand l'acheteur aura reçu l'article. Si la vente est annulée, vous pourrez la remettre en ligne depuis Mes annonces." : "Vendu : cet article a trouvé preneur et n'est plus disponible à l'achat. Découvrez des annonces similaires ci-dessous.")}
+      {listing.status === "vendue" && <SoldBanner sellerId={listing.userId} />}
+      {listing.status !== "en_ligne" && listing.status !== "vendue" && (
+        <div className="alert alert-info">
           {listing.status === "expiree" && "Cette annonce a expiré."}
           {listing.status === "en_attente" && `Votre annonce est en cours de vérification par notre équipe. ${listing.moderationReason || ""}`}
           {listing.status === "refusee" && `Annonce refusée : ${listing.moderationReason || "non conforme aux règles de diffusion."}`}

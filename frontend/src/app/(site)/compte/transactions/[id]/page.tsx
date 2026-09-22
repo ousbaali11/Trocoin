@@ -247,7 +247,7 @@ export default function TransactionPage() {
               <button className="btn btn-primary" disabled={busy || (tx.deliveryMethod !== "main_propre" && (tracking.trim() || tx.deliveryTrackingNumber || "").length < 4)} onClick={() => run(() => api(`/transactions/${tx.id}/ship`, { method: "POST", body: { trackingNumber: tracking.trim() || undefined } }), tx.deliveryMethod === "main_propre" ? "Acheteur prévenu." : "Expédition enregistrée.")}>
                 {tx.deliveryMethod === "main_propre" ? "Je suis prêt pour la remise" : "Confirmer l'expédition"}
               </button>
-              <button className="btn btn-ghost" disabled={busy} onClick={async () => (await confirm({ title: "Annuler la vente ?", text: "L'acheteur sera intégralement remboursé et l'annonce restera en ligne.", confirmLabel: "Annuler la vente", danger: true })) && run(() => api(`/transactions/${tx.id}/cancel`, { method: "POST" }), "Vente annulée, acheteur remboursé.")}>Article indisponible : annuler</button>
+              <button className="btn btn-ghost" disabled={busy} onClick={async () => (await confirm({ title: "Annuler la vente ?", text: "L'acheteur sera intégralement remboursé. L'annonce restera marquée « Vendue » : vous pourrez la remettre en ligne depuis Mes annonces.", confirmLabel: "Annuler la vente", danger: true })) && run(() => api(`/transactions/${tx.id}/cancel`, { method: "POST" }), "Vente annulée, acheteur remboursé.")}>Article indisponible : annuler</button>
             </div>
           </div>
         )}
@@ -268,6 +268,9 @@ export default function TransactionPage() {
             {tx.autoResolution === "reception_presumee" ? "Réception considérée acquise sans action de votre part." : "Paiement encaissé avant l'expiration de l'autorisation bancaire."} Un problème avec cet achat ? <button className="btn btn-ghost btn-sm" onClick={() => setDisputeOpen(true)}>Ouvrir un litige</button> (possible jusqu&apos;au {formatDateTime(tx.disputeAllowedUntil)}).
           </p>
         )}
+        {tx.status === "sequestre" && buyer && tx.deliveryMethod !== "main_propre" && (
+          <p className="small muted" style={{ margin: "12px 0 0" }} data-testid="confirm-after-shipping">Vous pourrez confirmer la réception une fois l&apos;expédition déclarée par le vendeur. Ne confirmez jamais avant d&apos;avoir l&apos;article en main, même si le vendeur vous le demande.</p>
+        )}
         {["sequestre", "livree"].includes(tx.status) && buyer && (
           <div className="stack" style={{ marginTop: 12 }}>
             {tx.deliveryMethod === "main_propre" && tx.handoverCode && (
@@ -277,7 +280,7 @@ export default function TransactionPage() {
               </div>
             )}
             <div className="row">
-              <button className="btn btn-primary" disabled={busy} onClick={async () => (await confirm({ title: "Confirmer la réception ?", text: "Le paiement sera versé au vendeur. Vérifiez l'article avant de confirmer : cette action est définitive.", confirmLabel: "J'ai bien reçu l'article" })) && run(() => api(`/transactions/${tx.id}/confirm-delivery`, { method: "POST" }), "Réception confirmée, merci !")}>J&apos;ai bien reçu l&apos;article</button>
+              {(tx.deliveryMethod === "main_propre" || tx.status === "livree") && <button className="btn btn-primary" disabled={busy} onClick={async () => (await confirm({ title: "Confirmer la réception ?", text: "Le paiement sera versé au vendeur. Vérifiez l'article avant de confirmer : cette action est définitive.", confirmLabel: "J'ai bien reçu l'article" })) && run(() => api(`/transactions/${tx.id}/confirm-delivery`, { method: "POST" }), "Réception confirmée, merci !")}>J&apos;ai bien reçu l&apos;article</button>}
               <button className="btn btn-outline" disabled={busy} onClick={() => setDisputeOpen(true)} style={{ color: "var(--brick)" }}>Un problème ? Ouvrir un litige</button>
             </div>
           </div>

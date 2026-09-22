@@ -102,6 +102,8 @@ export interface IPaymentProvider {
   refund(providerPaymentId: string): Promise<{ status: 'rembourse' }>;
   /** Modèle platform : paie le vendeur depuis le solde de la plateforme (Stripe Transfer, rattaché à la charge d'origine). */
   transfer(params: TransferParams): Promise<{ transferId: string }>;
+  /** Virement déjà fait pour cette vente chez le prestataire (AUDIT §69 : reprise d'une réservation orpheline après 24 h). */
+  findTransfer?(transactionId: string): Promise<string | null>;
   /** Modèle platform : annule un transfert déjà fait (remboursement après versement) ; le compte du vendeur est débité. */
   reverseTransfer(transferId: string): Promise<void>;
   /**

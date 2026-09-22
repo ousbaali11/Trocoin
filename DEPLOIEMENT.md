@@ -45,7 +45,7 @@ automatiquement) ou Fly.io. Les étapes ci-dessous restent les mêmes, seule l'i
    |---|---|
    | `NODE_ENV` | `production` |
    | `PORT` | `3000` |
-   | `TRUST_PROXY` | `true` |
+   | `TRUST_PROXY` | `true` (activé d’office en production depuis 1.40.0 sauf `TRUST_PROXY=false`) |
    | `DB_TYPE` | `postgres` |
    | `DATABASE_URL` | l'URL Neon copiée à l'étape 1 |
    | `DB_POOL_MAX` | `5` |

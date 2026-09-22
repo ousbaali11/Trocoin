@@ -38,6 +38,15 @@ export function databaseRegion(env: Record<string, unknown> = process.env): stri
 export class HealthController {
   constructor(@InjectDataSource() private dataSource: DataSource) {}
 
+  /** Comptage mis en cache 60 s : la sonde est appelée toutes les 30 s par plusieurs superviseurs (AUDIT §69). */
+  private issuesCache: { at: number; n: number } | null = null;
+  private async paymentIssuesCount(): Promise<number> {
+    if (this.issuesCache && Date.now() - this.issuesCache.at < 60_000) return this.issuesCache.n;
+    const n = Number((await this.dataSource.query('SELECT COUNT(*) AS n FROM transactions WHERE "paymentIssue" IS NOT NULL'))[0]?.n ?? 0);
+    this.issuesCache = { at: Date.now(), n };
+    return n;
+  }
+
   @Get()
   async check() {
     try {
@@ -55,8 +64,9 @@ export class HealthController {
       siteUrl: resolveSiteUrl(),
       // Webhooks du prestataire de paiement (AUDIT §65) : présence des secrets, jamais leur valeur
       // Ventes signalées « paiement inconnu du prestataire » en attente d'une décision de l'administration (AUDIT §65)
-      paymentIssues: Number((await this.dataSource.query('SELECT COUNT(*) AS n FROM transactions WHERE "paymentIssue" IS NOT NULL'))[0]?.n ?? 0),
-      ...(process.env.PAYMENT_PROVIDER === 'stripe' ? { stripeWebhooks: { platform: !!process.env.STRIPE_WEBHOOK_SECRET, connectedAccounts: !!process.env.STRIPE_CONNECT_WEBHOOK_SECRET, platformSecretFormat: describeSecret(process.env.STRIPE_WEBHOOK_SECRET), connectedAccountsSecretFormat: describeSecret(process.env.STRIPE_CONNECT_WEBHOOK_SECRET), ...webhookTrace }, payoutAccounts: payoutSweep } : {}),
+      paymentIssues: await this.paymentIssuesCount(),
+      // AUDIT §69 : l'identifiant du compte de versement d'un membre n'est plus exposé en clair (4 derniers caractères)
+      ...(process.env.PAYMENT_PROVIDER === 'stripe' ? { stripeWebhooks: { platform: !!process.env.STRIPE_WEBHOOK_SECRET, connectedAccounts: !!process.env.STRIPE_CONNECT_WEBHOOK_SECRET, platformSecretFormat: describeSecret(process.env.STRIPE_WEBHOOK_SECRET), connectedAccountsSecretFormat: describeSecret(process.env.STRIPE_CONNECT_WEBHOOK_SECRET), ...webhookTrace, lastAccountId: webhookTrace.lastAccountId ? `…${webhookTrace.lastAccountId.slice(-4)}` : null }, payoutAccounts: payoutSweep } : {}),
     };
   }
 }

@@ -1,6 +1,7 @@
 import { Transform } from 'class-transformer';
 import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsInt, IsLatitude, IsLongitude, IsNumber, IsObject, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, MinLength, ValidateIf } from 'class-validator';
 import { CONDITIONS, ListingCondition, PRICE_TYPES, PriceType } from '../listing.entity';
+import { trimString } from './create-listing.dto';
 import { MAX_PRICE } from './create-listing.dto';
 
 /** Statuts que le propriétaire peut choisir lui-même. */
@@ -9,10 +10,10 @@ export const OWNER_STATUSES = ['en_ligne', 'vendue', 'desactivee'] as const;
 const toIntOrKeep = ({ value }: { value: unknown }) => (value === "" || value === null || value === undefined ? undefined : Number.isFinite(Number(value)) ? Math.round(Number(value)) : value);
 
 export class UpdateListingDto {
-  @IsOptional() @IsString() @MinLength(3) @MaxLength(150)
+  @Transform(trimString) @IsOptional() @IsString() @MinLength(3) @MaxLength(150)
   title?: string;
 
-  @IsOptional() @IsString() @MinLength(10) @MaxLength(5000)
+  @Transform(trimString) @IsOptional() @IsString() @MinLength(10) @MaxLength(5000)
   description?: string;
 
   @IsOptional() @IsString() @Matches(/^[a-z0-9-]{2,60}$/)
@@ -63,6 +64,6 @@ export class UpdateListingDto {
 }
 
 export class ReorderPhotosDto {
-  @IsArray() @ArrayMaxSize(20) @IsUUID('4', { each: true })
+  @IsArray() @ArrayMaxSize(100) @IsUUID('4', { each: true }) // AUDIT §69 : plus de plafond à 20 photos par annonce
   photoIds: string[];
 }

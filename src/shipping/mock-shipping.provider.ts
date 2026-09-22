@@ -111,10 +111,11 @@ export class MockShippingProvider implements IShippingProvider {
   }
 
   /** Suivi simulé : l'envoi progresse avec le temps écoulé depuis la création (utile en démonstration). */
-  async track(carrier: ShippingCarrier, trackingNumber: string): Promise<TrackingInfo> {
+  async track(carrier: ShippingCarrier, trackingNumber: string, _providerRef?: string, now?: Date): Promise<TrackingInfo> {
     const c = this.created.get(trackingNumber);
     const at = c?.at ?? Date.now();
-    const elapsedH = (Date.now() - at) / 3_600_000;
+    // Date de référence fournie par l'appelant (tâche périodique rejouée « dans le futur » par les tests, AUDIT §69)
+    const elapsedH = ((now?.getTime() ?? Date.now()) - at) / 3_600_000;
     const events: TrackingInfo['events'] = [{ at: new Date(at).toISOString(), label: 'Étiquette créée', location: 'Trocoin (simulation)' }];
     let state: TrackingInfo['state'] = 'etiquette_creee';
     if (elapsedH >= 12) {

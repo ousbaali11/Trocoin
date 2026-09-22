@@ -133,6 +133,9 @@ export function describeBoxtalRefusal(text: string): string {
   return 'le transporteur a refusé la demande : ' + [...reasons].join(' ; ') + '. Corrigez puis réessayez.';
 }
 
+/** Délai maximal d'un appel au prestataire (AUDIT §69). */
+const FETCH_TIMEOUT_MS = 15_000;
+
 export class BoxtalShippingProvider implements IShippingProvider {
   readonly name = 'boxtal';
   private readonly logger = new Logger('Shipping(boxtal)');
@@ -175,6 +178,7 @@ export class BoxtalShippingProvider implements IShippingProvider {
     let res: Response;
     try {
       res = await fetch(`${base}/iam/account-app/token`, {
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         method: 'POST',
         headers: { Authorization: `Basic ${Buffer.from(`${this.accessKey}:${this.secretKey}`).toString('base64')}`, Accept: 'application/json' },
       });
@@ -195,6 +199,7 @@ export class BoxtalShippingProvider implements IShippingProvider {
     let res: Response;
     try {
       res = await fetch(`${base}${path}`, {
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         method,
         headers: { Authorization: `Bearer ${token}`, Accept: raw ? '*/*' : 'application/json', ...(body ? { 'Content-Type': 'application/json' } : {}) },
         body: body ? JSON.stringify(body) : undefined,
@@ -237,6 +242,7 @@ export class BoxtalShippingProvider implements IShippingProvider {
     const attempt = async (authHeader: string) => {
       try {
         return await fetch(`${base}/api/v1/cotation?${query.toString()}`, {
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
           method: 'GET',
           headers: { Authorization: authHeader, 'Api-Version': '1.3.7', 'Accept-Language': 'fr-FR', Accept: 'application/xml' },
         });
@@ -470,7 +476,7 @@ export class BoxtalShippingProvider implements IShippingProvider {
     const attempts: Record<string, string>[] = [{ Authorization: `Bearer ${token}` }, {}];
     for (const headers of attempts) {
       try {
-        const res = await fetch(url, { headers });
+        const res = await fetch(url, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
         if (!res.ok) continue;
         const buf = Buffer.from(await res.arrayBuffer());
         if (buf.subarray(0, 5).toString() === '%PDF-') return buf;
@@ -545,7 +551,7 @@ export class BoxtalShippingProvider implements IShippingProvider {
         for (const [host, base] of Object.entries(V3)) {
           for (const [label, pair] of [['acces:secret', `${this.accessKey}:${this.secretKey}`], ['secret:acces', `${this.secretKey}:${this.accessKey}`]] as const) {
             try {
-              const r = await fetch(`${base}/iam/account-app/token`, { method: 'POST', headers: { Authorization: `Basic ${Buffer.from(pair).toString('base64')}`, Accept: 'application/json' } });
+              const r = await fetch(`${base}/iam/account-app/token`, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS), method: 'POST', headers: { Authorization: `Basic ${Buffer.from(pair).toString('base64')}`, Accept: 'application/json' } });
               tries[`${host} ${label}`] = r.status;
             } catch (err) {
               tries[`${host} ${label}`] = (err as Error).message;
@@ -558,7 +564,7 @@ export class BoxtalShippingProvider implements IShippingProvider {
         for (const [host, base] of Object.entries(V1)) {
           for (const [label, header] of [['Basic', `Basic ${cred}`], ['nu', cred]] as const) {
             try {
-              const r = await fetch(`${base}/api/v1/cotation?${q}`, { headers: { Authorization: header, 'Api-Version': '1.3.7', 'Accept-Language': 'fr-FR', Accept: 'application/xml' } });
+              const r = await fetch(`${base}/api/v1/cotation?${q}`, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS), headers: { Authorization: header, 'Api-Version': '1.3.7', 'Accept-Language': 'fr-FR', Accept: 'application/xml' } });
               const t = await r.text();
               tries[`v1 ${host} ${label}`] = `${r.status}${r.ok ? ' ' + xmlBlocks(t, 'offer').length + ' offre(s)' : ' ' + (xmlText(t, 'error_description') || xmlText(t, 'error/message') || '').slice(0, 80)}`;
             } catch (err) {

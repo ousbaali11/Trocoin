@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { normalizeFrenchMobile } from '../common/validators/french-phone';
 import { User } from '../users/user.entity';
 import { ShopMember } from './shop-member.entity';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const MAX_MEMBERS = 10;
 
@@ -12,6 +13,7 @@ export class ShopsService {
   constructor(
     @InjectRepository(ShopMember) private membersRepo: Repository<ShopMember>,
     @InjectRepository(User) private usersRepo: Repository<User>,
+    private notifications: NotificationsService,
   ) {}
 
   private async requirePro(ownerId: string): Promise<User> {
@@ -49,6 +51,9 @@ export class ShopsService {
     const existing = await this.membersRepo.findOne({ where: { ownerId, memberId: member.id } });
     if (existing) throw new BadRequestException('Cette personne gère déjà votre boutique.');
     await this.membersRepo.save(this.membersRepo.create({ ownerId, memberId: member.id, invitedBy: ownerId }));
+    // AUDIT §69 : la personne ajoutée est prévenue et sait comment se retirer
+    const owner = await this.usersRepo.findOne({ where: { id: ownerId } });
+    await this.notifications.notify(member.id, { type: 'systeme', title: 'Vous gérez maintenant une boutique', body: `${owner?.shopName || owner?.displayName || 'Un professionnel'} vous a ajouté(e) comme membre de sa boutique : vous pouvez publier et gérer ses annonces. Pour vous retirer : Paramètres → Boutiques gérées.`, link: '/compte/parametres' });
     return this.listMembers(ownerId);
   }
 

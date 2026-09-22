@@ -259,7 +259,7 @@ export interface Message {
   /** Message automatique de suivi de vente (type « system ») : étape, vente concernée, données d'affichage. */
   systemEvent?: SystemEvent | null;
   transactionId?: string | null;
-  meta?: Record<string, string | number | null> | null;
+  meta?: (Record<string, string | number | null> & { warning?: "paiement_hors_site" | "lien_externe" | "coordonnees_bancaires" | null }) | null;
   content?: string;
   attachmentUrl?: string | null;
   offerAmount?: number | null;

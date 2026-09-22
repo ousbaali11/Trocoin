@@ -3621,3 +3621,124 @@ particulier).
 **Production 1.39.0** (§67) : au démarrage, `/health.payoutAccounts` = `{ checked: 3, reset: 2, unreachable: 0 }` — trois comptes de
 versement enregistrés, **deux orphelins remis à zéro** (dont « Jamal T. »), notifiés « Compte de versement à reconfigurer ».
 La page Paiements leur affiche « Votre configuration précédente n'est plus valable » et le parcours repart de zéro.
+
+## 69. Audit approfondi : bugs, failles, architecture, sécurité des personnes — 22 septembre 2026
+
+Quatre passes de lecture indépendantes (annonces ; paiements et versements ; comptes, messagerie et sécurité des personnes ;
+architecture, front et design), chaque constat revérifié dans le code avant correction. Dépendances : `npm audit` sans
+vulnérabilité (API et front). Aucun constat critique ; les constats hauts et moyens sont corrigés ci-dessous, les autres
+notés avec leur décision.
+
+### Sécurité des personnes (comptes, messagerie)
+
+- **Jeton de défi 2FA accepté par le temps réel** (haute) : le WebSocket vérifiait la signature du jeton sans rejeter
+  `purpose` — avec le seul mot de passe (sans le code), on pouvait lire et écrire dans la messagerie de la victime.
+  Corrigé (`conversations.gateway.ts`) ; le jeton n'est plus lu dans l'URL (journaux des proxys).
+- **Pré-détournement par le numéro** (haute) : le formulaire d'inscription enregistre un numéro jamais vérifié, mais la
+  connexion par SMS ouvrait *tout* compte portant ce numéro. Un attaquant inscrivait le numéro de la victime avec son
+  propre e-mail ; la victime, en se connectant par SMS, tombait dans ce compte (et l'attaquant y gardait l'accès par mot
+  de passe). Corrigé : connexion par SMS refusée tant que le numéro du compte n'est pas vérifié (message explicite :
+  « connectez-vous avec votre mot de passe »). La vérification du numéro à l'inscription reste différée (§11).
+- **Lien de changement d'adresse survivant au changement de mot de passe** (haute) : l'attaquant qui avait le mot de
+  passe demandait un changement d'adresse ; la victime changeait son mot de passe, mais le lien restait valable 24 h.
+  Corrigé : tout changement de mot de passe (utilisateur, réinitialisation, administrateur) annule les liens de changement
+  d'adresse et de réinitialisation en attente ; une nouvelle demande de réinitialisation annule les précédentes.
+- **Blocage incomplet** (moyenne) : la personne bloquée rejoignait encore la conversation en temps réel (présence, frappe,
+  accusés de lecture) et obtenait le numéro du vendeur par « Voir le numéro ». Corrigé : le blocage coupe le temps réel et
+  le numéro ; « Voir le numéro » est plafonné à 20 numéros par membre et par jour (en plus de la limite par adresse).
+- **Arnaques dans la messagerie** (moyenne) : aucun signal. Ajouté : détection serveur (paiement hors site — virement,
+  PayPal, Lydia, Wero, coupons, WhatsApp… —, lien vers un autre site, IBAN ou numéro de carte) → avertissement porté par le
+  message (`meta.warning`) et affiché au destinataire ; rappel permanent « Ne payez jamais en dehors de Trocoin » en tête
+  de chaque conversation. Rien n'est bloqué (un lien peut être légitime).
+- **Énumération** (moyenne) : la connexion répondait « compte créé par SMS sans mot de passe » pour un identifiant
+  existant. Corrigé : message unique ; le conseil « Mot de passe oublié » est affiché à tous par la page de connexion. Les
+  messages distincts de l'inscription (numéro/e-mail/pseudo déjà pris) sont conservés (lisibilité), noté.
+- **Second facteur** (moyenne) : verrou par compte (5 échecs → 15 min) et défi à usage unique (`jti`), en plus de la
+  limite par adresse. **Compteur d'essais OTP** rendu atomique (incrément conditionnel en base).
+- **Suspension par signalement** : sessions révoquées comme depuis la fiche. **`/health`** : identifiant du compte de
+  versement masqué (4 derniers caractères), comptage des incidents mis en cache 60 s. **`TRUST_PROXY`** : activé d'office en
+  production (sinon dix échecs de connexion bloquaient tout le site dix minutes).
+- **Front** : politique de sécurité du contenu (`Content-Security-Policy`) sur toutes les pages — scripts et styles du
+  site seulement, connexions vers l'API (HTTP + WebSocket) et Sentry, aucun cadre tiers, aucun envoi de formulaire ailleurs.
+  Les jetons restent en `localStorage` (cookie `HttpOnly` : chantier ultérieur, noté).
+
+### Argent (paiements, séquestre, versements, livraison)
+
+- **Blocage gratuit d'une annonce** (haute) : une page de paiement jamais payée bloquait l'annonce 30 min, sans coût et
+  sans limite. Corrigé : au plus 3 pages ouvertes à la fois par acheteur (`MAX_OPEN_CHECKOUTS`), en plus de la limite par
+  adresse ; l'abandon libère la place.
+- **Plancher de 1 € contourné par une proposition de prix** : proposition < 1 € refusée, et vente refusée si le prix
+  négocié est sous 1 €.
+- **Décision admin non atomique** : « rembourser » / « libérer » / « annuler » prennent la vente par `claim()` AVANT tout
+  mouvement d'argent (comme les actions membres), relisent `transferId`, et rendent l'état en cas d'échec — plus de vendeur
+  payé ET acheteur remboursé si l'acheteur confirmait au même instant.
+- **Réception présumée sans dépôt du colis** (moyenne) : un bon d'envoi généré puis « Confirmer l'expédition » sans jamais
+  déposer le colis faisait payer le vendeur à J+7. Corrigé : avant la réception présumée, le suivi du transporteur est
+  consulté ; « étiquette créée » ou « incident » → réception non présumée, administration et vendeur prévenus, l'admin
+  tranche. Symétriquement, **colis déposé sans clic « Confirmer l'expédition »** : à l'échéance, le suivi fait foi et la
+  vente passe « expédiée » au lieu d'être remboursée (l'acheteur recevait l'objet gratuitement).
+- **Réception confirmable avant toute expédition** (moyenne) : « confirmez la réception, sinon je ne peux pas envoyer »
+  libérait le paiement puis fermait le litige. Corrigé : avec envoi, la confirmation n'est possible (API et bouton) qu'après
+  l'expédition déclarée ; texte de prudence affiché à l'acheteur.
+- **Capture à l'expédition** : refus du prestataire rendu en clair (409/502) et signalé (`paymentIssue`), plus jamais
+  « Erreur interne ». **Autorisation annulée chez le prestataire alors que l'article est expédié** : signalée à
+  l'administration (`paymentIssue`) au lieu d'une clôture silencieuse.
+- **Fuites** : `paymentIssue` (message du prestataire, identifiant de paiement) remplacé par une phrase neutre pour les
+  membres ; avis publics sans `transactionId` ni identifiants des deux membres.
+- **Versements** : le formulaire IBAN ne remplace plus un compte guidé déjà actif ; `account.updated` relit l'état chez le
+  prestataire (évènements dans le désordre) ; une réservation de virement reprise après 24 h réutilise le virement existant
+  (`transfers.list` par `transfer_group`) au lieu d'en créer un second ; client Stripe avec délai (20 s) et deux essais.
+- **Bon d'envoi non annulable** chez le prestataire à l'annulation : administration prévenue (frais de port à récupérer).
+- Notés, non corrigés : réception présumée sur numéro saisi à la main pour les ventes antérieures à §59 (plus aucune en
+  production) ; retenue des frais de port quand l'annulation est refusée (décision produit).
+
+### Annonces (dépôt, modification, suppression)
+
+- **Annonce archivée manipulable par le vendeur** (haute) : `DELETE` deux fois effaçait la preuve d'un litige ;
+  `PATCH {status:'vendue'}` la ressuscitait. Corrigé : archivée = introuvable pour le vendeur (statut, photos, doublon,
+  suppression).
+- **Brouillon publié sans contrôle** (haute) : `brouillon → vendue` rendait publique une fiche jamais vérifiée, sans
+  numéro ni quota ; `brouillon → desactivee → renouveler` contournait les contrôles du dépôt. Corrigé : « vendue »
+  seulement depuis « en ligne », pas de pause depuis un brouillon, attributs obligatoires revalidés à la publication et au
+  renouvellement (numéro, prix, attributs, quota), texte d'une fiche « vendue » vérifié aussi.
+- **Fenêtre de litige** : titre, description et prix restent figés pendant la période de réclamation d'une vente confirmée.
+- **Remontée gratuite** : pause puis remise en ligne ne rafraîchit plus la date de publication avant sept jours (tri et
+  alertes), comme le renouvellement.
+- **Import de catalogue** : bornes du dépôt appliquées (titre ≥ 3, description ≥ 10, prix 0–10 000 000 arrondi au
+  centime, ville ≤ 100, référence ≤ 100).
+- **Boutiques** : ajout d'un membre limité à 10 essais par heure (énumération des numéros), membre prévenu (avec le moyen
+  de se retirer), suppression d'annonce réservée au propriétaire (un membre peut mettre en pause). L'invitation avec
+  acceptation reste un chantier, noté.
+- **Divers** : titre de trois espaces refusé (trim avant la longueur), prix effacé au passage en « gratuit/échange »
+  (`null`, `undefined` était ignoré), réordonnancement jusqu'à 100 photos, favoris sans annonces retirées/refusées/en
+  pause, signalements sans l'administrateur ni sa note, `createdBy`/`externalRef`/`moderationReason` hors des projections
+  publiques, compteur de vues dédoublonné (une vue par adresse et par annonce par heure, limite dédiée), duplication
+  limitée et sans compteurs copiés, recherche de la console avec `%`/`_` échappés.
+- **Baisse de prix** : les membres qui ont l'annonce en favori sont prévenus.
+- Notés, non corrigés : quotas vérifiés puis écrits sans verrou (dépassement par requêtes parallèles, faible enjeu) ;
+  `facets` chargeant jusqu'à 3 × 2 000 entités avec filtres d'attributs (à passer en SQL avec la recherche géographique).
+
+### Architecture, robustesse, front
+
+- **Transactions SQL** : archivage, effacement d'annonce et de compte dans une seule transaction (un redémarrage au milieu
+  laissait un compte à moitié effacé) ; fichiers effacés après validation.
+- **Délais** : appels Boxtal limités à 15 s ; appels SSR du front limités à 8 s ; client Stripe 20 s.
+- **Pages d'erreur** : `error.tsx` / `global-error.tsx` en français avec « Réessayer » (pas de `loading.tsx` : un squelette
+  ferait partir la réponse en 200 avant le `notFound()` d'une annonce retirée, vérifié en local) ;
+  bannière « Vendu » décidée côté client (le vendeur lisait le texte du public) ; manifeste et couleur de thème (écran
+  d'accueil) ; vignette servie sur petit écran (`srcset`) ; sitemap laissé à la demande (en `revalidate` il se figeait au build
+  quand l'API dort — vérifié en local) ;
+  arrêt propre de Nest (`enableShutdownHooks`).
+- **Requêtes** : boîte de réception (trois requêtes par conversation → deux groupées + un profil par interlocuteur),
+  liste des ventes (profils dédoublonnés) ; index `transactions.providerPaymentId`, `listings.publishedAt`, index partiel
+  `transactions.paymentIssue` (migration `IndexRechercheEtWebhooks`).
+- Notés, non corrigés : recherche géographique en mémoire (2 000 lignes) et alertes non bornées (à passer en SQL) ;
+  messages d'une conversation non paginés ; balayage Stripe à chaque démarrage ; `STORAGE_PROVIDER=local` non interdit en
+  production (à vérifier une fois sur Render : `s3`) ; Web Push, résumé e-mail, suivi de colis automatique (idées produit).
+
+### Vérification
+
+- Tests : `test/phase41.e2e-spec.ts` (8 scénarios : temps réel et blocage, connexion SMS refusée, lien d'adresse annulé,
+  avertissements d'arnaque et proposition < 1 €, annonces, réception après expédition + réception présumée suspendue,
+  colis déposé sans déclaration, plafond de pages de paiement + avis publics) ; deux tests existants adaptés aux nouvelles
+  règles (phase26 : avis sans identifiants ; phase31 : attribut obligatoire à la publication).

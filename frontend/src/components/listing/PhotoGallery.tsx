@@ -60,7 +60,7 @@ export function PhotoGallery({ photos, title, listingId, favoritesCount, showAct
     <div>
       <div style={{ position: "relative", aspectRatio: "4/3", background: "var(--ink)", borderRadius: "var(--radius-lg)", overflow: "hidden" }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={current} alt={`${title} — photo ${index + 1} sur ${total}`} fetchPriority="high" decoding="async" style={{ width: "100%", height: "100%", objectFit: "contain", cursor: "zoom-in" }} onClick={() => setZoom(true)} />
+        <img src={current} srcSet={photos[index]?.thumbUrl ? `${mediaUrl(photos[index].thumbUrl!)} 480w, ${current} 1600w` : undefined} sizes="(max-width: 720px) 100vw, 640px" alt={`${title} — photo ${index + 1} sur ${total}`} fetchPriority="high" decoding="async" style={{ width: "100%", height: "100%", objectFit: "contain", cursor: "zoom-in" }} onClick={() => setZoom(true)} />
         {total > 1 && (
           <>
             <button type="button" aria-label="Photo précédente" onClick={prev} style={navBtn("left")}>‹</button>

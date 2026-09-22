@@ -4,7 +4,7 @@ import { generateRecoveryCodes, generateTotpSecret, normalizeRecoveryCode, otpau
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash, randomBytes, randomUUID } from 'crypto';
-import { Repository } from 'typeorm';
+import { IsNull, Not, Repository } from 'typeorm';
 import { normalizeFrenchMobile } from '../common/validators/french-phone';
 import { DATE_TYPE } from '../config/db';
 import { OtpService } from '../otp/otp.service';
@@ -96,6 +96,13 @@ export class AuthService {
     let user = await this.usersService.findByPhone(normalized);
     if (user?.deletedAt) throw new ForbiddenException('Ce compte a été supprimé.');
     if (user?.suspendedAt) throw new ForbiddenException('Ce compte est suspendu. Contactez le support.');
+    // AUDIT §69 : un compte créé par formulaire porte un numéro jamais vérifié ; quiconque reçoit un SMS sur ce numéro
+    // (titulaire réel après une faute de frappe, numéro recyclé) ou l'inverse (inscription avec le numéro d'autrui, puis la
+    // victime se connecte par SMS dans le compte de l'attaquant) ne doit pas entrer : mot de passe obligatoire tant que le
+    // numéro n'a pas été confirmé depuis le compte lui-même.
+    if (user && !user.phoneVerified) {
+      throw new ForbiddenException("Ce numéro appartient à un compte créé avec un mot de passe et n'a pas encore été confirmé : connectez-vous avec votre e-mail (ou nom d'utilisateur) et votre mot de passe.");
+    }
     if (!user) user = await this.usersService.createFromPhone(normalized);
     if (user.twoFactorEnabled) return this.twoFactorChallenge(user);
 
@@ -214,9 +221,8 @@ export class AuthService {
     const user = await this.usersService.findForLogin(identifier);
     const ok = user ? await verifyPassword(password, user.passwordHash) : await verifyPassword(password, DUMMY_HASH); // temps constant
     if (!user || !ok) {
-      if (user && !user.passwordHash) {
-        throw new UnauthorizedException("Ce compte a été créé par code SMS et n'a pas de mot de passe : utilisez « Mot de passe oublié » pour en définir un.");
-      }
+      // AUDIT §69 : même message quel que soit le cas (un libellé « compte créé par SMS sans mot de passe » révélait quels
+      // numéros ou e-mails sont inscrits) ; le conseil « Mot de passe oublié » est affiché par la page de connexion
       throw new UnauthorizedException('Identifiant ou mot de passe incorrect.');
     }
     if (user.deletedAt) throw new UnauthorizedException('Identifiant ou mot de passe incorrect.');
@@ -232,24 +238,42 @@ export class AuthService {
   // ------------------------------------------------------------------
 
   /** Jeton intermédiaire (5 min) : prouve que le mot de passe est bon, n'ouvre aucune session. */
+  /** Échecs du second facteur par compte (AUDIT §69) : la limite par adresse IP ne protège pas d'une attaque répartie. */
+  private readonly secondFactorFailures = new Map<string, { count: number; until: number }>();
+  /** Défis déjà consommés (identifiant `jti`) : un jeton de défi ne sert qu'une fois. */
+  private readonly usedChallenges = new Map<string, number>();
+
   private async twoFactorChallenge(user: User) {
-    const challengeToken = await this.jwtService.signAsync({ sub: user.id, purpose: 'two-factor' }, { expiresIn: '5m' });
+    const challengeToken = await this.jwtService.signAsync({ sub: user.id, purpose: 'two-factor', jti: randomUUID() }, { expiresIn: '5m' });
     return { twoFactorRequired: true as const, challengeToken, expiresIn: '5m' };
   }
 
   /** Seconde étape de la connexion : code de l'application (ou code de récupération) → session. */
   async completeTwoFactorLogin(challengeToken: string, code: string, meta: { userAgent?: string; ip?: string } = {}) {
-    let payload: { sub?: string; purpose?: string };
+    let payload: { sub?: string; purpose?: string; jti?: string; exp?: number };
     try {
       payload = await this.jwtService.verifyAsync(challengeToken);
     } catch {
       throw new UnauthorizedException('Délai dépassé : recommencez la connexion.');
     }
     if (payload.purpose !== 'two-factor' || !payload.sub) throw new UnauthorizedException('Délai dépassé : recommencez la connexion.');
+    const now = Date.now();
+    for (const [jti, exp] of this.usedChallenges) if (exp < now) this.usedChallenges.delete(jti);
+    if (payload.jti && this.usedChallenges.has(payload.jti)) throw new UnauthorizedException('Délai dépassé : recommencez la connexion.');
+    const lock = this.secondFactorFailures.get(payload.sub);
+    if (lock && lock.count >= 5 && lock.until > now) throw new ForbiddenException('Trop de codes incorrects : réessayez dans 15 minutes.');
     const user = await this.usersService.findWithSecrets(payload.sub);
     if (!user || user.deletedAt || !user.twoFactorEnabled || !user.totpSecret) throw new UnauthorizedException('Délai dépassé : recommencez la connexion.');
     if (user.suspendedAt) throw new ForbiddenException('Ce compte est suspendu. Contactez le support.');
-    await this.checkSecondFactor(user, code);
+    try {
+      await this.checkSecondFactor(user, code);
+    } catch (err) {
+      const f = lock && lock.until > now ? lock : { count: 0, until: 0 };
+      this.secondFactorFailures.set(user.id, { count: f.count + 1, until: now + 15 * 60_000 });
+      throw err;
+    }
+    this.secondFactorFailures.delete(user.id);
+    if (payload.jti) this.usedChallenges.set(payload.jti, (payload.exp ?? 0) * 1000 || now + 5 * 60_000);
     const tokens = await this.openSession(user, randomUUID(), meta);
     this.logger.log(`Connexion avec second facteur pour ${user.id}`);
     return { ...tokens, user: this.sessionUser(user) };
@@ -368,6 +392,8 @@ export class AuthService {
     const user = await this.usersService.findForLogin(identifier);
     if (!user || user.deletedAt || !user.email) return { ok: true };
     const raw = randomBytes(32).toString('base64url');
+    // AUDIT §69 : un seul lien valable à la fois (les précédents, encore dans une boîte mal protégée, cessent de valoir)
+    await this.resetRepo.update({ userId: user.id, usedAt: IsNull() }, { usedAt: new Date() });
     await this.resetRepo.save(
       this.resetRepo.create({ userId: user.id, tokenHash: hashToken(raw), expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS) }),
     );
@@ -389,6 +415,7 @@ export class AuthService {
     await this.usersService.setPasswordHash(user.id, await hashPassword(password));
     await this.resetRepo.update(stored.id, { usedAt: new Date() });
     await this.revokeAllSessions(user.id);
+    await this.invalidatePendingLinks(user);
     this.logger.log(`Mot de passe réinitialisé pour ${user.id} (sessions révoquées)`);
     return { ok: true };
   }
@@ -404,6 +431,7 @@ export class AuthService {
     const temporaryPassword = generateTemporaryPassword();
     await this.usersService.setPasswordHash(user.id, await hashPassword(temporaryPassword));
     await this.revokeAllSessions(user.id);
+    await this.invalidatePendingLinks(user);
     return { temporaryPassword };
   }
 
@@ -423,6 +451,7 @@ export class AuthService {
     if (currentPassword === newPassword) throw new BadRequestException("Le nouveau mot de passe doit être différent de l'actuel.");
     await this.usersService.setPasswordHash(userId, await hashPassword(newPassword));
     await this.revokeAllSessions(userId);
+    await this.invalidatePendingLinks(user);
     this.logger.log(`Mot de passe changé par l'utilisateur ${userId} (sessions révoquées)`);
     return { ok: true };
   }
@@ -502,6 +531,18 @@ export class AuthService {
       if (stored) await this.refreshRepo.update({ familyId: stored.familyId }, { revokedAt: new Date() });
     }
     return { loggedOut: true };
+  }
+
+  /**
+   * AUDIT §69 : après un changement de mot de passe, les liens encore en attente cessent de valoir — réinitialisations, et
+   * changements d'adresse e-mail (un attaquant qui avait le mot de passe pouvait encore cliquer son lien de changement
+   * d'adresse après que la victime a repris la main). La confirmation de l'adresse actuelle reste valable.
+   */
+  private async invalidatePendingLinks(user: Pick<User, 'id' | 'email'>): Promise<void> {
+    const now = new Date();
+    await this.resetRepo.update({ userId: user.id, usedAt: IsNull() }, { usedAt: now });
+    if (user.email) await this.verificationRepo.update({ userId: user.id, usedAt: IsNull(), email: Not(user.email) }, { usedAt: now });
+    else await this.verificationRepo.update({ userId: user.id, usedAt: IsNull() }, { usedAt: now });
   }
 
   /** Déconnexion de tous les appareils (paramètres, changement de rôle, suspension). */

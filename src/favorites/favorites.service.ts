@@ -33,7 +33,8 @@ export class FavoritesService {
   async listMine(userId: string) {
     const favorites = await this.favoritesRepo.find({ where: { userId }, order: { createdAt: 'DESC' } });
     if (favorites.length === 0) return [];
-    const listings = await this.listingsRepo.findBy({ id: In(favorites.map((f) => f.listingId)) });
+    // AUDIT §69 : une annonce refusée, en pause ou en vérification n'est plus servie (titre, prix, photo) par les favoris
+    const listings = await this.listingsRepo.findBy({ id: In(favorites.map((f) => f.listingId)), status: In(['en_ligne', 'vendue', 'expiree']) });
     const order = new Map(favorites.map((f, i) => [f.listingId, i]));
     listings.sort((a, b) => order.get(a.id)! - order.get(b.id)!);
     return this.listingsService.toCards(listings);

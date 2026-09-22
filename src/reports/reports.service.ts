@@ -63,6 +63,7 @@ export class ReportsService {
   }
 
   listMine(reporterId: string) {
-    return this.reportsRepo.find({ where: { reporterId }, order: { createdAt: 'DESC' } });
+    // AUDIT §69 : ni l'administrateur qui a traité ni sa note interne
+    return this.reportsRepo.find({ where: { reporterId }, order: { createdAt: 'DESC' }, select: ['id', 'listingId', 'reportedUserId', 'conversationId', 'reason', 'status', 'createdAt', 'handledAt'] });
   }
 }

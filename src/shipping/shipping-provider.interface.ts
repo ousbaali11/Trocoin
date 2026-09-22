@@ -142,7 +142,7 @@ export interface IShippingProvider {
   /** Achat de l'étiquette : numéro de suivi + PDF. */
   createLabel(input: CreateLabelInput): Promise<LabelResult>;
   /** Suivi d'un envoi (la référence prestataire permet le suivi par commande quand le numéro transporteur tarde). */
-  track(carrier: ShippingCarrier, trackingNumber: string, providerRef?: string): Promise<TrackingInfo>;
+  track(carrier: ShippingCarrier, trackingNumber: string, providerRef?: string, at?: Date): Promise<TrackingInfo>;
   /** Annulation d'une commande chez le prestataire (facultatif). */
   cancel?(providerRef: string): Promise<boolean>;
 }

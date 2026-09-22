@@ -103,7 +103,7 @@ export default function MesAnnoncesPage() {
   };
 
   const setStatus = (id: string, status: ListingStatus, ok: string) => act(() => api(`/listings/${id}`, { method: "PATCH", body: { status } }), ok);
-  const renew = (id: string) => act(() => api(`/listings/${id}/renew`, { method: "POST" }), "Annonce renouvelée pour 60 jours.");
+  const renew = (id: string) => act(() => api(`/listings/${id}/renew`, { method: "POST" }), "Annonce remontée en tête des résultats.");
   const duplicate = (id: string) => act(() => api(`/listings/${id}/duplicate`, { method: "POST" }), "Brouillon créé à partir de l'annonce.");
   const promote = (id: string, type: "boost" | "urgent") =>
     act(() => api(`/listings/${id}/promote`, { method: "POST", body: { type } }), type === "boost" ? "Annonce remontée en tête des résultats pour 7 jours." : "Macaron « Urgent » activé pour 7 jours.");
@@ -198,7 +198,7 @@ export default function MesAnnoncesPage() {
           </button>
           {canPause > 0 && <button type="button" className="btn btn-outline btn-sm" disabled={busy} onClick={() => bulk("pause", "mise(s) en pause")}>Mettre en pause ({canPause})</button>}
           {canRepublish > 0 && <button type="button" className="btn btn-outline btn-sm" disabled={busy} onClick={() => bulk("republish", "remise(s) en ligne")}>Remettre en ligne ({canRepublish})</button>}
-          {selectedItems.some((l) => l.status === "en_ligne") && <button type="button" className="btn btn-outline btn-sm" disabled={busy} onClick={() => bulk("renew", "renouvelée(s) pour 60 jours")}>Renouveler ({selectedItems.filter((l) => l.status === "en_ligne").length})</button>}
+          {selectedItems.some((l) => l.status === "en_ligne") && <button type="button" className="btn btn-outline btn-sm" disabled={busy} onClick={() => bulk("renew", "remontée(s) en tête des résultats")}>Renouveler ({selectedItems.filter((l) => l.status === "en_ligne").length})</button>}
         </div>
       )}
 

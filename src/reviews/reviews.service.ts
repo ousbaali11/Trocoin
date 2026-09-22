@@ -54,7 +54,8 @@ export class ReviewsService {
   /** Avis reçus, avec le pseudo public de l'auteur. */
   async listForUser(userId: string) {
     const reviews = await this.reviewsRepo.find({ where: { reviewedId: userId }, order: { createdAt: 'DESC' } });
-    return this.withAuthors(reviews, 'reviewerId');
+    // AUDIT §69 : route publique — ni identifiant de vente ni identifiants des deux membres
+    return (await this.withAuthors(reviews, 'reviewerId')).map(({ transactionId, reviewerId, reviewedId, ...pub }) => (void transactionId, void reviewerId, void reviewedId, pub));
   }
 
   async listMine(reviewerId: string) {

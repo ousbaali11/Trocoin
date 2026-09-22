@@ -5,6 +5,8 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { User } from '../users/user.entity';
 import { ShopMember } from './shop-member.entity';
 import { ShopsService } from './shops.service';
+import { Throttle } from '@nestjs/throttler';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 class InviteMemberDto {
   @IsString() @MinLength(10) @MaxLength(20)
@@ -21,6 +23,8 @@ class ShopsController {
     return this.shops.listMembers(req.user.userId);
   }
 
+  /** AUDIT §69 : l'ajout par numéro permettait d'énumérer les numéros inscrits (réponse différente) — au plus 10 essais par heure. */
+  @Throttle({ default: { limit: 10, ttl: 3_600_000 } })
   @Post('shop/members')
   invite(@Req() req: any, @Body() dto: InviteMemberDto) {
     return this.shops.addMember(req.user.userId, dto.phoneNumber);
@@ -43,7 +47,7 @@ class ShopsController {
 }
 
 @Module({
-  imports: [TypeOrmModule.forFeature([ShopMember, User])],
+  imports: [TypeOrmModule.forFeature([ShopMember, User]), NotificationsModule],
   controllers: [ShopsController],
   providers: [ShopsService],
   exports: [ShopsService],

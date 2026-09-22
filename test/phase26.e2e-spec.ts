@@ -184,7 +184,7 @@ describe('Phase 26 : suppression réelle, trace comptable anonymisée, journal T
     expect(adminTx.body.seller.id).toBe(seller.id);
     // L'avis rédigé par le compte supprimé reste sur le vendeur (auteur « Compte supprimé ») ; la conversation reste lisible
     const received = await request(server).get(`/users/${seller.id}/reviews`).expect(200);
-    const fromDeleted = (received.body.items ?? received.body).find((r: any) => r.reviewerId === buyer.id);
+    const fromDeleted = (received.body.items ?? received.body).find((r: any) => r.reviewer?.deleted); // AUDIT §69 : les avis publics n'exposent plus les identifiants
     expect(fromDeleted.reviewer.displayName).toBe('Compte supprimé');
     const detail = await request(server).get(`/conversations/${conv.body.id}`).set(seller.auth).expect(200);
     expect(detail.body.other.displayName).toBe('Compte supprimé');

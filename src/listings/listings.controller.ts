@@ -153,10 +153,11 @@ export class ListingsController {
 
   /** Fiche affichée dans un navigateur : compte une vue (hors propriétaire) et, pour un membre, alimente « Annonces consultées ». */
   @UseGuards(OptionalJwtAuthGuard)
+  @Throttle({ default: { limit: 120, ttl: 600_000 } })
   @Post(':id/view')
   @HttpCode(200)
   view(@Req() req: any, @Param('id', ParseUUIDPipe) id: string) {
-    return this.listingsService.recordView(id, req.user?.userId);
+    return this.listingsService.recordView(id, req.user?.userId, req.ip);
   }
 
   /** « Voir le numéro » : membre connecté seulement ; compte le clic pour le vendeur. Limité (anti-collecte de numéros, audit §42). */
@@ -186,6 +187,7 @@ export class ListingsController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { limit: 20, ttl: 600_000 } })
   @Post(':id/duplicate')
   duplicate(@Req() req: any, @Param('id', ParseUUIDPipe) id: string) {
     return this.listingsService.duplicateOwn(id, req.user.userId);

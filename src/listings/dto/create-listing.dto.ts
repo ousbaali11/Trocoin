@@ -4,15 +4,20 @@ import { CONDITIONS, ListingCondition, PRICE_TYPES, PriceType } from '../listing
 
 export const MAX_PRICE = 10_000_000;
 
+/** Chaînes venues d'un formulaire : espaces autour retirés avant les contrôles de longueur (AUDIT §69). */
+export const trimString = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
+
 /** Entiers venus d'un formulaire (chaînes) : vide → absent, sinon nombre entier ou tel quel (rejeté par IsInt). */
 const toInt = ({ value }: { value: unknown }) => (value === "" || value === null || value === undefined ? undefined : Number.isFinite(Number(value)) ? Math.round(Number(value)) : value);
 
 export class CreateListingDto {
+  @Transform(trimString) // AUDIT §69 : « 3 espaces » passait la longueur minimale
   @IsString()
   @MinLength(3)
   @MaxLength(150)
   title: string;
 
+  @Transform(trimString)
   @IsString()
   @MinLength(10)
   @MaxLength(5000)

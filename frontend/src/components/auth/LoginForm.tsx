@@ -92,7 +92,12 @@ export function LoginForm() {
       {next !== "/compte" && (
         <div className="alert alert-info">Connectez-vous pour continuer votre action. Vous y serez ramené automatiquement.</div>
       )}
-      {error && <div className="alert alert-error" role="alert">{error}</div>}
+      {error && (
+        <div className="alert alert-error" role="alert">
+          {error}
+          <div className="small" style={{ marginTop: 4 }}>Compte créé par code SMS, sans mot de passe ? Utilisez « Mot de passe oublié » pour en définir un.</div>
+        </div>
+      )}
 
       <form onSubmit={submit}>
         <div className="field">

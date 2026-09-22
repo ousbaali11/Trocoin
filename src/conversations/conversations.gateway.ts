@@ -65,11 +65,12 @@ export class ConversationsGateway implements OnGatewayInit, OnGatewayConnection,
     });
     server.use(async (socket, next) => {
       try {
-        const token =
-          (socket.handshake.auth?.token as string) ||
-          (socket.handshake.query?.token as string);
+        // AUDIT §69 : jeton lu dans `auth` seulement (jamais dans l'URL, qui finit dans les journaux des proxys)
+        const token = socket.handshake.auth?.token as string;
         if (!token) throw new Error('Token manquant');
         const payload = await this.jwtService.verifyAsync(token);
+        // Jeton intermédiaire (défi de double authentification) : n'ouvre jamais une session, ni HTTP ni temps réel (AUDIT §69)
+        if (payload.purpose) throw new Error('Jeton intermédiaire refusé');
         const user = await this.usersService.findById(payload.sub);
         if (!user || user.deletedAt || user.suspendedAt) throw new Error('Compte indisponible');
         socket.data.userId = user.id;
@@ -124,6 +125,10 @@ export class ConversationsGateway implements OnGatewayInit, OnGatewayConnection,
     }
     try {
       await this.conversationsService.assertMember(data.conversationId, client.data.userId);
+      // AUDIT §69 : blocage dans un sens ou l'autre → pas de temps réel (présence, frappe, lectures) pour l'un ni l'autre
+      if (await this.conversationsService.isBlockedConversation(data.conversationId, client.data.userId)) {
+        return { ok: false, message: 'Vous ne pouvez plus échanger avec cet utilisateur.', blocked: true };
+      }
       client.join(roomName(data.conversationId));
       client.to(roomName(data.conversationId)).emit('presence', { userId: client.data.userId, online: true });
       if (!this.roomsOf.has(client.data.userId)) this.roomsOf.set(client.data.userId, new Set());

@@ -29,6 +29,20 @@ export const QUICK_REPLIES = [
   'Merci, je ne suis plus intéressé(e).',
 ];
 
+/**
+ * Signaux d'arnaque dans un message (AUDIT §69) : demande de paiement hors plateforme, lien vers un autre site, IBAN ou
+ * numéro de carte. Renvoie un code d'avertissement, ou null. Heuristique volontairement simple et explicable.
+ */
+export function detectScamSignals(text: string): 'paiement_hors_site' | 'lien_externe' | 'coordonnees_bancaires' | null {
+  const t = text.toLowerCase();
+  if (/\b[a-z]{2}\d{2}(?:\s?[a-z0-9]{4}){3,7}\b/i.test(text.replace(/[-.]/g, ' ')) && /\bfr\d{2}\b|iban|rib\b/i.test(t)) return 'coordonnees_bancaires';
+  if (/\b(?:\d[ -]?){13,19}\b/.test(text) && /carte|cb\b|visa|mastercard/.test(t)) return 'coordonnees_bancaires';
+  if (/paypal|western\s*union|moneygram|mandat cash|virement|lydia|wero|revolut|coupon|pcs\b|neosurf|transcash|paysafe|hors (?:du )?site|hors trocoin|en dehors (?:du site|de trocoin)|lien de paiement|whatsapp|t[ée]l[ée]gram/.test(t)) return 'paiement_hors_site';
+  const links = t.match(/https?:\/\/[^\s]+|\b[a-z0-9-]+\.(?:fr|com|net|org|io|co|shop|store|link|xyz|me)(?:\/[^\s]*)?/g) || [];
+  if (links.some((l) => !/(^|\/\/|\.)trocoin\.fr(\/|$)/.test(l))) return 'lien_externe';
+  return null;
+}
+
 @Injectable()
 export class ConversationsService {
   private readonly logger = new Logger('Conversations');
@@ -108,12 +122,26 @@ export class ConversationsService {
     const coverByListing = new Map<string, string>();
     for (const p of photos) if (!coverByListing.has(p.listingId)) coverByListing.set(p.listingId, p.url);
 
+    // AUDIT §69 : trois requêtes par conversation (profil, dernier message, non-lus) → une par interlocuteur distinct et deux groupées
+    const ids = conversations.map((c) => c.id);
+    const summaries = new Map<string, unknown>();
+    const unreadRows = await this.messagesRepo.createQueryBuilder('m')
+      .select('m.conversationId', 'conversationId').addSelect('COUNT(*)', 'n')
+      .where('m.conversationId IN (:...ids)', { ids }).andWhere('m.senderId != :userId', { userId }).andWhere('m.readAt IS NULL')
+      .groupBy('m.conversationId').getRawMany<{ conversationId: string; n: string }>();
+    const unreadBy = new Map(unreadRows.map((r) => [r.conversationId, Number(r.n)]));
+    const lastMessages = await this.messagesRepo.createQueryBuilder('m')
+      .where('m.conversationId IN (:...ids)', { ids })
+      .andWhere('m.id IN (SELECT m2.id FROM messages m2 WHERE m2."conversationId" = m."conversationId" ORDER BY m2."createdAt" DESC LIMIT 1)')
+      .getMany();
+    const lastBy = new Map(lastMessages.map((m) => [m.conversationId, m]));
     const result: any[] = [];
     for (const c of conversations) {
       const otherId = c.buyerId === userId ? c.sellerId : c.buyerId;
-      const other = await this.usersService.findPublicSummary(otherId);
-      const last = await this.messagesRepo.findOne({ where: { conversationId: c.id }, order: { createdAt: 'DESC' } });
-      const unread = await this.messagesRepo.count({ where: { conversationId: c.id, senderId: Not(userId), readAt: IsNull() } });
+      if (!summaries.has(otherId)) summaries.set(otherId, await this.usersService.findPublicSummary(otherId));
+      const other = summaries.get(otherId);
+      const last = lastBy.get(c.id) ?? null;
+      const unread = unreadBy.get(c.id) ?? 0;
       const listing = listingsById.get(c.listingId);
       result.push({
         ...c,
@@ -157,6 +185,12 @@ export class ConversationsService {
     const c = await this.conversationsRepo.findOne({ where: { id: conversationId } });
     if (!c) return null;
     return c.buyerId === userId ? c.sellerId : c.sellerId === userId ? c.buyerId : null;
+  }
+
+  /** Blocage dans un sens ou l'autre entre les deux membres (AUDIT §69 : coupe aussi le temps réel). */
+  async isBlockedConversation(conversationId: string, userId: string): Promise<boolean> {
+    const peerId = await this.peerOf(conversationId, userId);
+    return !!peerId && (await this.usersService.isBlockedEitherWay(userId, peerId));
   }
 
   async assertMember(conversationId: string, userId: string): Promise<Conversation> {
@@ -357,7 +391,10 @@ export class ConversationsService {
     const trimmed = (content || '').trim();
     if (!trimmed) throw new BadRequestException('Message vide.');
     if (trimmed.length > 2000) throw new BadRequestException('Message trop long (2000 caractères max).');
-    return this.persist(c, otherId, this.messagesRepo.create({ conversationId, senderId, type: 'text', content: trimmed }), trimmed.length > 80 ? trimmed.slice(0, 77) + '…' : trimmed);
+    // AUDIT §69 : signaux d'arnaque classiques (paiement hors Trocoin, lien externe, IBAN, coordonnées bancaires) → le
+    // message est livré mais porte un avertissement affiché au destinataire ; rien n'est bloqué (un lien peut être légitime)
+    const warning = detectScamSignals(trimmed);
+    return this.persist(c, otherId, this.messagesRepo.create({ conversationId, senderId, type: 'text', content: trimmed, meta: warning ? { warning } : null }), trimmed.length > 80 ? trimmed.slice(0, 77) + '…' : trimmed);
   }
 
   /** Photo dans la conversation (URL déjà vérifiée et stockée par le contrôleur). */
@@ -373,7 +410,7 @@ export class ConversationsService {
     if (senderId !== c.buyerId) throw new BadRequestException('Seul l\'acheteur peut proposer un prix.');
     const listing = await this.listingsRepo.findOne({ where: { id: c.listingId } });
     if (!listing || listing.status !== 'en_ligne') throw new BadRequestException('Cette annonce n\'est plus disponible.');
-    if (!Number.isFinite(amount) || amount <= 0 || amount > 10_000_000) throw new BadRequestException('Montant invalide.');
+    if (!Number.isFinite(amount) || amount < 1 || amount > 10_000_000) throw new BadRequestException('Montant invalide : proposez au moins 1 €.'); // AUDIT §69 : plancher du paiement sécurisé
     const pending = await this.messagesRepo.findOne({ where: { conversationId, type: 'offer', offerStatus: 'en_attente' } });
     if (pending) {
       await this.messagesRepo.update(pending.id, { offerStatus: 'retiree', offerAnsweredAt: new Date() });

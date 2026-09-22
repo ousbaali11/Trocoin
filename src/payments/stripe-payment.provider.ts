@@ -60,7 +60,7 @@ export class StripePaymentProvider implements IPaymentProvider {
     if (!key) {
       throw new Error('STRIPE_SECRET_KEY manquant : configurez-le dans .env pour utiliser PAYMENT_PROVIDER=stripe.');
     }
-    this.stripe = new Stripe(key);
+    this.stripe = new Stripe(key, { timeout: 20_000, maxNetworkRetries: 2 }); // AUDIT §69 : jamais 80 s d'attente
     this.webhookSecrets = [this.config.get<string>('STRIPE_WEBHOOK_SECRET'), this.config.get<string>('STRIPE_CONNECT_WEBHOOK_SECRET')].map((s) => (s || '').trim()).filter((s) => !!s);
     const connect = this.config.get<string>('STRIPE_CONNECT_WEBHOOK_SECRET') ? ', comptes connectés signés' : ', comptes connectés NON configurés (STRIPE_CONNECT_WEBHOOK_SECRET absent : account.updated ignoré)';
     this.logger.log(`Stripe ${key.startsWith('sk_test_') ? 'MODE TEST' : 'mode réel'} · webhook ${this.webhookSecrets.length ? 'signé' + connect : 'NON configuré (STRIPE_WEBHOOK_SECRET absent)'}`);
@@ -306,6 +306,11 @@ export class StripePaymentProvider implements IPaymentProvider {
       metadata: { transactionId: params.transactionId },
     }, { idempotencyKey: `payout-${params.transactionId}` });
     return { transferId: transfer.id };
+  }
+
+  async findTransfer(transactionId: string): Promise<string | null> {
+    const list = await this.stripe.transfers.list({ transfer_group: transactionId, limit: 1 });
+    return list.data[0]?.id ?? null;
   }
 
   async reverseTransfer(transferId: string) {

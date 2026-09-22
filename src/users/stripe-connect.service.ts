@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger, NotFoundException, OnApplicationBootstrap, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, HttpException, Injectable, Logger, NotFoundException, OnApplicationBootstrap, ServiceUnavailableException } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { NotificationsService } from '../notifications/notifications.service';
 import { payoutSweep } from './payout-sweep';
@@ -80,7 +80,7 @@ export class StripeConnectService implements OnApplicationBootstrap {
     const provider = this.config.get<string>('PAYMENT_PROVIDER') || 'mock';
     const key = this.config.get<string>('STRIPE_SECRET_KEY');
     if (provider === 'stripe' && key) {
-      this.stripe = new Stripe(key);
+      this.stripe = new Stripe(key, { timeout: 20_000, maxNetworkRetries: 2 }); // AUDIT §69
       this.mode = 'stripe';
       this.testMode = key.startsWith('sk_test_') || key.startsWith('rk_test_');
     } else if (provider === 'disabled') {
@@ -254,6 +254,9 @@ export class StripeConnectService implements OnApplicationBootstrap {
           return null;
         });
       }
+      if (existing && existing.type !== 'custom' && user.stripeOnboardingComplete) {
+        throw new BadRequestException('Votre compte de versement (parcours guidé) est déjà actif : il ne peut pas être remplacé par le formulaire. Pour le modifier, passez par « Configurer mon compte de versement ».');
+      }
       if (existing && existing.type === 'custom') {
         await stripe.accounts.update(accountId!, { account_token: (await accountToken()).id });
         const bank = await stripe.accounts.createExternalAccount(accountId!, { external_account: externalAccount as unknown as string });
@@ -283,6 +286,7 @@ export class StripeConnectService implements OnApplicationBootstrap {
 
   /** Erreur de saisie signalée par le prestataire → message en français sur le bon champ ; autre refus → 503 en clair. */
   private formError(err: unknown, userId: string) {
+    if (err instanceof HttpException) return err;
     const e = err as { type?: string; code?: string; param?: string; message?: string };
     if (e?.type === 'StripeInvalidRequestError' && e.param && !/Connect|platform/i.test(e.message || '')) {
       const field = e.param;
@@ -318,6 +322,14 @@ export class StripeConnectService implements OnApplicationBootstrap {
     const user = await this.usersService.findByStripeAccount(accountId);
     if (!user) return;
     const before = user.stripeOnboardingComplete;
+    // AUDIT §69 : les évènements ne sont pas garantis dans l'ordre — l'état courant est relu chez le prestataire quand c'est possible
+    if (this.stripe) {
+      try {
+        account = await this.stripe.accounts.retrieve(accountId);
+      } catch {
+        /* prestataire injoignable : le contenu de l'évènement fait foi */
+      }
+    }
     const status = await this.recordAccountState(user.id, account);
     await this.usersService.setPayoutInfo(user.id, { payoutWebhookAt: new Date() });
     this.logger.log(`account.updated reçu pour ${accountId} (membre ${user.id}) : ${status.onboardingComplete ? 'actif' : 'en attente'}${status.requirements.length ? ` — manque ${status.requirements.join(', ')}` : ''}`);

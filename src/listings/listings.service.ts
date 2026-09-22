@@ -25,7 +25,7 @@ import { User } from '../users/user.entity';
 import { Conversation } from '../conversations/conversation.entity';
 import { isFrenchMobileNumber } from '../common/validators/french-phone';
 import { UsersService } from '../users/users.service';
-import { CreateListingDto } from './dto/create-listing.dto';
+import { CreateListingDto, MAX_PRICE } from './dto/create-listing.dto';
 import { SearchListingsDto } from './dto/search-listings.dto';
 import { UpdateListingDto } from './dto/update-listing.dto';
 import { detectFormat, ImportRow, parseCsv, parseXml } from './import/listing-import';
@@ -34,6 +34,7 @@ import { ListingView } from './listing-view.entity';
 import { Listing, ListingStatus } from './listing.entity';
 import { moderateText } from './moderation';
 import { RetentionService } from '../retention/retention.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 /**
  * Photos : plus de plafond par annonce (AUDIT §56, choix du propriétaire). Restent les garde-fous contre l'abus de
@@ -43,6 +44,8 @@ import { RetentionService } from '../retention/retention.service';
 export const MAX_FILES_PER_UPLOAD = 10;
 export const BOOST_DAYS = 7;
 export const URGENT_DAYS = 7;
+/** Numéros de vendeurs qu'un membre peut révéler par jour (AUDIT §69). */
+const PHONE_REVEALS_PER_DAY = 20;
 const NO_DELIVERY_ROOTS = ['immobilier', 'vehicules', 'emploi', 'services', 'vacances', 'animaux'];
 /** Fenêtre de dépôt : les photos envoyées dans ces minutes après la publication font partie de l'annonce publiée (AUDIT §54). */
 const PUBLICATION_PHOTO_WINDOW_MS = Number(process.env.PUBLICATION_PHOTO_WINDOW_MINUTES || 10) * 60_000;
@@ -107,6 +110,7 @@ export class ListingsService {
     private settings: SettingsService,
     private shops: ShopsService,
     private retention: RetentionService,
+    private notifications: NotificationsService,
   ) {}
 
   // ---------------------------------------------------------------- helpers
@@ -271,7 +275,7 @@ export class ListingsService {
       where: { userId: In([userId, ...managed]), status: Not('archivee') },
       order: { createdAt: 'DESC' },
     });
-    const [cards, stats] = await Promise.all([this.toCards(listings), this.statsFor(listings)]);
+    const [cards, stats] = await Promise.all([this.toCards(listings, { owner: true }), this.statsFor(listings)]);
     return cards.map((c) => ({ ...c, shopOwnerId: c.userId !== userId ? c.userId : undefined, stats: stats.get(c.id)! }));
   }
 
@@ -287,14 +291,38 @@ export class ListingsService {
     if (!seller || seller.deletedAt || seller.isDemoAccount || !seller.phonePublic || !isFrenchMobileNumber(seller.phoneNumber)) {
       throw new NotFoundException('Le vendeur ne communique pas son numéro : utilisez la messagerie.');
     }
+    // AUDIT §69 : une personne bloquée par le vendeur (ou qui l'a bloqué) n'obtient pas son numéro par l'annonce
+    if (viewerId !== listing.userId && (await this.usersService.isBlockedEitherWay(viewerId, listing.userId))) {
+      throw new NotFoundException('Le vendeur ne communique pas son numéro : utilisez la messagerie.');
+    }
+    // Plafond par compte et par jour (la limite par adresse IP ne protège pas d'une collecte depuis plusieurs réseaux)
+    if (viewerId !== listing.userId) this.assertPhoneRevealQuota(viewerId, listingId);
     if (viewerId !== listing.userId) await this.listingsRepo.increment({ id: listingId }, 'phoneClicksCount', 1);
     return { phoneNumber: seller.phoneNumber };
+  }
+
+  /** Numéros révélés par membre sur 24 h (en mémoire : remis à zéro au redémarrage, ce qui reste bien plus strict qu'avant). */
+  private readonly phoneReveals = new Map<string, { since: number; listings: Set<string> }>();
+  private assertPhoneRevealQuota(viewerId: string, listingId: string) {
+    const now = Date.now();
+    let entry = this.phoneReveals.get(viewerId);
+    if (!entry || now - entry.since > 86_400_000) {
+      entry = { since: now, listings: new Set() };
+      this.phoneReveals.set(viewerId, entry);
+    }
+    if (!entry.listings.has(listingId) && entry.listings.size >= PHONE_REVEALS_PER_DAY) {
+      throw new BadRequestException(`Vous avez consulté ${PHONE_REVEALS_PER_DAY} numéros aujourd'hui : utilisez la messagerie, ou réessayez demain.`);
+    }
+    entry.listings.add(listingId);
+    if (this.phoneReveals.size > 20_000) for (const [k, v] of this.phoneReveals) if (now - v.since > 86_400_000) this.phoneReveals.delete(k);
   }
 
   /** Annonce que `userId` a le droit de gérer (propriétaire ou membre de sa boutique). */
   async getManaged(listingId: string, userId: string): Promise<Listing> {
     const listing = await this.listingsRepo.findOne({ where: { id: listingId } });
-    if (!listing) throw new NotFoundException('Annonce introuvable.');
+    // AUDIT §69 : archivée = conservée pour l'administration seulement (preuve en cas de litige) — le vendeur ne peut plus
+    // la ressusciter (statut), la modifier, y toucher aux photos, ni l'effacer avant l'échéance
+    if (!listing || listing.status === 'archivee') throw new NotFoundException('Annonce introuvable.');
     if (listing.userId !== userId && !(await this.shops.canActFor(userId, listing.userId))) {
       throw new ForbiddenException("Vous n'êtes pas propriétaire de cette annonce.");
     }
@@ -339,7 +367,7 @@ export class ListingsService {
     if (lockedBrand && dto.attributes !== undefined && this.brandOf(dto.attributes) !== lockedBrand) {
       throw new BadRequestException("La marque d'une annonce publiée ne peut plus être modifiée (protection contre la tromperie). Pour vendre autre chose, déposez une nouvelle annonce.");
     }
-    if (dto.attributes !== undefined || dto.categorySlug) {
+    if (dto.attributes !== undefined || dto.categorySlug || (dto.status === 'en_ligne' && listing.status !== 'en_ligne')) { // AUDIT §69 : attributs obligatoires revalidés à la publication
       patch.attributes = this.validateAttributesFor(category!, root!, dto.attributes ?? listing.attributes, willPublish);
     }
 
@@ -348,11 +376,11 @@ export class ListingsService {
     if (willPublish) this.validatePrice(priceType, price);
     if (dto.priceType !== undefined) patch.priceType = dto.priceType;
     if (dto.price !== undefined) patch.price = dto.price;
-    if (['gratuit', 'echange', 'sur_demande'].includes(priceType)) patch.price = undefined as any;
+    if (['gratuit', 'echange', 'sur_demande'].includes(priceType)) patch.price = null as any; // AUDIT §69 : `undefined` laissait l'ancien prix en base
     // AUDIT §63 : pendant une vente payée, titre, description et prix sont figés (c'est ce que l'acheteur a payé et
     // ce qu'un litige devra juger)
     if ((dto.title !== undefined && dto.title.trim() !== listing.title) || (dto.description !== undefined && dto.description.trim() !== listing.description) || (dto.price !== undefined && dto.price !== listing.price)) {
-      if (await this.hasActiveSale(listing.id)) throw new BadRequestException("Une vente payée est en cours : le titre, la description et le prix de l'annonce ne peuvent pas être modifiés avant la fin de la vente.");
+      if ((await this.hasActiveSale(listing.id)) || (await this.hasSaleUnderDispute(listing.id))) throw new BadRequestException("Une vente payée est en cours (ou sa période de réclamation n'est pas terminée) : le titre, la description et le prix de l'annonce ne peuvent pas être modifiés avant la fin de la vente.");
     }
 
     for (const key of ['title', 'description', 'condition', 'city', 'postalCode', 'deliveryAvailable', 'weightGrams', 'lengthCm', 'widthCm', 'heightCm'] as const) {
@@ -370,6 +398,10 @@ export class ListingsService {
       // « en pause » puis « renouveler » contournait la modération), jamais pendant une vente payée en cours (l'annonce
       // « vendue » mise en pause puis renouvelée revenait en ligne pendant la vente).
       if (dto.status !== from && ['en_attente', 'refusee'].includes(from)) throw new BadRequestException("Cette annonce attend une décision de notre équipe : son statut ne peut pas être changé.");
+      // AUDIT §69 : un brouillon (jamais vérifié, sans numéro ni quota) passait « vendue » — visible publiquement — ou « en pause »
+      // puis « renouvelée » sans les contrôles du dépôt
+      if (dto.status === 'vendue' && !['en_ligne', 'vendue'].includes(from)) throw new BadRequestException('Seule une annonce en ligne peut être marquée vendue.');
+      if (dto.status === 'desactivee' && from === 'brouillon') throw new BadRequestException('Un brouillon ne se met pas en pause : publiez-le ou supprimez-le.');
       if (dto.status !== from && (await this.hasActiveSale(listing.id))) throw new BadRequestException("Une vente est en cours sur cette annonce : elle ne peut pas être remise en ligne tant que la vente n'est pas terminée ou annulée.");
       if (dto.status === 'en_ligne') {
         if (!['brouillon', 'desactivee', 'expiree', 'en_ligne', 'vendue'].includes(from)) {
@@ -387,7 +419,7 @@ export class ListingsService {
     const newTitle = patch.title ?? listing.title;
     const newDesc = patch.description ?? listing.description;
     const targetStatus = patch.status ?? listing.status;
-    if (targetStatus === 'en_ligne' && (dto.title !== undefined || dto.description !== undefined || dto.status === 'en_ligne')) {
+    if (['en_ligne', 'vendue'].includes(targetStatus) && (dto.title !== undefined || dto.description !== undefined || dto.status === 'en_ligne')) { // AUDIT §69 : une fiche « vendue » reste publique, son texte est vérifié aussi
       const mod = moderateText(newTitle, newDesc);
       if (mod.flagged) {
         patch.status = 'en_attente';
@@ -397,12 +429,22 @@ export class ListingsService {
       }
     }
     if (patch.status === 'en_ligne' && listing.status !== 'en_ligne') {
-      const now = new Date();
-      patch.publishedAt = now;
+      // AUDIT §69 : pause puis remise en ligne remontait l'annonce en tête (et réveillait les alertes) sans limite — la date de
+      // publication n'est rafraîchie que si l'ancienne a plus de sept jours, comme pour le renouvellement
+      const recent = !!listing.publishedAt && Date.now() - new Date(listing.publishedAt).getTime() < 7 * 86_400_000;
+      patch.publishedAt = recent ? listing.publishedAt : new Date();
     }
     if (listing.userId !== userId) patch.createdBy = userId;
 
     await this.listingsRepo.update(listingId, patch);
+    // Baisse de prix sur une annonce en ligne (AUDIT §69) : les membres qui l'ont en favori sont prévenus
+    if (typeof patch.price === 'number' && listing.price && patch.price < listing.price && targetStatus === 'en_ligne') {
+      const favs = await this.favoritesRepo.find({ where: { listingId }, take: 500 });
+      for (const f of favs) {
+        if (f.userId === listing.userId) continue;
+        await this.notifications.notify(f.userId, { type: 'alerte_recherche', title: 'Baisse de prix sur un favori', body: `« ${newTitle} » passe de ${listing.price} € à ${patch.price} €.`, link: `/annonces/${listingId}` });
+      }
+    }
     // Publication (ou soumission à la vérification) : les photos présentes à cet instant sont verrouillées
     if ((patch.status === 'en_ligne' || patch.status === 'en_attente') && listing.status !== patch.status) await this.lockPhotos(listingId);
     return this.listingsRepo.findOne({ where: { id: listingId } }) as Promise<Listing>;
@@ -458,7 +500,15 @@ export class ListingsService {
     if (listing.status === 'en_ligne' && listing.publishedAt && Date.now() - new Date(listing.publishedAt).getTime() < 7 * 86_400_000) {
       throw new BadRequestException('Cette annonce est déjà en ligne depuis moins de sept jours : elle ne peut pas encore être renouvelée.');
     }
-    if (listing.status !== 'en_ligne') await this.assertQuota(listing.userId);
+    if (listing.status !== 'en_ligne') {
+      // AUDIT §69 : remise en ligne = mêmes contrôles qu'au dépôt (numéro de mobile, prix, attributs obligatoires, quota)
+      await this.assertPhone(listing.userId);
+      this.validatePrice(listing.priceType, listing.price);
+      const category = await this.categoriesService.findById(listing.categoryId);
+      const root = category?.parentId ? await this.categoriesService.findById(category.parentId) : category;
+      if (category && root) this.validateAttributesFor(category, root, listing.attributes, true);
+      await this.assertQuota(listing.userId);
+    }
     const now = new Date();
     // Remise en ligne = même contrôle du texte qu'à la publication (le texte a pu être modifié pendant la pause)
     const mod = moderateText(listing.title, listing.description);
@@ -475,8 +525,15 @@ export class ListingsService {
     return (await this.transactionsRepo.count({ where: { listingId, status: In(['sequestre', 'livree', 'litige']) } })) > 0;
   }
 
+  /** Vente confirmée dont la période de réclamation de l'acheteur court encore (AUDIT §69 : l'annonce ne doit pas être réécrite). */
+  async hasSaleUnderDispute(listingId: string): Promise<boolean> {
+    return (await this.transactionsRepo.count({ where: { listingId, status: 'confirme', disputeAllowedUntil: MoreThan(new Date()) } })) > 0;
+  }
+
   async deleteOwn(listingId: string, userId: string): Promise<void> {
     const listing = await this.getManaged(listingId, userId);
+    // AUDIT §69 : un membre ajouté à une boutique pouvait effacer définitivement le catalogue du propriétaire
+    if (listing.userId !== userId) throw new ForbiddenException('Seul le propriétaire de la boutique peut supprimer une annonce (vous pouvez la mettre en pause).');
     // Pas de suppression par le vendeur pendant une vente (AUDIT §60) : vente payée en cours, ou acheteur en train de payer
     // (la vente non payée serait effacée alors que sa page de paiement reste ouverte : l'argent arriverait sans vente)
     if (await this.hasActiveSale(listing.id)) throw new BadRequestException("Une vente est en cours sur cette annonce : elle sera retirée automatiquement une fois l'article reçu.");
@@ -503,9 +560,12 @@ export class ListingsService {
 
   async duplicateOwn(listingId: string, userId: string): Promise<Listing> {
     const source = await this.getManaged(listingId, userId);
+    if (source.status === 'refusee') throw new BadRequestException('Cette annonce a été refusée : elle ne peut pas être dupliquée.'); // AUDIT §69
     const copy = this.listingsRepo.create({
       ...source,
       id: undefined,
+      phoneClicksCount: 0,
+      archivedAt: undefined,
       status: 'brouillon',
       moderationReason: undefined,
       viewsCount: 0,
@@ -657,10 +717,11 @@ export class ListingsService {
       .map((f) => ({ key: f.key, label: f.label, value: listing.attributes![f.key], unit: f.unit }));
     const now = Date.now();
 
-    const { phoneClicksCount: _privateClicks, ...publicListing } = listing; // statistique du propriétaire, jamais dans la fiche
+    const { phoneClicksCount: _privateClicks, createdBy, externalRef, moderationReason, ...publicListing } = listing; // statistique du propriétaire, jamais dans la fiche
     void _privateClicks;
     return {
       ...publicListing,
+      ...(isOwner || isAdmin ? { createdBy, externalRef, moderationReason } : {}), // AUDIT §69
       // Verrous du vendeur après publication (AUDIT §54) : le formulaire de modification grise ces champs
       locks: { category: this.isPublishedOnce(listing), brand: this.isPublishedOnce(listing) && !!this.brandOf(listing.attributes), photos: this.isPublishedOnce(listing) },
       latitude: isOwner ? listing.latitude : listing.latitude != null ? Math.round(listing.latitude * 100) / 100 : listing.latitude,
@@ -800,11 +861,19 @@ export class ListingsService {
    * de l'annonce en ligne, et historique « Annonces consultées » pour un membre. Le propriétaire ne
    * compte pas. Les lectures API (rendu serveur, aperçu rapide, robots) ne comptent rien.
    */
-  async recordView(listingId: string, userId?: string): Promise<{ counted: boolean }> {
+  /** Vues déjà comptées (adresse + annonce) sur l'heure écoulée (AUDIT §69 : compteur gonflable en boucle). */
+  private readonly recentViews = new Map<string, number>();
+  async recordView(listingId: string, userId?: string, ip?: string): Promise<{ counted: boolean }> {
     const listing = await this.listingsRepo.findOne({ where: { id: listingId } });
     if (!listing || listing.userId === userId) return { counted: false };
     if (userId) await this.viewsRepo.save(this.viewsRepo.create({ userId, listingId, viewedAt: new Date() }));
     if (listing.status !== 'en_ligne') return { counted: false };
+    const key = `${userId || ip || '?'}:${listingId}`;
+    const now = Date.now();
+    const last = this.recentViews.get(key);
+    if (last && now - last < 3_600_000) return { counted: false };
+    this.recentViews.set(key, now);
+    if (this.recentViews.size > 50_000) for (const [k, t] of this.recentViews) if (now - t > 3_600_000) this.recentViews.delete(k);
     await this.listingsRepo.increment({ id: listingId }, 'viewsCount', 1);
     return { counted: true };
   }
@@ -918,6 +987,13 @@ export class ListingsService {
           onBehalfOf: ownerId !== actorId ? ownerId : undefined,
         };
         if (dto.condition && !['neuf', 'tres_bon_etat', 'bon_etat', 'etat_satisfaisant', 'pour_pieces'].includes(dto.condition)) delete dto.condition;
+        // AUDIT §69 : l'import contournait la validation du dépôt (prix négatif ou astronomique, champs sans limite)
+        if (dto.title.trim().length < 3) throw new Error('titre trop court (3 caractères minimum)');
+        if (dto.description.trim().length < 10) throw new Error('description trop courte (10 caractères minimum)');
+        if (dto.price !== undefined && (!(dto.price >= 0) || dto.price > MAX_PRICE)) throw new Error(`prix invalide (entre 0 et ${MAX_PRICE})`);
+        if (dto.price !== undefined) dto.price = Math.round(dto.price * 100) / 100;
+        if (dto.city && dto.city.length > 100) dto.city = dto.city.slice(0, 100);
+        if (row.externalRef && row.externalRef.length > 100) throw new Error('référence trop longue (100 caractères maximum)');
         if (dto.postalCode && !/^\d{5}$/.test(dto.postalCode)) delete dto.postalCode;
         if (!['fixe', 'negociable', 'gratuit', 'echange', 'sur_demande'].includes(dto.priceType as string)) dto.priceType = 'fixe';
 
@@ -1081,7 +1157,7 @@ export class ListingsService {
     return { items: cards.map((c, i) => ({ ...c, distanceKm: pageItems[i].distanceKm })), total, page, pageSize };
   }
 
-  async toCards(listings: Listing[]): Promise<ListingCard[]> {
+  async toCards(listings: Listing[], opts: { owner?: boolean } = {}): Promise<ListingCard[]> {
     if (listings.length === 0) return [];
     const ids = listings.map((l) => l.id);
     const photos = await this.photosRepo.find({ where: { listingId: In(ids) }, order: { sortOrder: 'ASC' } });
@@ -1101,10 +1177,13 @@ export class ListingsService {
       const ph = photosByListing.get(l.id) || [];
       const u = usersById.get(l.userId);
       const c = catById.get(l.categoryId);
-      const { phoneClicksCount: _privateClicks, ...pub } = l; // statistique du propriétaire (GET /listings/mine → stats), jamais sur une carte
+      const { phoneClicksCount: _privateClicks, createdBy, externalRef, moderationReason, ...pub } = l; // statistique du propriétaire (GET /listings/mine → stats), jamais sur une carte
       void _privateClicks;
+      // AUDIT §69 : le salarié qui a posté, la référence interne du catalogue et le motif de vérification ne regardent que le propriétaire
+      const internal = opts.owner ? { createdBy, externalRef, moderationReason } : {};
       return {
         ...pub,
+        ...internal,
         latitude: l.latitude != null ? Math.round(l.latitude * 100) / 100 : l.latitude,
         longitude: l.longitude != null ? Math.round(l.longitude * 100) / 100 : l.longitude,
         coverUrl: ph[0]?.thumbUrl || ph[0]?.url || null,

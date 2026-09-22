@@ -320,6 +320,9 @@ export default function ConversationPage() {
           {conv.blocked && !conv.blockedByMe ? <span className="small muted" title="Cette personne vous a bloqué">Bloqué</span> : <button className="btn btn-ghost btn-sm" onClick={toggleBlock}>{conv.blocked ? "Débloquer" : "Bloquer"}</button>}
         </div>
       </header>
+      <p className="small muted" style={{ margin: 0, padding: "6px 16px", borderBottom: "1px solid var(--line-soft)", background: "var(--paper, #faf9f6)" }} data-testid="safety-reminder">
+        🔒 Ne payez jamais en dehors de Trocoin (virement, lien, application de paiement) : seul le paiement sécurisé du site vous protège.
+      </p>
 
       {conv.transaction && <SalePanel sale={conv.transaction} listing={conv.listing} onChanged={load} />}
 
@@ -380,7 +383,14 @@ export default function ConversationPage() {
                   ))}
                 </div>
               ) : (
-                <div style={bubble}>{m.content}</div>
+                <>
+                  <div style={bubble}>{m.content}</div>
+                  {!mine && m.meta?.warning && (
+                    <div className="alert alert-warning small" role="alert" data-testid="scam-warning" style={{ margin: "6px 0 0", padding: "8px 10px" }}>
+                      {m.meta.warning === "lien_externe" ? "Ce message contient un lien vers un autre site. Ne suivez pas de lien pour payer : le paiement se fait uniquement sur Trocoin." : m.meta.warning === "coordonnees_bancaires" ? "Ce message contient des coordonnées bancaires. Ne faites jamais de virement ni ne donnez vos coordonnées : payez uniquement via Trocoin." : "Ce message évoque un paiement en dehors de Trocoin. Refusez : seul le paiement sécurisé du site vous protège."}
+                    </div>
+                  )}
+                </>
               )}
               <div className="small muted" style={{ textAlign: mine ? "right" : "left", marginTop: 2, fontSize: ".72rem" }}>
                 <span suppressHydrationWarning>{formatDateTime(m.createdAt)}</span>

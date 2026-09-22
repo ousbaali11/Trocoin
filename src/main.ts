@@ -38,10 +38,14 @@ async function bootstrap() {
     }),
   );
   app.disable('x-powered-by');
-  if (process.env.TRUST_PROXY === 'true') {
-    // Indispensable derrière un reverse proxy pour que le rate limiting voie la vraie IP
+  // Indispensable derrière un reverse proxy pour que le rate limiting voie la vraie IP. En production l'API est toujours
+  // derrière un proxy (Render) : activé d'office sauf TRUST_PROXY=false (AUDIT §69 — sans lui, dix échecs de connexion
+  // bloquaient tout le site dix minutes, et les adresses du journal étaient celles du proxy)
+  if (process.env.TRUST_PROXY === 'true' || (isProduction() && process.env.TRUST_PROXY !== 'false')) {
     app.set('trust proxy', 1);
   }
+  // Arrêt propre (déploiement, mise en veille) : les requêtes en vol se terminent, la base est fermée proprement (AUDIT §69)
+  app.enableShutdownHooks();
 
   // Validation des corps de requête, messages en français (src/common/validation.ts)
   app.useGlobalPipes(buildValidationPipe());

@@ -16,6 +16,7 @@ import { UsersService } from '../users/users.service';
 import { AdminAuditLog } from './admin-audit-log.entity';
 import { PagesService } from '../pages/pages.service';
 import { AuthService } from '../auth/auth.service';
+import { escapeLike } from '../common/sql';
 import { SettingsService } from '../settings/settings.service';
 import {
   AdminPageDto,
@@ -184,13 +185,13 @@ export class AdminService {
     const pageSize = query.page_size || 25;
     const qb = this.usersRepo.createQueryBuilder('u').orderBy('u.createdAt', 'DESC');
     if (query.q) {
-      const q = `%${query.q.toLowerCase()}%`;
+      const q = `%${escapeLike(query.q.toLowerCase())}%`;
       qb.andWhere(
         '(LOWER(u.phoneNumber) LIKE :q OR LOWER(u.displayName) LIKE :q OR LOWER(u.email) LIKE :q OR LOWER(u.username) LIKE :q OR u.siret LIKE :q OR LOWER(u.shopName) LIKE :q OR CAST(u.id AS varchar) = :exact)',
         { q, exact: query.q },
       );
     }
-    if (query.city) qb.andWhere('LOWER(u.city) LIKE :city', { city: `%${query.city.toLowerCase()}%` });
+    if (query.city) qb.andWhere('LOWER(u.city) LIKE :city', { city: `%${escapeLike(query.city.toLowerCase())}%` });
     if (query.account_type) qb.andWhere('u.accountType = :t', { t: query.account_type });
     if (query.status === 'suspendu') qb.andWhere('u.suspendedAt IS NOT NULL');
     if (query.status === 'supprime') qb.andWhere('u.deletedAt IS NOT NULL');
@@ -282,13 +283,13 @@ export class AdminService {
     const pageSize = query.page_size || 25;
     const qb = this.listingsRepo.createQueryBuilder('l').orderBy('l.createdAt', 'DESC');
     if (query.q) {
-      const q = `%${query.q.toLowerCase()}%`;
+      const q = `%${escapeLike(query.q.toLowerCase())}%`;
       qb.andWhere('(LOWER(l.title) LIKE :q OR LOWER(l.description) LIKE :q OR CAST(l.id AS varchar) = :exact)', { q, exact: query.q });
     }
     if (query.status) qb.andWhere('l.status = :status', { status: query.status });
     if (query.flagged === 'true') qb.andWhere('l.status = :pending', { pending: 'en_attente' });
     if (query.user_id) qb.andWhere('l.userId = :userId', { userId: query.user_id });
-    if (query.city) qb.andWhere('LOWER(l.city) LIKE :city', { city: `%${query.city.toLowerCase()}%` });
+    if (query.city) qb.andWhere('LOWER(l.city) LIKE :city', { city: `%${escapeLike(query.city.toLowerCase())}%` });
     if (query.category) {
       const ids = await this.categoriesService.idsIncludingChildren(query.category);
       if (ids) qb.andWhere('l.categoryId IN (:...ids)', { ids });
@@ -440,6 +441,7 @@ export class AdminService {
         suspensionReason: dto.note || `Suspendu suite à un signalement (${report.reason})`,
       });
       await this.listingsRepo.update({ userId: report.reportedUserId, status: 'en_ligne' }, { status: 'desactivee', moderationReason: 'Compte suspendu' });
+      await this.auth.revokeAllSessions(report.reportedUserId); // AUDIT §69 : comme la suspension depuis la fiche
       details.userSuspended = report.reportedUserId;
       await this.notifications.notify(report.reportedUserId, {
         type: 'moderation',

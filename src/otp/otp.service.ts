@@ -97,16 +97,21 @@ export class OtpService {
       throw new TooManyRequestsException('Trop de tentatives, redemandez un nouveau code.');
     }
 
+    // AUDIT §69 : incrément conditionnel en base (des essais parallèles dépassaient la limite lue en mémoire)
+    const counted = await this.otpRepo
+      .createQueryBuilder()
+      .update()
+      .set({ attempts: () => 'attempts + 1' })
+      .where('id = :id AND attempts < :max', { id: entry.id, max: MAX_ATTEMPTS })
+      .execute();
+    if (!counted.affected) throw new TooManyRequestsException('Trop de tentatives, redemandez un nouveau code.');
     entry.attempts += 1;
 
     // Comparaison en temps constant (pas de fuite par mesure de temps)
     const expected = Buffer.from(entry.codeHash, 'hex');
     const actual = Buffer.from(hashCode(code, phoneNumber), 'hex');
     const isValid = expected.length === actual.length && timingSafeEqual(expected, actual);
-    if (!isValid) {
-      await this.otpRepo.save(entry);
-      throw new BadRequestException('Code incorrect.');
-    }
+    if (!isValid) throw new BadRequestException('Code incorrect.');
 
     entry.verifiedAt = new Date();
     await this.otpRepo.save(entry);

@@ -398,6 +398,12 @@ textarea {
   color: #1f3f6b;
   border-color: #c6d9f2;
 }
+/* Avertissement (AUDIT §69 : signaux d'arnaque dans un message) */
+.alert-warning {
+  background: #fff4e0;
+  color: #6b4200;
+  border-color: #f2d9a6;
+}
 
 /* ---------- Grilles ---------- */
 .grid-cards {

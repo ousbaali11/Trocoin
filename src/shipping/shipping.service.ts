@@ -1,6 +1,6 @@
 import { BadGatewayException, BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { ConversationsService } from '../conversations/conversations.service';
 import { Listing } from '../listings/listing.entity';
 import { Transaction } from '../payments/transaction.entity';
@@ -154,17 +154,20 @@ export class ShippingService {
   }
 
   /** Vente annulée avant l'expédition : le bon d'envoi déjà généré est annulé chez le prestataire quand il le permet (au mieux, sans bloquer). */
-  async cancelLabelFor(transactionId: string): Promise<void> {
+  async cancelLabelFor(transactionId: string): Promise<{ label: boolean; cancelled: boolean }> {
     const shipment = await this.shipments.findOne({ where: { transactionId, status: 'etiquette_prete' } });
-    if (!shipment) return;
+    if (!shipment) return { label: false, cancelled: true };
     // Le PDF est effacé dans tous les cas : un bon d'envoi d'une vente remboursée ne doit plus pouvoir servir
     await this.shipments.update(shipment.id, { labelPdfBase64: null as any, status: 'echec', error: 'vente annulée : bon d\'envoi retiré' });
-    if (!shipment.providerRef || !this.provider.cancel) return;
+    // Sans référence chez le prestataire, ou prestataire sans annulation (simulation) : rien à annuler là-bas
+    if (!shipment.providerRef || !this.provider.cancel) return { label: true, cancelled: true };
     try {
       const done = await this.provider.cancel(shipment.providerRef);
       this.logger.log(`Bon d'envoi ${shipment.providerRef} de la vente annulée ${transactionId} : ${done ? 'annulé chez le prestataire' : 'annulation refusée (à reprendre à la main)'}`);
+      return { label: true, cancelled: done };
     } catch (e) {
       this.logger.warn(`Bon d'envoi ${shipment.providerRef} non annulé (${(e as Error).message}) : à reprendre à la main`);
+      return { label: true, cancelled: false };
     }
   }
 
@@ -322,6 +325,21 @@ export class ShippingService {
     const shipment = await this.shipments.findOne({ where: { transactionId } });
     if (!shipment || !shipment.labelPdfBase64) throw new NotFoundException("Aucune étiquette disponible pour cette vente.");
     return Buffer.from(shipment.labelPdfBase64, 'base64');
+  }
+
+  /**
+   * État réel du colis chez le transporteur pour une vente passée par un bon d'envoi Trocoin (AUDIT §69) ; `null` sans bon
+   * d'envoi ou quand le suivi est indisponible (rien n'est alors présumé). `now` : date de référence de la tâche périodique.
+   */
+  async carrierStateFor(transactionId: string, now = new Date()): Promise<TrackingInfo['state'] | null> {
+    const shipment = await this.shipments.findOne({ where: { transactionId, status: In(['etiquette_prete', 'expediee']) } });
+    if (!shipment?.trackingNumber) return null;
+    try {
+      return (await this.provider.track(shipment.carrier, shipment.trackingNumber, shipment.providerRef, now)).state;
+    } catch (e) {
+      this.logger.warn(`Suivi indisponible pour la vente ${transactionId} (${(e as Error).message})`);
+      return null;
+    }
   }
 
   async tracking(transactionId: string, userId: string): Promise<TrackingInfo & { trackingNumber: string; trackingUrl?: string }> {

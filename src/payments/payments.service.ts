@@ -46,6 +46,8 @@ export const SECURE_PAYMENT_EXCLUDED_ROOTS = ['immobilier', 'vehicules', 'emploi
 const round2 = (n: number) => Math.round(n * 100) / 100;
 /** Une page de paiement hébergée commencée depuis moins longtemps que cela bloque l'annonce (double vente). */
 const PENDING_TTL_MS = CHECKOUT_TTL_MINUTES * 60_000;
+/** Pages de paiement ouvertes (non payées, non expirées) qu'un même acheteur peut avoir en même temps (AUDIT §69). */
+export const MAX_OPEN_CHECKOUTS = 3;
 
 // ----- Échéances du séquestre (AUDIT §37, §39) -----
 const DAY_MS = 86_400_000;
@@ -273,6 +275,10 @@ export class PaymentsService implements OnApplicationBootstrap {
       ],
     });
     if (active > 0) throw new BadRequestException('Une transaction est déjà en cours sur cette annonce.');
+    // AUDIT §69 : une page de paiement jamais payée bloquait gratuitement l'annonce pendant 30 min, autant de fois qu'on voulait
+    // (10 annonces par 10 min et par adresse) — au plus MAX_OPEN_CHECKOUTS pages ouvertes à la fois par acheteur
+    const open = await this.transactionsRepo.count({ where: { buyerId, status: 'en_attente', createdAt: MoreThan(new Date(Date.now() - PENDING_TTL_MS)) } });
+    if (open >= MAX_OPEN_CHECKOUTS) throw new BadRequestException(`Vous avez déjà ${MAX_OPEN_CHECKOUTS} paiements en cours : terminez-les ou abandonnez-les avant d'en commencer un autre.`);
 
     // Mode d'envoi choisi par l'acheteur (AUDIT §57) : domicile, ou retrait dans un point réel du transporteur
     // (relais, bureau de poste, consigne), relu chez le prestataire avant tout paiement.
@@ -297,6 +303,8 @@ export class PaymentsService implements OnApplicationBootstrap {
     const shippingFee = shippingQuote ? round2(shippingQuote.priceCents / 100) : 0;
     // Prix payé : celui de la proposition acceptée par le vendeur si l'acheteur en a une valable, sinon le prix affiché
     const offer = await this.negotiatedPrice(listing, buyerId);
+    // AUDIT §69 : le plancher de 1 € (§63) s'applique aussi au prix négocié (0,01 € accepté par un vendeur complice = faux avis)
+    if (offer && offer.amount < 1) throw new BadRequestException('Le paiement sécurisé est possible à partir de 1 € : le prix convenu est trop bas.');
     const price = offer?.amount ?? listing.price!;
     const base0 = computeQuote(price, fees);
     const q = { ...base0, shippingFee, buyerTotal: round2(base0.buyerTotal + shippingFee) };
@@ -492,6 +500,7 @@ export class PaymentsService implements OnApplicationBootstrap {
 
   private async payoutSeller(tx: Transaction, title?: string): Promise<boolean> {
     if (!this.isPlatform(tx) || (tx.transferId && !this.isStaleReservation(tx))) return false;
+    const staleReservation = !!tx.transferId;
     if (tx.transferId) await this.transactionsRepo.update({ id: tx.id, transferId: tx.transferId }, { transferId: null });
     let accountId: string | undefined;
     try {
@@ -516,7 +525,10 @@ export class PaymentsService implements OnApplicationBootstrap {
     }
     let transferId: string;
     try {
-      ({ transferId } = await this.paymentProvider.transfer({
+      // AUDIT §69 : une réservation reprise après la fenêtre d'idempotence du prestataire (24 h) recréait un virement
+      const existing = staleReservation && this.paymentProvider.findTransfer ? await this.paymentProvider.findTransfer(tx.id) : null;
+      if (existing) this.logger.warn(`Transaction ${tx.id} : virement ${existing} déjà fait chez le prestataire, réutilisé`);
+      ({ transferId } = existing ? { transferId: existing } : await this.paymentProvider.transfer({
       providerPaymentId: tx.providerPaymentId!,
       sellerConnectedAccountId: accountId,
       amountEuros: this.sellerPayout(tx),
@@ -633,6 +645,22 @@ export class PaymentsService implements OnApplicationBootstrap {
           if (this.isPlatform(tx) && !tx.autoConfirmAt) continue;
           const autoAt = tx.autoConfirmAt ? new Date(tx.autoConfirmAt) : deadline;
           if (now >= autoAt) {
+            // AUDIT §69 : un bon d'envoi généré puis « Confirmer l'expédition » sans jamais déposer le colis faisait payer le
+            // vendeur au bout de 7 jours. Si le transporteur n'a jamais pris le colis en charge (ou signale un incident), la
+            // réception n'est pas présumée : l'administration est prévenue et tranche.
+            const carrier = await this.shipping.carrierStateFor(tx.id, now);
+            if (carrier === 'etiquette_creee' || carrier === 'incident') {
+              if (tx.escrowStage < 3) {
+                tx.escrowStage = 3;
+                await this.transactionsRepo.save(tx);
+                result.notices += 1;
+                for (const adminId of await this.usersService.findAdminIds()) {
+                  await this.notifications.notify(adminId, { type: 'transaction', title: 'Réception présumée suspendue : colis jamais pris en charge', body: `Vente ${tx.id.slice(0, 8)} (« ${title} », ${tx.amount} €) : le suivi du transporteur indique ${carrier === 'incident' ? 'un incident' : "que le colis n'a jamais été déposé"}. Le vendeur n'est pas payé automatiquement : tranchez depuis la console.`, link: `/admin/litiges/${tx.id}` });
+                }
+                await this.notifications.notify(tx.sellerId, { type: 'transaction', title: 'Colis non pris en charge', body: `Le transporteur n'a pas enregistré le dépôt du colis de « ${title} » : le paiement reste bloqué jusqu'à la confirmation de l'acheteur ou la décision de Trocoin.`, link });
+              }
+              continue;
+            }
             await this.settleAutomatically(tx, 'reception_presumee', `Réception présumée le ${frDate(now)} : aucune confirmation ni litige depuis l'expédition`, title);
             result.confirmed += 1;
             await this.notifications.notify(tx.buyerId, { type: 'transaction', title: 'Réception considérée acquise', body: `Sans nouvelle de votre part, la réception de « ${title} » est considérée acquise et le vendeur est payé. Un problème ? Vous pouvez encore ouvrir un litige jusqu'au ${frDate(tx.disputeAllowedUntil!)}.`, link });
@@ -672,6 +700,17 @@ export class PaymentsService implements OnApplicationBootstrap {
               : `Le paiement de « ${title} » a été encaissé avant l'expiration de l'autorisation bancaire et versé au vendeur. Un problème ? Vous pouvez ouvrir un litige jusqu'au ${frDate(tx.disputeAllowedUntil!)}.`;
             for (const uid of [tx.buyerId, tx.sellerId]) await this.notifications.notify(uid, { type: 'transaction', title: tx.status === 'litige' ? 'Fonds mis en sécurité' : 'Paiement encaissé', body, link });
           } else {
+            // AUDIT §69 : bon d'envoi généré, colis déposé, mais « Confirmer l'expédition » jamais cliqué → le suivi du transporteur
+            // fait foi : la vente passe « expédiée » au lieu d'être remboursée (l'acheteur recevait l'objet gratuitement)
+            if (tx.status === 'sequestre' && tx.deliveryMethod !== 'main_propre') {
+              const carrier = await this.shipping.carrierStateFor(tx.id, now);
+              if (carrier && carrier !== 'etiquette_creee' && carrier !== 'incident') {
+                await this.markShippedNow(tx.id, tx.sellerId);
+                this.logger.log(`Transaction ${tx.id} : expédition constatée par le suivi du transporteur (${carrier}) sans déclaration du vendeur`);
+                result.notices += 1;
+                continue;
+              }
+            }
             // Ni expédié ni remis avant l'échéance : l'acheteur récupère son argent ; l'annonce reste « vendue », au vendeur de la remettre en ligne
             const previous = tx.status;
             await this.claim(tx, [previous], { status: 'annulee', resolvedAt: now });
@@ -681,7 +720,7 @@ export class PaymentsService implements OnApplicationBootstrap {
               await this.release(tx, { status: previous, resolvedAt: null } as unknown as Partial<Transaction>);
               throw e;
             }
-            await this.shipping.cancelLabelFor(tx.id);
+            await this.cancelLabelOrAlert(tx);
             tx.autoResolution = 'annulation_echeance';
             tx.resolutionNote = tx.deliveryMethod === 'main_propre' ? 'Remise non confirmée avant l\'échéance : vente annulée, acheteur remboursé' : 'Article non expédié avant l\'échéance : vente annulée, acheteur remboursé';
             await this.transactionsRepo.save(tx);
@@ -896,7 +935,10 @@ export class PaymentsService implements OnApplicationBootstrap {
       }
     } else if (event.type === 'payment_canceled' && event.providerPaymentId) {
       const tx = await this.transactionsRepo.findOne({ where: { providerPaymentId: event.providerPaymentId } });
-      if (tx && ['sequestre', 'livree'].includes(tx.status)) {
+      if (tx && tx.status === 'livree') {
+        // AUDIT §69 : l'article est parti et le vendeur ne sera pas payé — l'administration tranche, rien n'est clos en silence
+        await this.flagPaymentIssue(tx, new PaymentProviderError('autorisation_expiree', "Autorisation annulée chez le prestataire alors que l'article était expédié : le vendeur n'est pas payé."), 'annulation chez le prestataire');
+      } else if (tx && tx.status === 'sequestre') {
         tx.status = 'annulee';
         tx.resolvedAt = new Date();
         tx.resolutionNote = 'Autorisation annulée chez le fournisseur de paiement';
@@ -948,10 +990,13 @@ export class PaymentsService implements OnApplicationBootstrap {
     const listingIds = [...new Set(txs.map((t) => t.listingId))];
     const listings = listingIds.length ? await this.listingsRepo.find({ where: { id: In(listingIds) } }) : [];
     const byId = new Map(listings.map((l) => [l.id, l]));
+    // AUDIT §69 : un profil public par interlocuteur distinct (et non par vente)
+    const summaries = new Map<string, unknown>();
     const result: any[] = [];
     for (const t of txs) {
       const otherId = t.buyerId === userId ? t.sellerId : t.buyerId;
-      const other = await this.usersService.findPublicSummary(otherId);
+      if (!summaries.has(otherId)) summaries.set(otherId, await this.usersService.findPublicSummary(otherId));
+      const other = summaries.get(otherId);
       const l = byId.get(t.listingId);
       result.push({
         ...this.viewFor(t, userId),
@@ -1007,7 +1052,13 @@ export class PaymentsService implements OnApplicationBootstrap {
     // ou l'administration tranche.
     const labelled = tx.deliveryMethod !== 'main_propre' && tx.shippingQuote ? !!(await this.shipments.findOne({ where: { transactionId: tx.id, status: In(['etiquette_prete', 'expediee']) } })) : true;
     // Modèle platform : le vendeur s'engage (expédition ou remise prête), les fonds sont encaissés maintenant
-    await this.ensureCaptured(tx);
+    // (AUDIT §69 : refus du prestataire rendu en clair et signalé à l'administration, plus jamais « Erreur interne »)
+    try {
+      await this.ensureCaptured(tx);
+    } catch (err) {
+      await this.flagPaymentIssue(tx, err, "capture à l'expédition");
+      await this.providerCall(() => Promise.reject(err));
+    }
     tx.status = 'livree';
     tx.deliveryTrackingNumber = tracking;
     await this.shipments.update({ transactionId: tx.id, status: 'etiquette_prete' }, { status: 'expediee' });
@@ -1089,6 +1140,11 @@ export class PaymentsService implements OnApplicationBootstrap {
     if (tx.status !== 'sequestre' && tx.status !== 'livree') {
       throw new BadRequestException(`Impossible de confirmer une transaction "${tx.status}".`);
     }
+    // AUDIT §69 : « confirmez la réception, sinon je ne peux pas expédier » — un acheteur pressé libérait le paiement avant
+    // tout envoi, puis ne pouvait plus ouvrir de litige. Avec envoi, la confirmation attend l'expédition déclarée.
+    if (tx.deliveryMethod !== 'main_propre' && tx.status === 'sequestre') {
+      throw new BadRequestException("Le vendeur n'a pas encore déclaré l'expédition : vous pourrez confirmer la réception une fois le colis envoyé. Ne confirmez jamais avant d'avoir l'article en main.");
+    }
     const before = { status: tx.status, confirmedAt: tx.confirmedAt ?? null };
     await this.claim(tx, ['sequestre', 'livree'], { status: 'confirme', confirmedAt: new Date() });
     try {
@@ -1156,7 +1212,7 @@ export class PaymentsService implements OnApplicationBootstrap {
       await this.release(tx, { status: 'sequestre', resolvedAt: null, resolutionNote: null } as unknown as Partial<Transaction>);
       throw e;
     }
-    await this.shipping.cancelLabelFor(tx.id);
+    await this.cancelLabelOrAlert(tx);
     const saved = await this.transactionsRepo.save(tx);
     const otherId = userId === tx.sellerId ? tx.buyerId : tx.sellerId;
     await this.notifications.notify(otherId, {
@@ -1218,20 +1274,30 @@ export class PaymentsService implements OnApplicationBootstrap {
     if (!open && !(decision === 'rembourser' && refundableAfterCapture)) {
       throw new BadRequestException(`Aucune décision possible sur une transaction "${tx.status}".`);
     }
+    // AUDIT §69 : la décision prend la vente de façon atomique (`claim`) AVANT tout mouvement d'argent — sinon une confirmation
+    // de l'acheteur ou une annulation au même instant faisait payer le vendeur ET rembourser l'acheteur, en perdant la trace du virement
+    const previous = tx.status;
+    const reload = async () => {
+      const fresh = await this.transactionsRepo.findOne({ where: { id: tx.id } });
+      if (fresh) Object.assign(tx, { transferId: fresh.transferId, transferredAt: fresh.transferredAt, capturedAt: fresh.capturedAt, confirmedAt: fresh.confirmedAt ?? tx.confirmedAt });
+    };
     if (decision === 'annuler') {
       if (tx.confirmedAt) throw new BadRequestException('Vente déjà confirmée : utilisez « rembourser ».');
+      await this.claim(tx, [previous], { status: 'annulee', resolvedAt: new Date() });
+      await reload();
       try {
         await this.providerCall(() => this.refundBuyer(tx));
       } catch (err) {
         // Paiement inconnu du prestataire (AUDIT §65) : rien à rendre chez lui, la vente est close et la note le dit
         const e = err as { getResponse?: () => { code?: string } };
-        if (e?.getResponse?.()?.code !== 'paiement_absent') throw err;
+        if (e?.getResponse?.()?.code !== 'paiement_absent') {
+          await this.release(tx, { status: previous, resolvedAt: null } as unknown as Partial<Transaction>);
+          throw err;
+        }
         note = `${note} (paiement inconnu du prestataire : aucun mouvement d'argent possible)`;
       }
-      await this.shipping.cancelLabelFor(tx.id);
-      tx.status = 'annulee';
+      await this.cancelLabelOrAlert(tx);
       tx.resolutionNote = note;
-      tx.resolvedAt = new Date();
       const cancelled = await this.transactionsRepo.save(tx);
       for (const uid of [tx.buyerId, tx.sellerId]) {
         await this.notifications.notify(uid, { type: 'transaction', title: 'Vente annulée par Trocoin', body: `L'acheteur est intégralement remboursé. ${note}`, link: `/compte/transactions/${tx.id}` });
@@ -1241,19 +1307,30 @@ export class PaymentsService implements OnApplicationBootstrap {
     if (decision === 'rembourser') {
       // Autorisation encore ouverte : annulée ; fonds encaissés : remboursés (modèle platform : depuis le solde
       // de Trocoin, après annulation du virement s'il a déjà eu lieu)
-      await this.providerCall(() => this.refundBuyer(tx));
-      await this.shipping.cancelLabelFor(tx.id);
-      tx.status = 'rembourse';
+      await this.claim(tx, [previous], { status: 'rembourse', resolvedAt: new Date() });
+      await reload();
+      try {
+        await this.providerCall(() => this.refundBuyer(tx));
+      } catch (err) {
+        await this.release(tx, { status: previous, resolvedAt: null } as unknown as Partial<Transaction>);
+        throw err;
+      }
+      await this.cancelLabelOrAlert(tx);
       // L'annonce reste « vendue » : le vendeur la remet en ligne lui-même s'il a récupéré l'article (AUDIT §58)
     } else {
       // Ancien modèle : déjà capturé si l'échéance est passée ; modèle platform : capture si besoin puis virement
-      if (this.isPlatform(tx) || !tx.confirmedAt) await this.providerCall(() => this.settle(tx));
-      tx.status = 'confirme';
-      tx.confirmedAt = tx.confirmedAt ?? new Date();
+      const hadConfirmedAt = tx.confirmedAt ?? null;
+      await this.claim(tx, [previous], { status: 'confirme', confirmedAt: hadConfirmedAt ?? new Date(), resolvedAt: new Date() });
+      await reload();
+      try {
+        if (this.isPlatform(tx) || !hadConfirmedAt) await this.providerCall(() => this.settle(tx));
+      } catch (err) {
+        await this.release(tx, { status: previous, confirmedAt: hadConfirmedAt, resolvedAt: null } as unknown as Partial<Transaction>);
+        throw err;
+      }
       await this.removeSoldListing(tx);
     }
     tx.resolutionNote = note;
-    tx.resolvedAt = new Date();
     const saved = await this.transactionsRepo.save(tx);
     for (const uid of [tx.buyerId, tx.sellerId]) {
       await this.notifications.notify(uid, {
@@ -1265,6 +1342,15 @@ export class PaymentsService implements OnApplicationBootstrap {
     }
     await this.track(saved, 'litige_resolu', tx.sellerId, decision === 'rembourser' ? "Litige clos : l'acheteur est remboursé" : 'Litige clos : les fonds sont versés au vendeur', { decision });
     return saved;
+  }
+
+  /** Vente annulée/remboursée : bon d'envoi retiré ; s'il ne peut pas être annulé chez le prestataire, l'administration est prévenue (AUDIT §69). */
+  private async cancelLabelOrAlert(tx: Transaction): Promise<void> {
+    const r = await this.shipping.cancelLabelFor(tx.id).catch(() => ({ label: true, cancelled: false }));
+    if (!r.label || r.cancelled) return;
+    for (const adminId of await this.usersService.findAdminIds()) {
+      await this.notifications.notify(adminId, { type: 'transaction', title: "Bon d'envoi à annuler à la main", body: `Vente ${tx.id.slice(0, 8)} annulée : le bon d'envoi n'a pas pu être annulé chez le prestataire (frais de port ${tx.shippingFee ?? 0} € à récupérer ou à assumer).`, link: `/admin/litiges/${tx.id}` });
+    }
   }
 
   private async getOwned(transactionId: string, userId: string): Promise<Transaction> {
@@ -1288,6 +1374,8 @@ export class PaymentsService implements OnApplicationBootstrap {
     const isBuyer = viewerId === tx.buyerId;
     return {
       ...rest,
+      // AUDIT §69 : le signalement interne (message du prestataire, identifiant de paiement) reste à l'administration
+      paymentIssue: rest.paymentIssue ? 'Un incident technique sur ce paiement est en cours de traitement par Trocoin.' : rest.paymentIssue,
       // Adresse de l'acheteur : le vendeur ne la voit qu'une fois la vente PAYÉE (un acheteur qui ouvre la page de paiement
       // puis renonce n'a pas à laisser son nom, son adresse et son téléphone au vendeur — AUDIT §60)
       shippingAddress: isBuyer || tx.paidAt ? rest.shippingAddress : null,

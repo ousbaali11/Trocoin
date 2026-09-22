@@ -193,6 +193,8 @@ export async function api<T = unknown>(path: string, opts: RequestOptions = {}):
     signal: opts.signal,
   };
   if (typeof window === "undefined") {
+    // AUDIT §69 : côté serveur, jamais plus de 8 s d'attente (réveil de l'API) — au-delà, la page d'erreur propose « Réessayer »
+    if (!init.signal && typeof AbortSignal !== "undefined" && "timeout" in AbortSignal) init.signal = AbortSignal.timeout(8_000);
     init.next = { revalidate: opts.revalidate ?? 0 };
     if (opts.revalidate === false || opts.revalidate === 0) init.cache = "no-store";
   }

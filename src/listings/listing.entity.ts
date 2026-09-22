@@ -135,6 +135,7 @@ export class Listing {
   @Column({ nullable: true })
   externalRef?: string;
 
+  @Index()
   @Column({ type: DATE_TYPE, nullable: true })
   publishedAt?: Date;
 
