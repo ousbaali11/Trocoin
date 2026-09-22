@@ -3743,3 +3743,9 @@ notés avec leur décision.
   avertissements d'arnaque et proposition < 1 €, annonces, réception après expédition + réception présumée suspendue,
   colis déposé sans déclaration, plafond de pages de paiement + avis publics) ; deux tests existants adaptés aux nouvelles
   règles (phase26 : avis sans identifiants ; phase31 : attribut obligatoire à la publication).
+
+**Production 1.40.1 — 22 septembre 2026.** Première CI (1.40.0) rouge sur les parcours navigateur : la CSP bloquait les suggestions de
+communes (`api-adresse.data.gouv.fr`) et le dédoublonnage des vues comptait un membre une seule fois ; corrigés en 1.40.1. CI verte
+(typecheck, 231 tests API sur SQLite et PostgreSQL 16, image Docker, Playwright desktop + mobile, déploiement) ; `/health` →
+`version 1.40.1`, `payoutAccounts { checked: 2, reset: 0, unreachable: 0 }`, `stripeWebhooks.lastAccountId` masqué. Vérifié dans le
+navigateur sur www.trocoin.fr : en-tête `Content-Security-Policy` servi, suggestion « Lyon (toute la ville) » proposée.
