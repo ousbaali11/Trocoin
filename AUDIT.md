@@ -3617,3 +3617,7 @@ boîte de confirmation ; « Activer le compte professionnel » demande désormai
 rappelés, réversibilité annoncée). Pour « Jamal T. » : Paramètres → Ma boutique → « Repasser en compte particulier », ou
 console → fiche utilisateur → type « particulier ». Test `phase38` (retour au particulier, données effacées, 400 pour un
 particulier).
+
+**Production 1.39.0** (§67) : au démarrage, `/health.payoutAccounts` = `{ checked: 3, reset: 2, unreachable: 0 }` — trois comptes de
+versement enregistrés, **deux orphelins remis à zéro** (dont « Jamal T. »), notifiés « Compte de versement à reconfigurer ».
+La page Paiements leur affiche « Votre configuration précédente n'est plus valable » et le parcours repart de zéro.
