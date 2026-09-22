@@ -3792,3 +3792,9 @@ toutes les 15 min) avec la nouvelle clé ; si un virement existait déjà, il es
 Test `phase42` : clés identiques/différentes selon le compte, ancienne clé en conflit → nouvelle clé (une fois) et
 virement créé, virement existant réutilisé (annulé ignoré), libellé identique par les deux chemins et reprise au passage
 suivant après un refus.
+
+**Production 1.41.0 — 22 septembre 2026, 17 h 27 UTC.** CI verte (six étapes). 92 s après le démarrage, `/health.payouts` =
+`{ pending: 0, attempts: 1, created: 1, reused: 0, keyConflicts: 0, failed: 0, lastTransferAt: 17:27:14 }` : la seule vente en
+attente de virement (48b57551) a été virée au premier passage avec la nouvelle clé ; aucun virement antérieur n'existait chez
+le prestataire pour cette vente (`reused: 0`), ce qui désigne un refus enregistré sous l'ancienne clé fixe puis des paramètres
+différents (libellé et/ou compte de destination), et non une réponse perdue. Aucune autre vente dans ce cas (`pending: 0`).
