@@ -112,8 +112,9 @@ export default function AdminListingPage() {
           <h1>{l.title} <span className={`a-pill ${s.cls}`}>{s.label}</span></h1>
           <p className="mono">{l.id} · {l.category?.name} · {formatPrice(l.price, l.priceType)} · {l.viewsCount} vue{l.viewsCount > 1 ? "s" : ""} · créée {formatDateTime(l.createdAt)}</p>
         </div>
-        <Link href={`/annonces/${l.id}`} className="a-btn" target="_blank">Voir sur le site ↗</Link>
+        {l.status !== "archivee" && <Link href={`/annonces/${l.id}`} className="a-btn" target="_blank">Voir sur le site ↗</Link>}
       </div>
+      {l.status === "archivee" && <div className="a-alert" data-testid="archived-banner">Annonce archivée à la fin de sa vente (AUDIT §63) : invisible pour les membres et le vendeur, conservée avec ses photos pour l'administration tant qu'un litige est possible, puis effacée automatiquement après 90 jours.</div>}
       {l.moderationReason && <div className="a-alert" style={{ background: "var(--a-warn-soft)", color: "#92400e" }}>Motif enregistré : {l.moderationReason}</div>}
 
       <div className="a-two">
@@ -121,7 +122,7 @@ export default function AdminListingPage() {
           <h2 className="h3" style={{ marginTop: 0 }}>Décision de modération</h2>
           <textarea className="a-textarea" aria-label="Motif de la décision (obligatoire pour un refus, transmis au vendeur)" placeholder="Motif (obligatoire pour un refus, transmis au vendeur)" value={reason} onChange={(e) => setReason(e.target.value)} />
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-            {l.status !== "en_ligne" && <button className="a-btn ok" disabled={busy} onClick={() => patch({ status: "en_ligne" }, "Annonce publiée.")}>Approuver et publier</button>}
+            {["en_attente", "refusee", "desactivee", "expiree"].includes(l.status) && <button className="a-btn ok" disabled={busy} onClick={() => patch({ status: "en_ligne" }, "Annonce publiée.")}>Approuver et publier</button>}
             {l.status !== "refusee" && <button className="a-btn danger" disabled={busy || reason.trim().length < 3} onClick={() => patch({ status: "refusee", moderationReason: reason.trim() }, "Annonce refusée.")}>Refuser</button>}
             {l.status === "en_ligne" && <button className="a-btn" disabled={busy} onClick={() => patch({ status: "desactivee", moderationReason: reason.trim() || "Mise en pause par la modération" }, "Annonce mise en pause.")}>Mettre en pause</button>}
             <button className="a-btn" disabled={busy} onClick={() => setDeleteOpen(true)} style={{ color: "var(--a-danger)" }} data-testid="delete-listing">Supprimer définitivement</button>

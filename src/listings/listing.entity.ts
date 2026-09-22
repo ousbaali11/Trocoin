@@ -15,10 +15,12 @@ export type ListingStatus =
   | 'vendue'
   | 'refusee'
   | 'expiree'
-  | 'desactivee';
+  | 'desactivee'
+  /** Vente terminée : invisible pour les membres, consultable par l'administration (AUDIT §63). */
+  | 'archivee';
 
 export const LISTING_STATUSES: ListingStatus[] = [
-  'brouillon', 'en_attente', 'en_ligne', 'vendue', 'refusee', 'expiree', 'desactivee',
+  'brouillon', 'en_attente', 'en_ligne', 'vendue', 'refusee', 'expiree', 'desactivee', 'archivee',
 ];
 
 export type PriceType = 'fixe' | 'negociable' | 'gratuit' | 'echange' | 'sur_demande';
@@ -135,6 +137,10 @@ export class Listing {
 
   @Column({ type: DATE_TYPE, nullable: true })
   publishedAt?: Date;
+
+  /** Date d'archivage (AUDIT §63) ; l'effacement réel intervient après RetentionService.ARCHIVE_DAYS. */
+  @Column({ type: DATE_TYPE, nullable: true })
+  archivedAt?: Date | null;
 
   @Index()
   @Column({ type: DATE_TYPE, nullable: true })

@@ -231,7 +231,9 @@ Pendant la phase de test, le paiement est **simulé** (aucune carte n'est débit
         title: "Recevoir mes paiements",
         summary: "Configurer le compte de versement.",
         keywords: ["versement", "stripe", "iban", "vendre"],
-        body: `Dans **Paiements**, configurez votre compte de versement auprès de notre prestataire de paiement : vos coordonnées bancaires ne transitent jamais par Trocoin. Les ventes vous sont versées automatiquement après confirmation de réception.
+        body: `Dans **Paiements**, indiquez une fois vos nom, prénom, date de naissance, adresse et **IBAN** : c'est tout. Ces informations sont transmises à notre prestataire de paiement (Trocoin ne conserve pas votre IBAN) et les ventes vous sont versées automatiquement après confirmation de réception. Au-delà d'un certain volume de ventes, une pièce d'identité pourra vous être demandée : la page Paiements vous le dira.
+
+Comptes professionnels : la configuration passe par la page sécurisée du prestataire (raison sociale, représentant légal, IBAN de l'entreprise).
 
 Au-delà de 30 ventes ou 2 000 € par an, la réglementation européenne (DAC7) impose une déclaration : des informations complémentaires vous seront demandées.`,
       },

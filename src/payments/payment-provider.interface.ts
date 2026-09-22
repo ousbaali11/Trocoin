@@ -73,11 +73,25 @@ export interface CheckoutSync {
 /** Évènement de webhook normalisé (après vérification de la signature). */
 export interface PaymentWebhookEvent {
   id: string;
-  type: 'checkout_completed' | 'checkout_expired' | 'payment_canceled' | 'payment_refunded' | 'ignored';
+  type: 'checkout_completed' | 'checkout_expired' | 'payment_canceled' | 'payment_refunded' | 'account_updated' | 'ignored';
+  /** account_updated : compte de versement concerné et son objet brut (AUDIT §63). */
+  accountId?: string;
+  account?: unknown;
   raw: string;
   providerSessionId?: string;
   providerPaymentId?: string;
   transactionId?: string;
+}
+
+/** État réel d'un paiement chez le prestataire (AUDIT §63) : ce que l'admin doit savoir avant de trancher. */
+export type PaymentState = 'autorisee' | 'encaissee' | 'annulee' | 'remboursee' | 'en_attente' | 'inconnue';
+
+/** Refus du prestataire porteur d'un sens métier (autorisation expirée…) : rendu en clair, jamais en « erreur interne ». */
+export class PaymentProviderError extends Error {
+  constructor(public readonly code: 'autorisation_expiree' | 'paiement_absent' | 'refus', message: string) {
+    super(message);
+    this.name = 'PaymentProviderError';
+  }
 }
 
 export interface IPaymentProvider {
@@ -100,4 +114,6 @@ export interface IPaymentProvider {
   expireCheckout?(providerSessionId: string): Promise<void>;
   /** Vérifie la signature du webhook et normalise l'évènement ; lève une erreur si la signature est invalide. */
   parseWebhook?(rawBody: Buffer, signature: string | undefined): PaymentWebhookEvent;
+  /** État réel du paiement chez le prestataire (AUDIT §63). */
+  inspect?(providerPaymentId: string): Promise<{ state: PaymentState; detail?: string }>;
 }

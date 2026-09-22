@@ -123,6 +123,7 @@ export const LISTING_STATUS_LABELS: Record<ListingStatus, { label: string; pill:
   en_attente: { label: "En vérification", pill: "pill pill-ochre" },
   en_ligne: { label: "En ligne", pill: "pill pill-green" },
   vendue: { label: "Vendue", pill: "pill pill-dark" },
+  archivee: { label: "Archivée", pill: "pill" },
   refusee: { label: "Refusée", pill: "pill pill-brick" },
   expiree: { label: "Expirée", pill: "pill" },
   desactivee: { label: "En pause", pill: "pill" },

@@ -388,6 +388,11 @@ export class UsersService {
   }
 
   /** true si l'un a bloqué l'autre (dans un sens ou dans l'autre). */
+  /** Vrai si `blockerId` a bloqué `blockedId` (et non l'inverse). */
+  async hasBlocked(blockerId: string, blockedId: string): Promise<boolean> {
+    return (await this.blocksRepo.count({ where: { blockerId, blockedId } })) > 0;
+  }
+
   async isBlockedEitherWay(a: string, b: string): Promise<boolean> {
     const count = await this.blocksRepo
       .createQueryBuilder('b')
@@ -428,7 +433,8 @@ export class UsersService {
       messages,
       reviewsReceived,
       reviewsGiven,
-      transactions,
+      // AUDIT §63 : l'export livrait le code de remise (le vendeur pouvait valider la remise seul) et les références internes
+      transactions: transactions.map(({ handoverCode, providerPaymentId, transferId, ...t }) => t),
       favorites,
     };
   }
@@ -459,6 +465,16 @@ export class UsersService {
         'Impossible de supprimer le compte : une transaction est encore en cours. Terminez-la ou contactez le support.',
       );
     }
+    // AUDIT §63 : une vente confirmée dont le virement n'a pas encore été fait (compte de versement absent) bloquerait
+    // l'argent du vendeur chez Trocoin pour toujours : il configure d'abord son compte de versement
+    const pendingPayout = opts.force ? 0 : await this.transactionsRepo
+      .createQueryBuilder('t')
+      .where('t.sellerId = :userId', { userId })
+      .andWhere("t.status = 'confirme' AND t.escrowModel = 'platform' AND t.transferId IS NULL AND t.capturedAt IS NOT NULL")
+      .getCount();
+    if (pendingPayout > 0) {
+      throw new BadRequestException('Impossible de supprimer le compte : un versement vous est dû. Configurez votre compte de versement dans « Paiements » pour le recevoir, puis réessayez.');
+    }
 
     // Suppression réelle (AUDIT §41) : la ligne et toutes les données personnelles disparaissent de la base ;
     // seules les ventes payées gardent une trace comptable anonymisée (RetentionService).
@@ -466,6 +482,14 @@ export class UsersService {
   }
 
   // ----- Stripe Connect -----
+  async setPayoutInfo(userId: string, patch: { payoutAccountKind?: 'formulaire' | 'guide' | null; payoutIbanLast4?: string | null; payoutRequirements?: string[] | null; stripeOnboardingComplete?: boolean }) {
+    await this.usersRepo.update(userId, { ...patch, payoutRequirements: patch.payoutRequirements === undefined ? undefined : patch.payoutRequirements && patch.payoutRequirements.length ? JSON.stringify(patch.payoutRequirements) : null } as Partial<User>);
+  }
+
+  findByStripeAccount(stripeAccountId: string): Promise<User | null> {
+    return this.usersRepo.findOne({ where: { stripeAccountId } });
+  }
+
   async setStripeAccount(userId: string, stripeAccountId: string, complete: boolean) {
     await this.usersRepo.update(userId, { stripeAccountId, stripeOnboardingComplete: complete });
   }

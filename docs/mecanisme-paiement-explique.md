@@ -163,3 +163,19 @@ garde 1,80 € (commission + protection) **et** les 4,49 € de livraison, avec 
 d'étiquettes règle le bon d'envoi. La livraison ne rapporte donc rien à Trocoin (pas de marge) et lui coûte les frais
 Stripe sur cette part (≈ 0,07 €). En cas d'annulation ou de remboursement, tout est rendu à l'acheteur, livraison
 comprise. Détail et risques : `docs/etiquettes-transporteur.md` §10.
+
+## Compte de versement en un formulaire (AUDIT §63)
+
+Le parcours d'inscription hébergé par le prestataire (compte **Express** : plusieurs écrans, téléphone, code SMS,
+pièce d'identité) décourageait des vendeurs. Les particuliers remplissent désormais **un seul formulaire sur Trocoin**
+(prénom, nom, date de naissance, adresse, IBAN, acceptation des conditions) : l'API crée pour eux un compte
+**Custom** chez le prestataire (`POST /users/me/payout-account`, `StripeConnectService.setupPayoutAccount`) avec
+la capacité « transfers » seule — ils ne font que recevoir des virements. L'IBAN part une fois au prestataire ;
+Trocoin n'en garde que les quatre derniers caractères (`users.payoutIbanLast4`). Ce sont les informations minimales
+exigées par la réglementation des paiements (LCB-FT) pour verser un particulier en France ; la pièce d'identité
+n'est demandée par le prestataire qu'au-delà de seuils de volume — le statut (`GET /users/me/stripe-status` :
+`requirements`, `needsHostedStep`) le signale, et le lien « Compléter la vérification » n'ouvre que cette étape.
+Le webhook `account.updated` (à activer côté prestataire pour les *comptes connectés*) tient l'état à jour sans
+visite. Les comptes **professionnels** gardent le parcours hébergé (raison sociale, représentant légal, IBAN
+d'entreprise). Contrepartie de ce choix : avec des comptes Custom, c'est Trocoin qui affiche les conditions du
+prestataire et qui reçoit ses demandes de pièces — le code les traduit et les relaie.

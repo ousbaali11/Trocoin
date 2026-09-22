@@ -11,8 +11,13 @@ import type { DeliveryAddress } from "@/lib/types";
 import { statusPill } from "@/components/admin/AdminPager";
 
 interface Party { id: string; displayName: string; phoneNumber: string; email?: string | null; accountType: string; suspended: boolean; deleted: boolean; ratingAvg: number; ratingCount: number }
+const PROVIDER_STATE: Record<string, string> = { autorisee: "autorisé, non encaissé", encaissee: "encaissé par Trocoin", annulee: "autorisation annulée ou expirée", remboursee: "remboursé", en_attente: "non payé", inconnue: "inconnu" };
+
 interface AdminTxDetail {
   id: string;
+  buyerId: string;
+  sellerId: string;
+  provider?: { state: "autorisee" | "encaissee" | "annulee" | "remboursee" | "en_attente" | "inconnue"; detail?: string };
   status: string;
   amount: number;
   commission: number;
@@ -64,7 +69,7 @@ export default function AdminTransactionPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(() => api<AdminTxDetail>(`/admin/transactions/${id}`).then(setTx).catch((e) => setError((e as Error).message)), [id]);
+  const load = useCallback(() => api<AdminTxDetail>(`/admin/transactions/${id}`).then((t) => { setTx(t); setError(null); }).catch((e) => setError((e as Error).message)), [id]);
   useEffect(() => {
     load();
   }, [load]);
@@ -86,7 +91,7 @@ export default function AdminTransactionPage() {
     }
   };
 
-  if (error) return <div><Link href="/admin/litiges" className="mono">← Transactions et litiges</Link><div className="a-alert danger" style={{ marginTop: 12 }}>{error}</div></div>;
+  if (error && !tx) return <div><Link href="/admin/litiges" className="mono">← Transactions et litiges</Link><div className="a-alert danger" style={{ marginTop: 12 }}>{error} <button type="button" className="a-btn" onClick={load}>Réessayer</button></div></div>;
   if (!tx) return <div className="skeleton" style={{ height: 300 }} />;
   const s = statusPill(tx.status);
   const open = ["sequestre", "livree", "litige"].includes(tx.status);
@@ -115,7 +120,14 @@ export default function AdminTransactionPage() {
           <p className="mono">{tx.id} · {formatEuros(tx.amount)} (frais acheteur {formatEuros(tx.buyerFee)}, commission {formatEuros(tx.commission)}) · créée {formatDateTime(tx.createdAt)}</p>
         </div>
       </div>
-      {tx.disputeReason && <div className="a-alert danger">Litige ouvert par {tx.disputeOpenedBy === tx.buyer?.id ? "l'acheteur" : "le vendeur"} : « {tx.disputeReason} »</div>}
+      {error && <div className="a-alert danger">{error} <button type="button" className="a-btn" onClick={load}>Réessayer</button></div>}
+      {tx.provider && tx.provider.state !== "inconnue" && (
+        <div className={`a-alert${tx.provider.state === "annulee" ? " danger" : ""}`} data-testid="provider-state">
+          Paiement chez le prestataire : <strong>{PROVIDER_STATE[tx.provider.state]}</strong>{tx.provider.detail ? ` (${tx.provider.detail})` : ""}.
+          {tx.provider.state === "annulee" && " L'argent n'a jamais été encaissé et ne peut plus l'être : seule l'annulation de la vente est possible (l'acheteur n'est pas débité)."}
+        </div>
+      )}
+      {tx.disputeReason && <div className="a-alert danger">Litige ouvert par {tx.disputeOpenedBy === tx.buyerId ? "l'acheteur" : "le vendeur"} : « {tx.disputeReason} »</div>}
       {tx.resolutionNote && <div className="a-alert">Décision : {tx.resolutionNote}{tx.autoResolution && ` (automatique : ${AUTO_LABEL[tx.autoResolution] ?? tx.autoResolution})`}</div>}
 
       <div className="a-two">
@@ -152,7 +164,7 @@ export default function AdminTransactionPage() {
               <p className="small" style={{ margin: "0 0 8px", color: "var(--a-muted)" }}>
                 {tx.status === "litige" ? "Arbitrage du litige." : "Décision forcée hors litige (fraude, conflit, vendeur ou acheteur injoignable) : réservée aux cas avérés, journalisée comme telle."}
               </p>
-              <textarea className="a-textarea" aria-label="Note de décision (transmise aux deux parties)" placeholder="Note de décision (transmise aux deux parties, conservée dans le journal)" value={note} onChange={(e) => setNote(e.target.value)} data-testid="decision-note" />
+              <textarea className="a-textarea" aria-label="Note de décision (transmise aux deux parties)" placeholder="Note de décision (transmise aux deux parties, conservée dans le journal)" value={note} onChange={(e) => setNote(e.target.value)} data-testid="decision-note" maxLength={1000} />
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
                 {can("rembourser") && <button className="a-btn danger" disabled={busy} onClick={() => decide("rembourser")} data-testid="decide-refund">Rembourser l&apos;acheteur</button>}
                 {can("annuler") && <button className="a-btn" disabled={busy} onClick={() => decide("annuler")} data-testid="decide-cancel">Annuler la vente</button>}

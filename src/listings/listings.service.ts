@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, In, IsNull, MoreThan, Repository } from 'typeorm';
+import { Brackets, In, IsNull, MoreThan, Not, Repository } from 'typeorm';
 import { CategoriesService } from '../categories/categories.service';
 import { computeCompleteness } from './listing-completeness';
 import { FieldSchema, getSchemaForSlugs, validateAttributes } from '../categories/category-schemas';
@@ -268,7 +268,7 @@ export class ListingsService {
   async findMine(userId: string): Promise<Array<ListingCard & { shopOwnerId?: string; stats: { views: number; favorites: number; messages: number; phoneClicks: number } }>> {
     const managed = await this.shops.managedOwnerIds(userId);
     const listings = await this.listingsRepo.find({
-      where: { userId: In([userId, ...managed]) },
+      where: { userId: In([userId, ...managed]), status: Not('archivee') },
       order: { createdAt: 'DESC' },
     });
     const [cards, stats] = await Promise.all([this.toCards(listings), this.statsFor(listings)]);
@@ -349,6 +349,11 @@ export class ListingsService {
     if (dto.priceType !== undefined) patch.priceType = dto.priceType;
     if (dto.price !== undefined) patch.price = dto.price;
     if (['gratuit', 'echange', 'sur_demande'].includes(priceType)) patch.price = undefined as any;
+    // AUDIT §63 : pendant une vente payée, titre, description et prix sont figés (c'est ce que l'acheteur a payé et
+    // ce qu'un litige devra juger)
+    if ((dto.title !== undefined && dto.title.trim() !== listing.title) || (dto.description !== undefined && dto.description.trim() !== listing.description) || (dto.price !== undefined && dto.price !== listing.price)) {
+      if (await this.hasActiveSale(listing.id)) throw new BadRequestException("Une vente payée est en cours : le titre, la description et le prix de l'annonce ne peuvent pas être modifiés avant la fin de la vente.");
+    }
 
     for (const key of ['title', 'description', 'condition', 'city', 'postalCode', 'deliveryAvailable', 'weightGrams', 'lengthCm', 'widthCm', 'heightCm'] as const) {
       if (dto[key] !== undefined) (patch as any)[key] = typeof dto[key] === 'string' ? (dto[key] as string).trim() : dto[key];
@@ -448,6 +453,11 @@ export class ListingsService {
       throw new BadRequestException(`Impossible de renouveler une annonce "${listing.status}".`);
     }
     if (await this.hasActiveSale(listing.id)) throw new BadRequestException("Une vente est en cours sur cette annonce : elle ne peut pas être remise en ligne tant que la vente n'est pas terminée ou annulée.");
+    // AUDIT §63 : renouveler une annonce déjà en ligne la remontait en tête des résultats (et réveillait les alertes) sans
+    // limite — c'est une mise en avant gratuite. Au plus une fois par semaine.
+    if (listing.status === 'en_ligne' && listing.publishedAt && Date.now() - new Date(listing.publishedAt).getTime() < 7 * 86_400_000) {
+      throw new BadRequestException('Cette annonce est déjà en ligne depuis moins de sept jours : elle ne peut pas encore être renouvelée.');
+    }
     if (listing.status !== 'en_ligne') await this.assertQuota(listing.userId);
     const now = new Date();
     // Remise en ligne = même contrôle du texte qu'à la publication (le texte a pu être modifié pendant la pause)
@@ -461,7 +471,7 @@ export class ListingsService {
   }
 
   /** Vente payée encore ouverte sur l'annonce (fonds bloqués, expédiée, litige). */
-  private async hasActiveSale(listingId: string): Promise<boolean> {
+  async hasActiveSale(listingId: string): Promise<boolean> {
     return (await this.transactionsRepo.count({ where: { listingId, status: In(['sequestre', 'livree', 'litige']) } })) > 0;
   }
 
@@ -480,6 +490,13 @@ export class ListingsService {
    * la concernant gardent leur trace comptable (titre conservé, l'annonce s'affiche « supprimée »).
    */
   async deleteListing(listing: Listing): Promise<{ deleted: true; keptTransactions: number }> {
+    // Une annonce qui a connu une vente payée est archivée (l'administration doit pouvoir la relire en cas de litige) ;
+    // sans vente payée, elle est effacée tout de suite (AUDIT §63)
+    const paid = await this.transactionsRepo.count({ where: { listingId: listing.id, paidAt: Not(IsNull()) } });
+    if (paid > 0 && listing.status !== 'archivee') {
+      await this.retention.archiveListing(listing);
+      return { deleted: true, keptTransactions: paid };
+    }
     const { keptTransactions } = await this.retention.purgeListing(listing);
     return { deleted: true, keptTransactions };
   }
@@ -617,6 +634,8 @@ export class ListingsService {
     if (!listing) throw new NotFoundException('Annonce introuvable.');
     const isOwner = !!viewer && (viewer.userId === listing.userId || (await this.shops.canActFor(viewer.userId, listing.userId)));
     const isAdmin = viewer?.accountType === 'admin';
+    // Archivée (vente terminée, AUDIT §63) : plus personne ne la voit, sauf l'administration
+    if (listing.status === 'archivee' && !isAdmin) throw new NotFoundException('Annonce introuvable.');
     if (listing.status !== 'en_ligne' && !isOwner && !isAdmin && !['vendue', 'expiree'].includes(listing.status)) {
       throw new NotFoundException('Annonce introuvable.');
     }

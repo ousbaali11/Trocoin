@@ -64,8 +64,10 @@ describe('Phase 17 : suggestion de catégorie, actions groupées, appareils', ()
 
     const republish = await request(server).post('/listings/bulk').set(pro.auth).send({ ids: [a.id, b.id], action: 'republish' }).expect(200);
     expect(republish.body).toEqual({ done: 2, failed: [] });
+    // AUDIT §63 : une annonce en ligne depuis moins de sept jours ne se renouvelle pas (remontée gratuite) — aucune ici
     const renew = await request(server).post('/listings/bulk').set(pro.auth).send({ ids: [a.id, c.id], action: 'renew' }).expect(200);
-    expect(renew.body.done).toBe(2);
+    expect(renew.body.done).toBe(0);
+    expect(renew.body.failed).toHaveLength(2);
     const after = await request(server).get('/listings/mine').set(pro.auth).expect(200);
     expect(after.body.filter((l: any) => l.status === 'en_ligne')).toHaveLength(3);
 

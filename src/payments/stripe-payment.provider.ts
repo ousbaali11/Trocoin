@@ -8,6 +8,8 @@ import {
   CreatePaymentIntentParams,
   IPaymentProvider,
   PaymentIntentResult,
+  PaymentProviderError,
+  PaymentState,
   PaymentWebhookEvent,
   TransferParams,
 } from './payment-provider.interface';
@@ -175,6 +177,10 @@ export class StripePaymentProvider implements IPaymentProvider {
         const pi = event.data.object as Stripe.PaymentIntent;
         return { ...base, type: 'payment_canceled', providerPaymentId: pi.id };
       }
+      case 'account.updated': {
+        const acct = event.data.object as Stripe.Account;
+        return { ...base, type: 'account_updated', accountId: acct.id, account: acct };
+      }
       case 'charge.refunded': {
         const ch = event.data.object as Stripe.Charge;
         // Remboursement PARTIEL (geste commercial fait dans le tableau de bord) : la vente ne passe pas « remboursée »
@@ -186,20 +192,64 @@ export class StripePaymentProvider implements IPaymentProvider {
     }
   }
 
+  /** Identifiant de session de paiement encore présent (retour et webhook manqués) : on retrouve le paiement lui-même. */
+  private async intentIdOf(providerPaymentId: string): Promise<string> {
+    if (!providerPaymentId.startsWith('cs_')) return providerPaymentId;
+    const session = await this.stripe.checkout.sessions.retrieve(providerPaymentId);
+    const pi = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id;
+    if (!pi) throw new PaymentProviderError('paiement_absent', "Aucun paiement n'a été effectué sur cette page de paiement.");
+    return pi;
+  }
+
+  /**
+   * Encaissement (AUDIT §63) : l'état réel est relu d'abord — déjà encaissé (capture faite par le prestataire ou une
+   * autre exécution) → rien à faire ; autorisation annulée ou expirée (7 jours pour une carte : la tâche des
+   * échéances n'a pas pu tourner, API en veille) → refus explicite, plus jamais une « erreur interne ».
+   */
   async capture(providerPaymentId: string) {
-    await this.stripe.paymentIntents.capture(providerPaymentId);
+    const id = await this.intentIdOf(providerPaymentId);
+    const intent = await this.stripe.paymentIntents.retrieve(id);
+    if (intent.status === 'succeeded') return { status: 'succeeded' as const };
+    if (intent.status === 'canceled') throw new PaymentProviderError('autorisation_expiree', "L'autorisation bancaire de cet achat a expiré ou a été annulée chez le prestataire : l'argent n'a jamais été encaissé et ne peut plus l'être.");
+    try {
+      await this.stripe.paymentIntents.capture(id);
+    } catch (err) {
+      const e = err as { code?: string; message?: string };
+      if (/expired|canceled|already been captured/i.test(e?.message || '')) throw new PaymentProviderError('autorisation_expiree', `Encaissement refusé par le prestataire : ${e.message}`);
+      throw err;
+    }
     return { status: 'succeeded' as const };
+  }
+
+  async inspect(providerPaymentId: string): Promise<{ state: PaymentState; detail?: string }> {
+    let id: string;
+    try {
+      id = await this.intentIdOf(providerPaymentId);
+    } catch (err) {
+      return err instanceof PaymentProviderError ? { state: 'en_attente', detail: err.message } : { state: 'inconnue', detail: (err as Error).message };
+    }
+    const intent = await this.stripe.paymentIntents.retrieve(id, { expand: ['latest_charge'] });
+    const charge = intent.latest_charge && typeof intent.latest_charge !== 'string' ? intent.latest_charge : null;
+    if (charge?.refunded) return { state: 'remboursee', detail: 'remboursement intégral émis' };
+    if (intent.status === 'succeeded') return { state: 'encaissee', detail: charge?.amount_refunded ? `remboursé partiellement : ${(charge.amount_refunded / 100).toFixed(2)} €` : undefined };
+    if (intent.status === 'requires_capture') return { state: 'autorisee' };
+    if (intent.status === 'canceled') return { state: 'annulee', detail: intent.cancellation_reason ? `motif : ${intent.cancellation_reason}` : undefined };
+    return { state: 'en_attente', detail: intent.status };
   }
 
   async refund(providerPaymentId: string) {
     // Une autorisation non capturée est annulée ; un paiement capturé est remboursé (modèle platform :
     // depuis le solde de la plateforme ; ancien modèle destination : avec annulation du transfert).
-    const intent = await this.stripe.paymentIntents.retrieve(providerPaymentId);
+    const id = await this.intentIdOf(providerPaymentId).catch((err) => { if (err instanceof PaymentProviderError) return null; throw err; });
+    if (!id) return { status: 'rembourse' as const }; // jamais payé : rien à rendre
+    const intent = await this.stripe.paymentIntents.retrieve(id, { expand: ['latest_charge'] });
+    const charge = intent.latest_charge && typeof intent.latest_charge !== 'string' ? intent.latest_charge : null;
     if (intent.status === 'requires_capture') {
-      await this.stripe.paymentIntents.cancel(providerPaymentId);
-    } else if (intent.status === 'succeeded') {
-      await this.stripe.refunds.create({ payment_intent: providerPaymentId, ...(intent.transfer_data ? { reverse_transfer: true, refund_application_fee: true } : {}) });
+      await this.stripe.paymentIntents.cancel(id);
+    } else if (intent.status === 'succeeded' && !charge?.refunded) {
+      await this.stripe.refunds.create({ payment_intent: id, ...(intent.transfer_data ? { reverse_transfer: true, refund_application_fee: true } : {}) });
     }
+    // annulé / expiré / déjà remboursé : l'acheteur n'est pas (ou plus) débité, il n'y a rien à faire
     return { status: 'rembourse' as const };
   }
 

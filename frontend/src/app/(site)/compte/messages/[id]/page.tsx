@@ -317,7 +317,7 @@ export default function ConversationPage() {
         <div className="row conv-actions" style={{ gap: 4, marginLeft: "auto" }}>
           {isBuyer && !saleOpen && conv.listing?.status === "en_ligne" && <Link href={`/annonces/${conv.listing.id}?acheter=1`} className="btn btn-dark btn-sm" data-testid="conv-buy">{conv.acceptedOffer ? `Payer ${formatEuros(conv.acceptedOffer.amount)}` : "Acheter"}</Link>}
           <button className="btn btn-ghost btn-sm" onClick={() => setReportOpen(true)} style={{ color: "var(--brick)" }}>Signaler</button>
-          <button className="btn btn-ghost btn-sm" onClick={toggleBlock}>{conv.blocked ? "Débloquer" : "Bloquer"}</button>
+          {conv.blocked && !conv.blockedByMe ? <span className="small muted" title="Cette personne vous a bloqué">Bloqué</span> : <button className="btn btn-ghost btn-sm" onClick={toggleBlock}>{conv.blocked ? "Débloquer" : "Bloquer"}</button>}
         </div>
       </header>
 

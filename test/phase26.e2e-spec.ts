@@ -115,11 +115,13 @@ describe('Phase 26 : suppression réelle, trace comptable anonymisée, journal T
     const listing = await createListing(app, seller, { title: 'Casque audio sans fil', price: 70, deliveryAvailable: true });
     const tx = await buy(seller, buyer, listing.id);
     await request(server).post(`/transactions/${tx.id}/ship`).set(seller.auth).send({ trackingNumber: '6A00000000301' }).expect(201);
-    // AUDIT §58 : à la réception, l'annonce est supprimée d'office ; l'admin la supprime donc ici pendant la vente,
-    // puis l'acheteur confirme — la trace comptable est la même dans les deux cas
+    // AUDIT §63 : pendant la vente, la suppression admin est refusée (preuves d'un litige éventuel) ; à la réception,
+    // l'annonce est archivée ; l'admin peut alors l'effacer pour de bon — la trace comptable de la vente reste
+    await request(server).delete(`/admin/listings/${listing.id}`).set(admin.auth).send(HARD).expect(400);
+    await request(server).post(`/transactions/${tx.id}/confirm-delivery`).set(buyer.auth).expect(201);
+    expect((await listings.findOne({ where: { id: listing.id } }))!.status).toBe('archivee');
     const res = await request(server).delete(`/admin/listings/${listing.id}`).set(admin.auth).send(HARD).expect(200);
     expect(res.body).toEqual({ deleted: true, keptTransactions: 1 });
-    await request(server).post(`/transactions/${tx.id}/confirm-delivery`).set(buyer.auth).expect(201);
     expect(await listings.findOne({ where: { id: listing.id } })).toBeNull();
     const kept = (await txRepo.findOne({ where: { id: tx.id } }))!;
     expect(kept.status).toBe('confirme');

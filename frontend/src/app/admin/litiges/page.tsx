@@ -12,6 +12,7 @@ import { AdminPager, statusPill } from "@/components/admin/AdminPager";
 
 interface AdminTx {
   id: string;
+  buyerId: string;
   amount: number;
   commission: number;
   buyerFee: number;
@@ -99,7 +100,7 @@ function AdminDisputesInner() {
                       <><dt>Échéance</dt><dd data-testid="admin-capture-before">autorisation bancaire jusqu&apos;au {formatDateTime(t.captureBefore)}{t.autoConfirmAt && ` · réception présumée le ${formatDateTime(t.autoConfirmAt)}`}</dd></>
                     )}
                     {t.autoResolution && <><dt>Automatique</dt><dd>{t.autoResolution === "reception_presumee" ? "réception présumée" : t.autoResolution === "capture_echeance" ? "capture avant expiration de l'autorisation" : "annulation à l'échéance"}</dd></>}
-                    {t.disputeReason && <><dt>Litige</dt><dd>« {t.disputeReason} » — ouvert par {t.disputeOpenedBy === t.buyer?.id ? "l'acheteur" : "le vendeur"}</dd></>}
+                    {t.disputeReason && <><dt>Litige</dt><dd>« {t.disputeReason} » — ouvert par {t.disputeOpenedBy === t.buyerId ? "l'acheteur" : "le vendeur"}</dd></>}
                     {t.resolutionNote && <><dt>Décision</dt><dd>{t.resolutionNote}</dd></>}
                   </dl>
                 </div>

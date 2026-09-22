@@ -1,11 +1,14 @@
 import {
+  BadGatewayException,
   BadRequestException,
+  HttpException,
   ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
   Logger,
   NotFoundException,
+  OnApplicationBootstrap,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
@@ -25,7 +28,7 @@ import { ShippingService } from '../shipping/shipping.service';
 import { carrierTrackingUrl } from '../shipping/tracking-url';
 import { StripeConnectService } from '../users/stripe-connect.service';
 import { UsersService } from '../users/users.service';
-import { CheckoutSync, IPaymentProvider } from './payment-provider.interface';
+import { CheckoutSync, IPaymentProvider, PaymentProviderError, PaymentState } from './payment-provider.interface';
 import { CHECKOUT_TTL_MINUTES, PAYMENT_PROVIDER } from './payments.constants';
 import { ChosenPickupPoint, DeliveryAddress, DeliveryMethod, DeliveryMode, Transaction, TransactionStatus } from './transaction.entity';
 
@@ -90,7 +93,56 @@ export function quoteOfTransaction(tx: Pick<Transaction, 'amount' | 'commission'
 }
 
 @Injectable()
-export class PaymentsService {
+export class PaymentsService implements OnApplicationBootstrap {
+  /**
+   * AUDIT §63 : l'API de production (offre gratuite) est mise en veille entre deux visites — la tâche des échéances
+   * (toutes les 15 min) ne tournait donc pas ; les autorisations bancaires expiraient au bout de 7 jours sans être
+   * encaissées. Au réveil, les échéances sont jouées tout de suite (et un réveil régulier est assuré par ailleurs).
+   */
+  onApplicationBootstrap() {
+    if (process.env.NODE_ENV === 'test' || process.env.ESCROW_RUN_ON_BOOT === '0') return;
+    setTimeout(() => {
+      this.runEscrowSchedule().catch((e) => this.logger.error(`Échéances au démarrage : ${(e as Error).message}`));
+    }, 8_000).unref();
+  }
+
+  /**
+   * Refus du prestataire rendu en clair (AUDIT §63) : autorisation expirée → 409 avec le message ; autre refus → 502
+   * avec le motif du prestataire. Avant, tout finissait en « Erreur interne » et l'administrateur ne pouvait pas trancher.
+   */
+  private async providerCall<T>(fn: () => Promise<T>): Promise<T> {
+    try {
+      return await fn();
+    } catch (err) {
+      if (err instanceof HttpException) throw err;
+      if (err instanceof PaymentProviderError) throw new ConflictException({ statusCode: 409, code: err.code, message: err.message });
+      const e = err as { type?: string; code?: string; message?: string };
+      throw new BadGatewayException({ statusCode: 502, code: 'PROVIDER_REFUSED', message: `Le prestataire de paiement a refusé l'opération : ${e?.message || String(err)}` });
+    }
+  }
+
+  /** Une seule action à la fois par vente (AUDIT §63) : décision admin, annulation, confirmation, expédition ne se croisent plus. */
+  private readonly locks = new Map<string, Promise<unknown>>();
+  private async locked<T>(id: string, fn: () => Promise<T>): Promise<T> {
+    const previous = this.locks.get(id) ?? Promise.resolve();
+    const run = previous.catch(() => undefined).then(fn);
+    this.locks.set(id, run);
+    try {
+      return await run;
+    } finally {
+      if (this.locks.get(id) === run) this.locks.delete(id);
+    }
+  }
+
+  /** État réel du paiement chez le prestataire, pour la fiche admin (au mieux, jamais bloquant). */
+  async inspectPayment(tx: Transaction): Promise<{ state: PaymentState; detail?: string }> {
+    if (!tx.providerPaymentId || !this.paymentProvider.inspect) return { state: 'inconnue' };
+    try {
+      return await Promise.race([this.paymentProvider.inspect(tx.providerPaymentId), new Promise<{ state: PaymentState; detail: string }>((r) => setTimeout(() => r({ state: 'inconnue', detail: 'prestataire injoignable' }), 6_000).unref())]);
+    } catch (e) {
+      return { state: 'inconnue', detail: (e as Error).message };
+    }
+  }
   private readonly logger = new Logger('Paiements');
   /** Codes de remise incorrects par vente (mémoire du processus) : 5 essais par heure, quelle que soit l'adresse IP. */
   private readonly handoverFailures = new Map<string, { count: number; until: number }>();
@@ -141,6 +193,8 @@ export class PaymentsService {
 
   private async checkEligibility(listing: Listing): Promise<{ ok: boolean; reason?: string }> {
     if (!listing.price || listing.price <= 0) return { ok: false, reason: 'Cette annonce n\'a pas de prix fixe.' };
+    // AUDIT §63 : sous 1 €, le paiement sécurisé ne servait qu'à fabriquer de faux avis (0,51 € le cycle)
+    if (listing.price < 1) return { ok: false, reason: 'Le paiement sécurisé est possible à partir de 1 €.' };
     // Préférence du vendeur (remise en main propre seulement) ou compte de démonstration (AUDIT §46) : jamais de paiement en ligne
     const seller = await this.usersService.findById(listing.userId);
     if (!seller || seller.securePaymentDisabled || seller.isDemoAccount) return { ok: false, reason: 'Ce vendeur ne propose pas le paiement sécurisé : réglez en main propre, à la remise.' };
@@ -460,7 +514,13 @@ export class PaymentsService {
   private async settle(tx: Transaction, title?: string) {
     if (this.isPlatform(tx)) {
       await this.ensureCaptured(tx);
-      await this.payoutSeller(tx, title);
+      // AUDIT §63 : un virement refusé par le prestataire (compte du vendeur restreint…) ne bloque plus la confirmation de
+      // l'acheteur : la vente est confirmée, le virement reste en attente et la tâche périodique le retente
+      try {
+        await this.payoutSeller(tx, title);
+      } catch (e) {
+        this.logger.error(`Transaction ${tx.id} : virement au vendeur refusé, à retenter (${(e as Error).message})`);
+      }
     } else {
       await this.paymentProvider.capture(tx.providerPaymentId!);
     }
@@ -542,6 +602,8 @@ export class PaymentsService {
 
         // 1. Réception présumée (article expédié, aucun litige) : rappel 48 h avant, dernier avis 24 h avant, puis confirmation
         if (tx.status === 'livree' && tx.deliveryMethod !== 'main_propre') {
+          // Numéro de suivi saisi à la main sur une livraison prépayée (AUDIT §63) : pas de réception présumée
+          if (this.isPlatform(tx) && !tx.autoConfirmAt) continue;
           const autoAt = tx.autoConfirmAt ? new Date(tx.autoConfirmAt) : deadline;
           if (now >= autoAt) {
             await this.settleAutomatically(tx, 'reception_presumee', `Réception présumée le ${frDate(now)} : aucune confirmation ni litige depuis l'expédition`, title);
@@ -686,7 +748,8 @@ export class PaymentsService {
   private async removeSoldListing(tx: Transaction) {
     try {
       const listing = await this.listingsRepo.findOne({ where: { id: tx.listingId } });
-      if (listing) await this.retention.purgeListing(listing);
+      // AUDIT §63 : archivée (invisible pour les membres, consultable par l'administration en cas de litige), effacée plus tard
+      if (listing) await this.retention.archiveListing(listing);
     } catch (e) {
       this.logger.error(`Transaction ${tx.id} : suppression de l'annonce vendue ${tx.listingId} impossible (${(e as Error).message})`);
     }
@@ -785,6 +848,8 @@ export class PaymentsService {
           this.logger.warn(`Paiement ${sync.providerPaymentId} reçu pour une vente ${tx ? 'annulée' : 'introuvable'} : autorisation libérée`);
         }
       }
+    } else if (event.type === 'account_updated' && event.accountId) {
+      await this.stripeConnect.applyAccountUpdate(event.accountId, event.account as never);
     } else if (event.type === 'payment_canceled' && event.providerPaymentId) {
       const tx = await this.transactionsRepo.findOne({ where: { providerPaymentId: event.providerPaymentId } });
       if (tx && ['sequestre', 'livree'].includes(tx.status)) {
@@ -792,6 +857,7 @@ export class PaymentsService {
         tx.resolvedAt = new Date();
         tx.resolutionNote = 'Autorisation annulée chez le fournisseur de paiement';
         await this.transactionsRepo.save(tx);
+        await this.shipping.cancelLabelFor(tx.id).catch(() => undefined);
         for (const uid of [tx.buyerId, tx.sellerId]) {
           await this.notifications.notify(uid, { type: 'transaction', title: 'Transaction annulée', body: "L'autorisation de paiement a été annulée : aucun montant ne sera débité.", link: `/compte/transactions/${tx.id}` });
         }
@@ -799,6 +865,17 @@ export class PaymentsService {
     } else if (event.type === 'payment_refunded' && event.providerPaymentId) {
       const tx = await this.transactionsRepo.findOne({ where: { providerPaymentId: event.providerPaymentId } });
       if (tx && ['sequestre', 'livree', 'confirme', 'litige'].includes(tx.status)) {
+        // AUDIT §63 : remboursement fait depuis le tableau de bord du prestataire alors que le vendeur a déjà été payé → le
+        // virement est annulé (sinon Trocoin paie deux fois)
+        if (this.isPlatform(tx) && tx.transferId && !tx.transferId.startsWith('en-cours:')) {
+          try {
+            await this.paymentProvider.reverseTransfer(tx.transferId);
+            tx.transferId = null;
+            tx.transferredAt = null;
+          } catch (e) {
+            this.logger.error(`Transaction ${tx.id} : virement ${tx.transferId} non annulé après remboursement externe (${(e as Error).message}) — à récupérer à la main`);
+          }
+        }
         tx.status = 'rembourse';
         tx.resolvedAt = new Date();
         tx.resolutionNote = tx.resolutionNote || 'Remboursement constaté chez le fournisseur de paiement';
@@ -836,7 +913,7 @@ export class PaymentsService {
         ...this.viewFor(t, userId),
         role: t.buyerId === userId ? 'acheteur' : 'vendeur',
         other,
-        listing: l ? { id: l.id, title: l.title, price: l.price, status: l.status } : null,
+        listing: l && l.status !== 'archivee' ? { id: l.id, title: l.title, price: l.price, status: l.status } : null, // archivée = supprimée pour les membres (AUDIT §63)
       });
     }
     return result;
@@ -846,7 +923,8 @@ export class PaymentsService {
     let tx = await this.getOwned(transactionId, userId);
     let checkoutUrl: string | undefined;
     if (tx.status === 'en_attente') ({ tx, checkoutUrl } = await this.syncPending(tx));
-    const listing = await this.listingsRepo.findOne({ where: { id: tx.listingId } });
+    const found = await this.listingsRepo.findOne({ where: { id: tx.listingId } });
+    const listing = found && found.status !== 'archivee' ? found : null; // archivée = supprimée pour les membres (AUDIT §63)
     const otherId = tx.buyerId === userId ? tx.sellerId : tx.buyerId;
     const other = await this.usersService.findPublicSummary(otherId);
     return {
@@ -862,7 +940,11 @@ export class PaymentsService {
   }
 
   /** Le vendeur déclare l'expédition (n° de suivi) ou la remise prête. */
-  async markShipped(transactionId: string, userId: string, trackingNumber?: string): Promise<Transaction> {
+  markShipped(transactionId: string, userId: string, trackingNumber?: string): Promise<Transaction> {
+    return this.locked(transactionId, () => this.markShippedNow(transactionId, userId, trackingNumber));
+  }
+
+  private async markShippedNow(transactionId: string, userId: string, trackingNumber?: string): Promise<Transaction> {
     const tx = await this.getOwned(transactionId, userId);
     if (tx.sellerId !== userId) throw new ForbiddenException("Seul le vendeur peut déclarer l'envoi.");
     if (tx.status !== 'sequestre') throw new BadRequestException(`Impossible depuis le statut "${tx.status}".`);
@@ -871,6 +953,15 @@ export class PaymentsService {
     if (tx.deliveryMethod !== 'main_propre' && !tracking) {
       throw new BadRequestException('Un numéro de suivi est requis pour un envoi.');
     }
+    // Numéro saisi à la main : forme d'un vrai numéro de suivi
+    if (tx.deliveryMethod !== 'main_propre' && trackingNumber && !/^[A-Z0-9]{8,30}$/i.test(trackingNumber.replace(/[\s-]/g, ''))) {
+      throw new BadRequestException('Numéro de suivi invalide : 8 à 30 lettres ou chiffres.');
+    }
+    // AUDIT §63 : quand l'acheteur a payé la livraison, l'envoi passe normalement par le bon d'envoi de Trocoin (numéro de
+    // suivi réel du transporteur). Un numéro saisi à la main reste possible en secours, mais il ne déclenche PAS la
+    // réception présumée : un numéro inventé faisait payer le vendeur sans envoi au bout de 7 jours. L'acheteur confirme,
+    // ou l'administration tranche.
+    const labelled = tx.deliveryMethod !== 'main_propre' && tx.shippingQuote ? !!(await this.shipments.findOne({ where: { transactionId: tx.id, status: In(['etiquette_prete', 'expediee']) } })) : true;
     // Modèle platform : le vendeur s'engage (expédition ou remise prête), les fonds sont encaissés maintenant
     await this.ensureCaptured(tx);
     tx.status = 'livree';
@@ -880,7 +971,8 @@ export class PaymentsService {
     if (tx.deliveryMethod !== 'main_propre') {
       // Réception présumée : N jours après l'expédition (ancien modèle : jamais après la marge de sécurité de l'autorisation)
       const wanted = tx.shippedAt.getTime() + ESCROW_AUTO_CONFIRM_DAYS * DAY_MS;
-      tx.autoConfirmAt = new Date(this.isPlatform(tx) ? wanted : Math.min(wanted, this.escrowDeadline(tx).getTime()));
+      tx.autoConfirmAt = labelled ? new Date(this.isPlatform(tx) ? wanted : Math.min(wanted, this.escrowDeadline(tx).getTime())) : undefined;
+      if (!labelled) this.logger.warn(`Transaction ${tx.id} : expédition déclarée à la main sur une livraison prépayée (${tracking}) — pas de réception présumée`);
       tx.escrowStage = 0; // les rappels repartent sur la nouvelle échéance (réception)
     }
     const saved = await this.transactionsRepo.save(tx);
@@ -1045,7 +1137,7 @@ export class PaymentsService {
     const previous = tx.status;
     await this.claim(tx, [previous], { status: 'litige', disputeReason: reason, disputeOpenedBy: userId });
     try {
-      await this.ensureCaptured(tx);
+      await this.providerCall(() => this.ensureCaptured(tx));
     } catch (e) {
       await this.release(tx, { status: previous, disputeReason: null, disputeOpenedBy: null } as unknown as Partial<Transaction>);
       throw e;
@@ -1069,9 +1161,14 @@ export class PaymentsService {
    * la vente. Possible sur toute transaction encore ouverte (séquestre, expédiée, litige) et, pour un
    * remboursement, sur une transaction confirmée automatiquement tant que sa fenêtre de litige est ouverte.
    */
-  async resolveDispute(transactionId: string, decision: 'rembourser' | 'liberer' | 'annuler', note: string): Promise<Transaction> {
+  resolveDispute(transactionId: string, decision: 'rembourser' | 'liberer' | 'annuler', note: string): Promise<Transaction> {
+    return this.locked(transactionId, () => this.resolveDisputeNow(transactionId, decision, note));
+  }
+
+  private async resolveDisputeNow(transactionId: string, decision: 'rembourser' | 'liberer' | 'annuler', note: string): Promise<Transaction> {
     const tx = await this.transactionsRepo.findOne({ where: { id: transactionId } });
     if (!tx) throw new NotFoundException('Transaction introuvable.');
+    if (tx.resolvedAt && ['rembourse', 'annulee'].includes(tx.status)) throw new ConflictException('Cette vente a déjà été tranchée.');
     const open = ['sequestre', 'livree', 'litige'].includes(tx.status);
     const refundableAfterCapture = tx.status === 'confirme' && !!tx.autoResolution && !!tx.disputeAllowedUntil && new Date(tx.disputeAllowedUntil).getTime() > Date.now();
     if (!open && !(decision === 'rembourser' && refundableAfterCapture)) {
@@ -1079,7 +1176,8 @@ export class PaymentsService {
     }
     if (decision === 'annuler') {
       if (tx.confirmedAt) throw new BadRequestException('Vente déjà confirmée : utilisez « rembourser ».');
-      await this.refundBuyer(tx);
+      await this.providerCall(() => this.refundBuyer(tx));
+      await this.shipping.cancelLabelFor(tx.id);
       tx.status = 'annulee';
       tx.resolutionNote = note;
       tx.resolvedAt = new Date();
@@ -1092,12 +1190,13 @@ export class PaymentsService {
     if (decision === 'rembourser') {
       // Autorisation encore ouverte : annulée ; fonds encaissés : remboursés (modèle platform : depuis le solde
       // de Trocoin, après annulation du virement s'il a déjà eu lieu)
-      await this.refundBuyer(tx);
+      await this.providerCall(() => this.refundBuyer(tx));
+      await this.shipping.cancelLabelFor(tx.id);
       tx.status = 'rembourse';
       // L'annonce reste « vendue » : le vendeur la remet en ligne lui-même s'il a récupéré l'article (AUDIT §58)
     } else {
       // Ancien modèle : déjà capturé si l'échéance est passée ; modèle platform : capture si besoin puis virement
-      if (this.isPlatform(tx) || !tx.confirmedAt) await this.settle(tx);
+      if (this.isPlatform(tx) || !tx.confirmedAt) await this.providerCall(() => this.settle(tx));
       tx.status = 'confirme';
       tx.confirmedAt = tx.confirmedAt ?? new Date();
       await this.removeSoldListing(tx);

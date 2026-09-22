@@ -174,13 +174,15 @@ export class ConversationsService {
   async getDetail(conversationId: string, userId: string) {
     const c = await this.assertMember(conversationId, userId);
     const otherId = c.buyerId === userId ? c.sellerId : c.buyerId;
-    const [other, listing, messages] = await Promise.all([
+    const [other, found, messages] = await Promise.all([
       this.usersService.findPublicSummary(otherId),
       this.listingsRepo.findOne({ where: { id: c.listingId } }),
       this.getMessages(conversationId, userId),
     ]);
+    const listing = found && found.status !== 'archivee' ? found : null; // archivée = supprimée pour les membres (AUDIT §63)
     const cover = listing ? await this.photosRepo.findOne({ where: { listingId: listing.id }, order: { sortOrder: 'ASC' } }) : null;
     const blocked = await this.usersService.isBlockedEitherWay(userId, otherId);
+    const blockedByMe = blocked && (await this.usersService.hasBlocked(userId, otherId));
     return {
       ...c,
       role: c.buyerId === userId ? 'acheteur' : 'vendeur',
@@ -190,6 +192,7 @@ export class ConversationsService {
         : null,
       messages,
       blocked,
+      blockedByMe,
       quickReplies: QUICK_REPLIES,
       transaction: await this.saleSummary(c, userId),
       // Proposition acceptée encore valable : l'acheteur peut payer ce prix (AUDIT §60) ; le vendeur voit qu'il est engagé jusqu'à l'échéance
@@ -325,6 +328,9 @@ export class ConversationsService {
   }
 
   private async assertCanWrite(conversationId: string, senderId: string): Promise<{ c: Conversation; otherId: string }> {
+    // AUDIT §63 : le statut du compte est relu à chaque écriture (un socket ouvert avant une suspension écrivait encore)
+    const sender = await this.usersService.findById(senderId);
+    if (!sender || sender.deletedAt || sender.suspendedAt) throw new ForbiddenException('Votre compte ne permet plus d\'écrire.');
     const c = await this.assertMember(conversationId, senderId);
     const otherId = c.buyerId === senderId ? c.sellerId : c.buyerId;
     if (await this.usersService.isBlockedEitherWay(senderId, otherId)) {

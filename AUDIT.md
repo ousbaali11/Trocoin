@@ -3354,3 +3354,106 @@ Demande du propriétaire, livrée **sans passage des suites locales** (crédit l
 - Page « Paiements » : le bloc « Comment sont calculés les frais ? » est retiré (le barème ne doit pas être exposé), le bloc DAC7 est gardé sous « Bon à savoir » ; le nom du prestataire de paiement n'apparaît plus nulle part dans les textes du site (page Paiements, Formule, page de la vente, message d'un vendeur sans compte de versement). Les identifiants techniques (routes, variables) sont inchangés.
 - Conversation : la vignette carrée de l'annonce laisse place à l'**avatar rond** de l'autre membre (photo ou initiale) avec une **pastille** en haut à droite — **verte** s'il est connecté, **orange** sinon, jamais d'heure de dernière visite. Présence tenue par la passerelle (sockets ouverts par membre ; `peerOnline` dans l'accusé de `join`, évènement `presence` à l'entrée dans la conversation et à la fermeture du dernier onglet). L'indicateur « ● en direct » disparaît de l'en-tête (« différé » n'apparaît qu'en cas de coupure). Vignettes de la boîte de réception arrondies.
 - Specs `05` et `28` : l'attente de « en direct » devient l'attente de la pastille verte.
+
+## 63. Litiges introuvables pour l'admin, annonces effacées trop tôt, audit complet, versement par IBAN — 22 septembre 2026
+
+Demande du propriétaire : (1) un litige déclaré ne pouvait pas être tranché par l'admin ; (2) une annonce effacée
+automatiquement à la réception doit rester consultable par l'administration (pas par les membres) si un litige
+survient ; (3) audit complet — bugs, erreurs, failles, « personne ne doit pouvoir tricher » — avec test des
+paiements et de Boxtal ; (4) un compte de versement simple (nom + IBAN) au lieu du parcours du prestataire.
+
+### 1. Pourquoi l'admin ne pouvait pas trancher — cause racine
+
+Reproduit localement : les trois décisions passent. Mesure en production : **l'API est en veille** (offre gratuite de
+Render : premier appel 32 s, `uptimeSeconds` 24). La tâche interne des échéances (toutes les 15 min : encaissement
+sous 24 h, réception présumée, virements) **ne tournait donc jamais** entre deux visites. Les autorisations
+bancaires expiraient au bout de 7 jours sans encaissement ; toute décision demandant un mouvement d'argent finissait
+chez le prestataire en refus, rendu au site en **500 « Erreur interne »** — l'admin ne voyait ni la cause ni ce
+qu'il pouvait encore faire.
+
+Corrections :
+- **Échéances rejouées à chaque démarrage** de l'API (`onApplicationBootstrap`, 8 s après le réveil) et **workflow
+  GitHub `keep-alive.yml`** : appel de `/health` toutes les 10 minutes (documenté dans `DEPLOIEMENT.md` §5b bis ;
+  l'instance Starter reste la vraie solution).
+- **État réel du paiement lu chez le prestataire** (`IPaymentProvider.inspect`) : la fiche admin l'affiche (« autorisé,
+  non encaissé », « encaissé par Trocoin », « autorisation annulée ou expirée », « remboursé ») et n'offre que les
+  décisions possibles — autorisation expirée → **annuler seulement** (l'acheteur n'a jamais été débité).
+- `capture` relit l'état avant d'agir (déjà encaissé → rien ; annulé → refus explicite `autorisation_expiree`),
+  `refund` ne rembourse pas deux fois ni un paiement annulé ; un identifiant de session resté en place est résolu en
+  identifiant de paiement.
+- **Refus du prestataire rendus en clair** (`providerCall`) : 409 avec message pour une autorisation expirée, 502
+  « Le prestataire de paiement a refusé l'opération : … » sinon — sur les décisions admin, l'ouverture de litige et
+  la confirmation de réception. Plus jamais « Erreur interne ».
+- Fiche admin : bouton « Réessayer » sans perdre la page, « ouvert par l'acheteur / le vendeur » juste même sans
+  compte, note bornée à 1 000 caractères.
+
+### 2. Annonces archivées au lieu d'effacées
+
+À la fin d'une vente (réception confirmée, remise validée, réception présumée, décision « libérer »), l'annonce est
+**archivée** (`status = archivee`, `archivedAt`, migration `1789590000000`) : retirée de la recherche, de la fiche
+(404), de « Mes annonces », des favoris et de l'historique — mais **conservée avec ses photos pour l'administration**
+(fiche admin avec bandeau, lien depuis la fiche de la vente, filtre « Archivée » dans la liste). Effacement réel par
+une tâche quotidienne après **90 jours**, jamais tant qu'un litige est ouvert ou qu'une fenêtre de litige court. Une
+suppression (vendeur ou admin) d'une annonce ayant connu une vente payée archive au lieu d'effacer.
+
+### 3. Audit complet — failles et bugs corrigés
+
+Deux relectures systématiques (API : 35 constats ; front : 25 constats). Corrigé dans ce tour :
+
+| Constat | Gravité | Correction |
+| --- | --- | --- |
+| **Export RGPD** (`/users/me/export`) livrait le **code de remise** : un vendeur pouvait valider la remise seul et être payé sans livrer | critique | code de remise, référence de paiement et de virement retirés de l'export |
+| Fiches admin utilisateur / annonce renvoyaient les transactions brutes avec le code de remise | élevée | retiré |
+| Décision admin, expédition, annulation pouvaient se croiser (double mouvement d'argent, vente « livrée » alors que l'acheteur est remboursé) | élevée | verrou par vente (`locked`), relecture avant décision, refus d'une seconde décision sur une vente tranchée |
+| Virement au vendeur refusé par le prestataire → la confirmation de l'acheteur échouait en boucle | élevée | la vente est confirmée, le virement reste en attente et est retenté par la tâche périodique |
+| Numéro de suivi **inventé** → « livrée » → réception présumée → vendeur payé sans envoi (livraison prépayée par l'acheteur) | élevée | expédition exigeant le bon d'envoi de Trocoin quand la livraison est prépayée ; forme du numéro contrôlée sinon |
+| Admin : « Approuver et publier » sur une annonce vendue (vente en cours) ou un brouillon → double vente ; suppression admin pendant une vente | élevée | publication limitée à en vérification / refusée / en pause / expirée, jamais pendant une vente ; suppression refusée pendant une vente |
+| « Renouveler » une annonce déjà en ligne = remontée gratuite illimitée (et réveil des alertes) | élevée | au plus une fois par semaine |
+| Titre, description et prix modifiables pendant une vente payée | moyenne | figés jusqu'à la fin de la vente |
+| Socket : un compte suspendu ou supprimé continuait d'écrire | moyenne | statut relu à chaque écriture |
+| Vendeur au compte de versement commencé mais non fini : toutes ses annonces inachetables (400 après « Payer ») | moyenne | traité comme « pas de compte » : achat possible, virement en attente |
+| Suppression de compte avec un virement dû : argent bloqué chez Trocoin | moyenne | refusée tant qu'un versement est dû |
+| Remboursement fait depuis le tableau de bord du prestataire après virement au vendeur : Trocoin payait deux fois | moyenne | le virement est annulé ; annulation externe → bon d'envoi retiré |
+| Signalement d'un membre confondu avec un signalement d'annonce (`undefined` ignoré) ; retrait sur signalement d'une annonce vendue | moyenne | `IsNull()` ; retrait limité aux annonces visibles |
+| Faux avis à 0,51 € (prix 0,01 €) | moyenne | paiement sécurisé à partir de 1 € |
+| Litiges anciens absents de la file « à échéance » | moyenne | litiges de plus de 7 jours inclus |
+| Identifiant non UUID dans une route protégée → 500 | faible | 400 |
+| Avatar / logo sans limite dédiée | faible | 10 par heure |
+| PDF du bon d'envoi muet après expiration du jeton | élevée (front) | jeton rafraîchi, erreur affichée |
+| « Débloquer » proposé à celui qui est bloqué | moyenne (front) | `blockedByMe` ; « Bloqué » sinon |
+
+Non traité (choix ou reporté) : vérification SMS du numéro (reportée par le propriétaire — sans elle, un numéro
+peut être usurpé à l'inscription) ; verrouillage par compte à la connexion ; exécution mémoire des recherches
+sauvegardées ; compteurs de la console non rafraîchis après action ; champs vidés non enregistrés dans Paramètres.
+
+### 4. Compte de versement en un formulaire (nom + IBAN)
+
+Options pesées : (a) garder le parcours hébergé Express (le plus simple pour la conformité, mais plusieurs écrans,
+SMS, pièce d'identité — c'est ce qui décourageait) ; (b) compte **Custom** créé par Trocoin depuis un formulaire du
+site ; (c) virements SEPA faits par Trocoin depuis son propre compte bancaire — **écarté** : détenir et reverser les
+fonds de tiers hors prestataire agréé est une activité réglementée (ACPR). Retenu : **(b)**. Le particulier saisit
+prénom, nom, date de naissance, adresse, IBAN et coche les conditions du service de versement ; c'est le minimum
+imposé par la réglementation des paiements — « nom + IBAN » seuls ne suffisent pas légalement. Prénom, nom, code
+postal et ville sont préremplis ; l'IBAN est vérifié (format, clé) avant tout appel ; Trocoin n'en garde que les
+4 derniers caractères. Si le prestataire demande ensuite une pièce d'identité (seuils de volume), la page le dit et
+un lien n'ouvre que cette étape ; webhook `account.updated` à activer pour les comptes connectés. Les comptes
+professionnels gardent le parcours hébergé. Migration `1789600000000`. La mention des conditions du prestataire
+(lien) est contractuellement obligatoire : c'est la seule trace de son nom sur le site.
+
+### 5. Paiement et Boxtal : ce qui a été testé
+
+Pile locale (prestataire de paiement simulé, transporteur simulé) : achat, expédition, réception, remise, litige et
+les trois décisions admin, autorisation expirée, refus du prestataire, archivage, formulaire IBAN. Production :
+cotations et points Boxtal réels vérifiés aux §59 et §61 ; **un achat complet en production exige de saisir une carte
+(même de test), ce qui reste interdit** — la chaîne paiement → séquestre → virement est prouvée par les tests API et
+navigateur sur le prestataire simulé et par le parcours réel jusqu'à la page de paiement.
+
+### Vérification
+
+- API : `test/phase39` (5 tests : autorisation expirée → 409 en clair, décisions restreintes, annulation ; refus du prestataire
+  → 502 sans changement d'état ; archivage et effacement différé ; formulaire IBAN et suppression bloquée ; export sans code,
+  texte figé, suivi manuel sans réception présumée, renouvellement limité, suppression admin refusée, prix minimum) ;
+  `phase17`, `22`, `24`, `26` adaptées aux nouvelles règles → **216 tests**, 1 ignoré.
+- Navigateur : `31-versement-iban-archivage` (formulaire IBAN → compte actif « •••• 2606 », IBAN jamais réaffiché ; litige →
+  état du prestataire sur la fiche admin → décision ; annonce archivée : bandeau admin, 404 membres, absente de « Mes
+  annonces ») à 375 px et sur grand écran ; `30` adaptée au formulaire.

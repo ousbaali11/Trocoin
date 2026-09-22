@@ -1,5 +1,5 @@
 export type AccountType = "particulier" | "professionnel" | "admin";
-export type ListingStatus = "brouillon" | "en_attente" | "en_ligne" | "vendue" | "refusee" | "expiree" | "desactivee";
+export type ListingStatus = "brouillon" | "en_attente" | "en_ligne" | "vendue" | "refusee" | "expiree" | "desactivee" | "archivee";
 export type PriceType = "fixe" | "negociable" | "gratuit" | "echange" | "sur_demande";
 export type Condition = "neuf" | "tres_bon_etat" | "bon_etat" | "etat_satisfaisant" | "pour_pieces";
 export type TransactionStatus = "en_attente" | "sequestre" | "livree" | "confirme" | "litige" | "rembourse" | "annulee";
@@ -328,6 +328,8 @@ export interface ConversationSale {
 export interface ConversationDetail extends Omit<ConversationSummary, "lastMessage" | "unreadCount"> {
   messages: Message[];
   blocked: boolean;
+  /** Vrai si c'est moi qui ai bloqué l'autre (AUDIT §63) ; faux quand c'est l'autre qui m'a bloqué. */
+  blockedByMe?: boolean;
   quickReplies: string[];
   transaction?: ConversationSale | null;
   /** Proposition de prix acceptée et encore valable : l'acheteur peut payer ce prix (AUDIT §60). */

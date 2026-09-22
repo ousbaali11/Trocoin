@@ -215,7 +215,7 @@ export class AdminService {
         .getMany(),
       this.reviewsRepo.find({ where: { reviewedId: id }, order: { createdAt: 'DESC' }, take: 20 }),
     ]);
-    return { ...this.userView(user), listings, reportsAgainst, reportsByCount: reportsBy, transactions, reviews };
+    return { ...this.userView(user), listings, reportsAgainst, reportsByCount: reportsBy, transactions: transactions.map(({ handoverCode, ...t }) => t), reviews };
   }
 
   async resetUserPassword(ctx: AdminContext, id: string) {
@@ -308,7 +308,7 @@ export class AdminService {
       this.transactionsRepo.find({ where: { listingId: id } }),
     ]);
     const category = await this.categoriesService.findById(listing.categoryId);
-    return { ...listing, photos, reports, owner: owner ? this.userView(owner) : null, transactions, category };
+    return { ...listing, photos, reports, owner: owner ? this.userView(owner) : null, transactions: transactions.map(({ handoverCode, ...t }) => t), category };
   }
 
   async updateListing(ctx: AdminContext, id: string, dto: AdminUpdateListingDto) {
@@ -326,6 +326,10 @@ export class AdminService {
       if (dto.status === 'refusee' && !dto.moderationReason) {
         throw new BadRequestException('Un motif est requis pour refuser une annonce (il est transmis au vendeur).');
       }
+      // AUDIT §63 : publier depuis un brouillon (le vendeur n'a pas fini) ou une annonce vendue / archivée, ou pendant une
+      // vente payée, rendait l'article achetable une seconde fois
+      if (dto.status === 'en_ligne' && !['en_attente', 'refusee', 'desactivee', 'expiree'].includes(listing.status)) throw new BadRequestException(`Impossible de publier une annonce « ${listing.status} » : seules les annonces en vérification, refusées, en pause ou expirées se publient.`);
+      if (dto.status === 'en_ligne' && (await this.listingsService.hasActiveSale(id))) throw new BadRequestException('Une vente payée est en cours sur cette annonce : elle ne peut pas être remise en ligne.');
       patch.status = dto.status;
       changed.status = { from: listing.status, to: dto.status };
       if (dto.status === 'en_ligne') {
@@ -364,6 +368,8 @@ export class AdminService {
   async deleteListing(ctx: AdminContext, id: string, reason: string) {
     const listing = await this.listingsRepo.findOne({ where: { id } });
     if (!listing) throw new NotFoundException('Annonce introuvable.');
+    // AUDIT §63 : une vente payée est en cours → l'annonce reste (preuves du litige éventuel) ; retirez-la (refusée) à la place
+    if (await this.listingsService.hasActiveSale(id)) throw new BadRequestException("Une vente payée est en cours sur cette annonce : elle ne peut pas être supprimée. Retirez-la (statut « refusée ») ou tranchez d'abord la vente.");
     const result = await this.listingsService.deleteListing(listing);
     // hardDeleted : l'annonce n'existe plus en base ; keptTransactions : ventes payées conservées (trace comptable anonymisée)
     await this.audit(ctx, 'listing.delete', 'listing', id, { title: listing.title, ownerId: listing.userId, reason, hardDeleted: result.deleted, keptTransactions: result.keptTransactions });
@@ -411,7 +417,8 @@ export class AdminService {
     const details: Record<string, unknown> = { status: dto.status, action, note: dto.note };
 
     if ((action === 'retirer_annonce' || action === 'retirer_et_suspendre') && report.listingId) {
-      await this.listingsRepo.update(report.listingId, {
+      // AUDIT §63 : une annonce vendue (vente en cours) ou archivée ne se « retire » pas — l'acheteur verrait sa vente refusée
+      await this.listingsRepo.update({ id: report.listingId, status: In(['en_ligne', 'en_attente', 'desactivee', 'expiree']) }, {
         status: 'refusee',
         moderationReason: dto.note || `Retirée suite à un signalement (${report.reason})`,
       });
@@ -467,7 +474,7 @@ export class AdminService {
       // Séquestres à échéance sous ESCROW_ADMIN_ALERT_HOURS : ancien modèle → date limite de capture ;
       // modèle platform → délai d'expédition / de remise ou réception présumée (mêmes règles que PaymentsService.escrowDueSoon)
       qb.andWhere('t.status IN (:...open)', { open: ['sequestre', 'livree', 'litige'] })
-        .andWhere(`((t.escrowModel = 'destination' AND t.captureBefore < :limit) OR (t.escrowModel = 'platform' AND t.status IN ('sequestre', 'livree') AND COALESCE(t.autoConfirmAt, t.shipBy) < :limit))`, { limit: new Date(Date.now() + ESCROW_ADMIN_ALERT_HOURS * 3_600_000) })
+        .andWhere(`((t.escrowModel = 'destination' AND t.captureBefore < :limit) OR (t.escrowModel = 'platform' AND t.status IN ('sequestre', 'livree') AND COALESCE(t.autoConfirmAt, t.shipBy) < :limit) OR (t.status = 'litige' AND t.updatedAt < :stale) OR (t.status = 'livree' AND t.escrowModel = 'platform' AND t.autoConfirmAt IS NULL AND t.shippedAt < :manual))`, { limit: new Date(Date.now() + ESCROW_ADMIN_ALERT_HOURS * 3_600_000), stale: new Date(Date.now() - 7 * 86_400_000), manual: new Date(Date.now() - 10 * 86_400_000) })
         .orderBy('COALESCE(t.autoConfirmAt, t.shipBy, t.captureBefore)', 'ASC');
     }
     qb.skip((page - 1) * pageSize).take(pageSize);
@@ -515,10 +522,16 @@ export class AdminService {
     const { handoverCode, ...safe } = tx;
     const open = ['sequestre', 'livree', 'litige'].includes(tx.status);
     const refundableAfterCapture = tx.status === 'confirme' && !!tx.autoResolution && !!tx.disputeAllowedUntil && new Date(tx.disputeAllowedUntil).getTime() > Date.now();
+    // État réel chez le prestataire (AUDIT §63) : une autorisation expirée ne se libère pas au vendeur — seule l'annulation
+    // reste possible ; un paiement déjà remboursé ne se tranche plus.
+    const provider = open || refundableAfterCapture ? await this.paymentsService.inspectPayment(tx) : { state: 'inconnue' as const };
     // Décisions possibles maintenant (mêmes règles que PaymentsService.resolveDispute)
-    const decisions = [...(open || refundableAfterCapture ? ['rembourser'] : []), ...(open ? ['liberer'] : []), ...(open && !tx.confirmedAt ? ['annuler'] : [])];
+    let decisions = [...(open || refundableAfterCapture ? ['rembourser'] : []), ...(open ? ['liberer'] : []), ...(open && !tx.confirmedAt ? ['annuler'] : [])];
+    if (provider.state === 'annulee') decisions = open && !tx.confirmedAt ? ['annuler'] : [];
+    if (provider.state === 'remboursee') decisions = [];
     return {
       ...safe,
+      provider,
       hasHandoverCode: !!handoverCode,
       decisions,
       buyer: party(buyer),

@@ -49,7 +49,8 @@ describe('Phase 22 : échéances du séquestre (expiration de l\'autorisation ba
     const body = delivery === 'main_propre' ? { listingId: listing.id } : { listingId: listing.id, deliveryMethod: delivery, shippingAddress: { name: 'Alex Acheteur', line1: '5 avenue des Ternes', postalCode: '75017', city: 'Paris' } };
     const created = await request(server).post('/transactions').set(buyer.auth).send(body).expect(201);
     // Ancien modèle « destination charge » (AUDIT §39) : les ventes créées avant la bascule gardent cette logique
-    await txRepo.update(created.body.transaction.id, { escrowModel: 'destination', shipBy: null });
+    // Ventes antérieures au bon d'envoi prépayé (AUDIT §63) : sans devis de livraison, le numéro de suivi saisi vaut expédition
+    await txRepo.update(created.body.transaction.id, { escrowModel: 'destination', shipBy: null, shippingFee: 0, shippingQuote: null, deliveryMode: null, pickupPoint: null });
     return { seller, buyer, listing, tx: created.body.transaction as Transaction & { id: string } };
   };
 

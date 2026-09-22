@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, ensureFreshToken } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { PICKUP_TYPE_LABELS, formatEuros, formatPhone } from "@/lib/format";
 
@@ -137,7 +137,7 @@ export function ShipmentPanel({ tx, onChanged }: { tx: Transaction; onChanged: (
         </p>
         <p style={{ margin: "6px 0" }}>Numéro de suivi : <strong data-testid="shipment-tracking">{shipment.trackingNumber}</strong>{shipment.trackingUrl && <> · <a href={shipment.trackingUrl} target="_blank" rel="noopener">suivre</a></>}</p>
         <div className="row" style={{ marginTop: 8 }}>
-          <a className="btn btn-dark" href={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"}/transactions/${tx.id}/shipment/label.pdf`} onClick={(e) => { e.preventDefault(); downloadLabel(tx.id); }} data-testid="download-label">{tx.shippingQuote ? "Télécharger le bon d'envoi (PDF)" : "Télécharger l'étiquette (PDF)"}</a>
+          <a className="btn btn-dark" href={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"}/transactions/${tx.id}/shipment/label.pdf`} onClick={(e) => { e.preventDefault(); downloadLabel(tx.id).catch((err) => setError((err as Error).message)); }} data-testid="download-label">{tx.shippingQuote ? "Télécharger le bon d'envoi (PDF)" : "Télécharger l'étiquette (PDF)"}</a>
         </div>
         <p className="small muted" style={{ margin: "10px 0 0" }}>Imprimez l&apos;étiquette, collez-la sur le colis, puis déposez-le {shipment.mode === "domicile" ? "en bureau de poste" : "au point relais choisi"} et confirmez l&apos;expédition ci-dessous.</p>
       </div>
@@ -239,9 +239,18 @@ function clean(a: DeliveryAddress): DeliveryAddress {
 }
 
 async function downloadLabel(txId: string) {
-  const token = typeof window !== "undefined" ? localStorage.getItem("trocoin_token") : null;
+  // AUDIT §63 : jeton rafraîchi (une page laissée ouverte recevait 401 en silence) et échec expliqué
+  const token = await ensureFreshToken();
   const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"}/transactions/${txId}/shipment/label.pdf`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-  if (!res.ok) return;
+  if (!res.ok) {
+    let message = "Téléchargement impossible pour le moment.";
+    try {
+      message = ((await res.json()) as { message?: string }).message || message;
+    } catch {
+      /* réponse sans corps */
+    }
+    throw new Error(message);
+  }
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");

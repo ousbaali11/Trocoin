@@ -187,6 +187,16 @@ Vérifier un envoi réel hors production : `POST /auth/password/forgot` puis
 `GET /dev/last-reset-link/:email` (module dev, absent en production) donne le lien envoyé ; le
 comparer à l'e-mail reçu.
 
+## 5b bis. Mise en veille de l'API (offre gratuite de Render) — AUDIT §63
+
+Sur l'offre gratuite, Render **met l'API en veille** après 15 minutes sans requête (premier appel suivant : 30 à
+60 s). Conséquence constatée en production : la tâche interne des échéances du séquestre (toutes les 15 min :
+encaissement sous 24 h, réception présumée, virements, annulations) ne tournait pas, et les autorisations bancaires
+expiraient au bout de 7 jours sans être encaissées — l'admin ne pouvait plus libérer les fonds. Deux parades sont en
+place : les échéances sont rejouées **à chaque démarrage** de l'API, et le workflow GitHub `keep-alive.yml` appelle
+`/health` **toutes les 10 minutes** (GitHub peut décaler ses tâches planifiées de quelques minutes). La solution
+propre reste l'instance **Starter** de Render (pas de mise en veille) : dans ce cas le workflow peut être supprimé.
+
 ## 5c. Paiement (Stripe)
 
 Modèle : **Stripe Checkout** (page de paiement hébergée, aucune clé publiable ni formulaire de

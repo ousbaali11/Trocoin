@@ -18,6 +18,7 @@ export function statusPill(status: string): { cls: string; label: string } {
     en_attente: { cls: "warn", label: "À vérifier" },
     brouillon: { cls: "", label: "Brouillon" },
     vendue: { cls: "accent", label: "Vendue" },
+    archivee: { cls: "", label: "Archivée (vente terminée)" },
     refusee: { cls: "danger", label: "Refusée" },
     expiree: { cls: "", label: "Expirée" },
     desactivee: { cls: "", label: "En pause" },

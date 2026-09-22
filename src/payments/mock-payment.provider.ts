@@ -7,6 +7,7 @@ import {
   CreatePaymentIntentParams,
   IPaymentProvider,
   PaymentIntentResult,
+  PaymentProviderError,
   TransferParams,
 } from './payment-provider.interface';
 
@@ -38,6 +39,14 @@ export class MockPaymentProvider implements IPaymentProvider {
   private readonly logger = new Logger('Paiement(mock)');
   private hosted = false;
   private readonly sessions = new Map<string, MockCheckoutSession>();
+  /** État simulé des paiements (AUDIT §63) : `forceState` permet aux tests de simuler une autorisation expirée. */
+  private readonly states = new Map<string, 'autorisee' | 'encaissee' | 'annulee' | 'remboursee'>();
+  forceState(providerPaymentId: string, state: 'autorisee' | 'encaissee' | 'annulee' | 'remboursee') {
+    this.states.set(providerPaymentId, state);
+  }
+  async inspect(providerPaymentId: string) {
+    return { state: this.states.get(providerPaymentId) ?? ('autorisee' as const) };
+  }
   /** Présent seulement en mode hébergé : c'est sa présence qui fait naître la transaction « en_attente ». */
   createCheckout?: (params: CreateCheckoutParams) => Promise<CheckoutResult>;
 
@@ -87,11 +96,16 @@ export class MockPaymentProvider implements IPaymentProvider {
   }
 
   async capture(providerPaymentId: string) {
+    const state = this.states.get(providerPaymentId);
+    if (state === 'annulee') throw new PaymentProviderError('autorisation_expiree', "L'autorisation bancaire de cet achat a expiré ou a été annulée chez le prestataire : l'argent n'a jamais été encaissé et ne peut plus l'être.");
+    if (state === 'encaissee') return { status: 'succeeded' as const };
+    this.states.set(providerPaymentId, 'encaissee');
     this.logger.log(`Capture simulée : ${providerPaymentId}`);
     return { status: 'succeeded' as const };
   }
 
   async refund(providerPaymentId: string) {
+    if (this.states.get(providerPaymentId) !== 'annulee') this.states.set(providerPaymentId, 'remboursee');
     this.logger.log(`Remboursement simulé : ${providerPaymentId}`);
     return { status: 'rembourse' as const };
   }

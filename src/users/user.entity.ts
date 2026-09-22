@@ -137,6 +137,18 @@ export class User {
   @Column({ default: false })
   stripeOnboardingComplete: boolean;
 
+  /** Compte de versement (AUDIT §63) : « formulaire » (nom + IBAN saisis sur Trocoin) ou « guide » (parcours du prestataire). */
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  payoutAccountKind?: 'formulaire' | 'guide' | null;
+
+  /** Quatre derniers caractères de l'IBAN transmis au prestataire (seule trace conservée). */
+  @Column({ type: 'varchar', length: 4, nullable: true })
+  payoutIbanLast4?: string | null;
+
+  /** Pièces ou informations encore demandées par le prestataire (JSON, codes techniques). */
+  @Column({ type: 'text', nullable: true })
+  payoutRequirements?: string | null;
+
   // ----- Réputation -----
   @Column({ type: 'float', default: 0 })
   ratingAvg: number;

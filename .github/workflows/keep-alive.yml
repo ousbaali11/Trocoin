@@ -1,0 +1,27 @@
+name: Réveil de l'API
+
+# AUDIT §63 : sur l'offre gratuite de Render, l'API est mise en veille après 15 minutes sans requête. Or les échéances
+# du séquestre (encaissement sous 24 h, réception présumée, virements, annulations) sont jouées par une tâche
+# interne toutes les 15 minutes : en veille, rien ne tournait et les autorisations bancaires expiraient. Ce
+# passage toutes les 10 minutes garde l'API éveillée (les échéances sont aussi rejouées à chaque démarrage).
+# Sur une offre payante sans mise en veille, ce fichier est inutile mais inoffensif.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    name: GET /health
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Appel de /health (réveil, jusqu'à 90 s)
+        run: |
+          for i in 1 2 3; do
+            if curl -sf --max-time 90 https://api.trocoin.fr/health; then echo; exit 0; fi
+            sleep 10
+          done
+          echo "API injoignable après 3 essais" >&2
+          exit 1

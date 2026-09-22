@@ -57,6 +57,8 @@ describe('Phase 24 : séquestre sur le solde de la plateforme (capture rapide, v
     const listing = await createListing(app, seller, { price, deliveryAvailable: delivery !== 'main_propre' });
     const body = delivery === 'main_propre' ? { listingId: listing.id } : { listingId: listing.id, deliveryMethod: delivery, shippingAddress: { name: 'Alex Acheteur', line1: '5 avenue des Ternes', postalCode: '75017', city: 'Paris' } };
     const created = await request(server).post('/transactions').set(buyer.auth).send(body).expect(201);
+    // Ventes antérieures au bon d'envoi prépayé (AUDIT §63) : sans devis de livraison, le numéro de suivi saisi vaut expédition
+    await txRepo.update(created.body.transaction.id, { shippingFee: 0, shippingQuote: null, deliveryMode: null, pickupPoint: null });
     return { seller, buyer, listing, tx: created.body.transaction as Transaction & { id: string } };
   };
 

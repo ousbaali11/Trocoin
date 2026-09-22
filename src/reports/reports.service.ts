@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { Conversation } from '../conversations/conversation.entity';
 import { Listing } from '../listings/listing.entity';
 import { User } from '../users/user.entity';
@@ -45,7 +45,8 @@ export class ReportsService {
 
     // Un seul signalement ouvert par (auteur, cible)
     const dup = await this.reportsRepo.findOne({
-      where: { reporterId, listingId: listingId ?? undefined, reportedUserId: reportedUserId ?? undefined, status: 'ouvert' },
+      // AUDIT §63 : `undefined` était ignoré par TypeORM (signaler un membre passait pour un doublon d'un signalement d'annonce)
+      where: { reporterId, listingId: listingId ?? IsNull(), reportedUserId: reportedUserId ?? IsNull(), status: 'ouvert' },
     });
     if (dup) throw new BadRequestException('Vous avez déjà signalé ce contenu ; notre équipe l\'examine.');
 

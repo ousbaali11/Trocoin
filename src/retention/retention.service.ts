@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, Not, Repository } from 'typeorm';
+import { In, IsNull, LessThan, Not, Repository } from 'typeorm';
 import { EmailVerificationToken } from '../auth/email-verification-token.entity';
 import { PasswordResetToken } from '../auth/password-reset-token.entity';
 import { RefreshToken } from '../auth/refresh-token.entity';
@@ -79,6 +80,44 @@ export class RetentionService {
    * Annonce : effacée de la base (photos et fichiers, favoris, historique de consultation). Les ventes
    * payées la concernant gardent leur trace comptable avec le titre de l'annonce ; les autres sont effacées.
    */
+  /** Délai de conservation d'une annonce archivée (jours) avant effacement réel — prolongé tant qu'un litige est possible. */
+  static readonly ARCHIVE_DAYS = 90;
+
+  /**
+   * Archivage (AUDIT §63) : à la fin d'une vente, l'annonce n'est plus effacée sur-le-champ mais **archivée** — retirée
+   * de tout ce que voient les membres (recherche, fiche, « Mes annonces », favoris, historique), conservée avec ses
+   * photos pour l'administration (un litige peut s'ouvrir après la réception ; l'admin doit pouvoir consulter l'annonce
+   * telle qu'elle était). Effacement réel par `purgeArchived` après ARCHIVE_DAYS, jamais tant qu'un litige est ouvert
+   * ou possible.
+   */
+  async archiveListing(listing: Listing): Promise<void> {
+    if (listing.status === 'archivee') return;
+    const transactions = await this.transactionsRepo.find({ where: { listingId: listing.id } });
+    for (const tx of transactions) if (tx.paidAt && !tx.listingTitle) await this.transactionsRepo.update(tx.id, { listingTitle: listing.title });
+    await this.deleteUnpaidTransactions(transactions);
+    await this.favoritesRepo.delete({ listingId: listing.id });
+    await this.viewsRepo.delete({ listingId: listing.id });
+    await this.listingsRepo.update(listing.id, { status: 'archivee', archivedAt: new Date() });
+    this.logger.log(`Annonce ${listing.id} archivée (consultable par l'administration, effacée dans ${RetentionService.ARCHIVE_DAYS} jours)`);
+  }
+
+  /** Annonces archivées arrivées à échéance : effacées, sauf litige ouvert ou fenêtre de litige encore ouverte. */
+  @Cron('40 4 * * *')
+  async purgeArchived(now: Date = new Date()): Promise<number> {
+    const limit = new Date(now.getTime() - RetentionService.ARCHIVE_DAYS * 86_400_000);
+    const archived = await this.listingsRepo.find({ where: { status: 'archivee', archivedAt: LessThan(limit) }, take: 200 });
+    let purged = 0;
+    for (const listing of archived) {
+      const txs = await this.transactionsRepo.find({ where: { listingId: listing.id } });
+      const blocked = txs.some((t) => t.status === 'litige' || (t.disputeAllowedUntil && new Date(t.disputeAllowedUntil) > now));
+      if (blocked) continue;
+      await this.purgeListing(listing);
+      purged += 1;
+    }
+    if (purged) this.logger.log(`${purged} annonce(s) archivée(s) effacée(s) après ${RetentionService.ARCHIVE_DAYS} jours`);
+    return purged;
+  }
+
   async purgeListing(listing: Listing): Promise<{ keptTransactions: number; deletedTransactions: number }> {
     const transactions = await this.transactionsRepo.find({ where: { listingId: listing.id } });
     const paid = transactions.filter((t) => !!t.paidAt);

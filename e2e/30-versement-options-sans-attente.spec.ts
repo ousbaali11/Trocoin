@@ -12,8 +12,20 @@ const seed = readSeed();
 
 test('compte de versement : le refus du prestataire est affiché en clair et reste à l\'écran', async ({ page, isMobile }) => {
   await loginAs(page, seed.buyer, '/compte/paiements');
-  await page.route(`${API}/users/me/stripe-onboarding-link`, (route) => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ statusCode: 503, code: 'CONNECT_NOT_READY', message: "Les versements ne sont pas encore ouverts sur Trocoin : la configuration du prestataire de paiement est en cours de finalisation. Votre argent reste en sécurité.", reason: "StripeInvalidRequestError : You can only create new accounts if you've signed up for Connect" }) }));
-  const start = page.getByRole('button', { name: 'Configurer mon compte de versement' });
+  await page.route(`${API}/users/me/payout-account`, (route) => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ statusCode: 503, code: 'CONNECT_NOT_READY', message: "Les versements ne sont pas encore ouverts sur Trocoin : la configuration du prestataire de paiement est en cours de finalisation. Votre argent reste en sécurité.", reason: "StripeInvalidRequestError : You can only create new accounts if you've signed up for Connect" }) }));
+  // Formulaire nom + IBAN (AUDIT §63) : rempli, puis refus simulé du prestataire
+  const already = page.getByTestId('payout-active');
+  await expect(page.getByTestId('payout-form').or(already)).toBeVisible();
+  if (await already.isVisible()) await already.getByRole('button', { name: "Changer d'IBAN" }).click();
+  await page.getByLabel('Prénom').fill('Nora');
+  await page.getByLabel('Nom', { exact: true }).fill('Acheteur');
+  await page.getByLabel('Date de naissance').fill('1990-05-12');
+  await page.getByLabel('Adresse', { exact: true }).fill('5 avenue des Ternes');
+  await page.getByLabel('Code postal').fill('75017');
+  await page.getByLabel('Ville').fill('Paris');
+  await page.getByLabel('IBAN').fill('FR1420041010050500013M02606');
+  await page.getByRole('checkbox', { name: /conditions du service de versement/ }).check();
+  const start = page.getByTestId('payout-submit');
   await start.click();
   const error = page.getByTestId('payout-setup-error');
   await expect(error).toContainText('Les versements ne sont pas encore ouverts sur Trocoin');

@@ -25,6 +25,7 @@ import {
   MAX_IMAGE_BYTES,
 } from '../common/upload/image-upload';
 import { BecomeProDto, UpdateProfileDto } from './dto/update-profile.dto';
+import { PayoutAccountDto } from './dto/payout-account.dto';
 import { StripeConnectService } from './stripe-connect.service';
 import { User } from './user.entity';
 import { UsersService } from './users.service';
@@ -61,6 +62,7 @@ export class UsersController {
 
   @UseGuards(JwtAuthGuard)
   @Post('me/avatar')
+  @Throttle({ default: { limit: 10, ttl: 3_600_000 } })
   @UseInterceptors(singleImageUpload())
   async uploadAvatar(@Req() req: any, @UploadedFile() file?: { path: string; filename: string }) {
     if (!file) throw new BadRequestException('Aucun fichier reçu (champ "file").');
@@ -70,6 +72,7 @@ export class UsersController {
 
   @UseGuards(JwtAuthGuard)
   @Post('me/shop-logo')
+  @Throttle({ default: { limit: 10, ttl: 3_600_000 } })
   @UseInterceptors(singleImageUpload())
   async uploadShopLogo(@Req() req: any, @UploadedFile() file?: { path: string; filename: string }) {
     if (!file) throw new BadRequestException('Aucun fichier reçu (champ "file").');
@@ -90,6 +93,14 @@ export class UsersController {
   @Throttle({ default: { limit: 5, ttl: 600_000 } })
   stripeOnboardingLink(@Req() req: any) {
     return this.stripeConnect.createOnboardingLink(req.user.userId);
+  }
+
+  /** Compte de versement en un formulaire (AUDIT §63) : nom, date de naissance, adresse, IBAN — sans quitter Trocoin. */
+  @UseGuards(JwtAuthGuard)
+  @Post('me/payout-account')
+  @Throttle({ default: { limit: 6, ttl: 600_000 } })
+  payoutAccount(@Req() req: any, @Body() dto: PayoutAccountDto) {
+    return this.stripeConnect.setupPayoutAccount(req.user.userId, dto, req.ip);
   }
 
   /** Rafraîchit l'état d'onboarding depuis Stripe (à appeler au retour du lien). */
@@ -130,6 +141,7 @@ export class UsersController {
   @Delete('me')
   @HttpCode(204)
   async deleteMe(@Req() req: any) {
+    await this.stripeConnect.closeAccount(req.user.userId).catch(() => undefined);
     await this.usersService.deleteAccount(req.user.userId);
     await this.auth.revokeAllSessions(req.user.userId);
   }
