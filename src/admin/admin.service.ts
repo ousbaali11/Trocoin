@@ -473,8 +473,8 @@ export class AdminService {
     if (query.due === '1') {
       // Séquestres à échéance sous ESCROW_ADMIN_ALERT_HOURS : ancien modèle → date limite de capture ;
       // modèle platform → délai d'expédition / de remise ou réception présumée (mêmes règles que PaymentsService.escrowDueSoon)
-      qb.andWhere('t.status IN (:...open)', { open: ['sequestre', 'livree', 'litige'] })
-        .andWhere(`((t.escrowModel = 'destination' AND t.captureBefore < :limit) OR (t.escrowModel = 'platform' AND t.status IN ('sequestre', 'livree') AND COALESCE(t.autoConfirmAt, t.shipBy) < :limit) OR (t.status = 'litige' AND t.updatedAt < :stale) OR (t.status = 'livree' AND t.escrowModel = 'platform' AND t.autoConfirmAt IS NULL AND t.shippedAt < :manual))`, { limit: new Date(Date.now() + ESCROW_ADMIN_ALERT_HOURS * 3_600_000), stale: new Date(Date.now() - 7 * 86_400_000), manual: new Date(Date.now() - 10 * 86_400_000) })
+      // Ventes ouvertes à échéance, litiges anciens, expéditions déclarées à la main, et — quel que soit leur statut — les paiements inconnus du prestataire (AUDIT §65)
+      qb.andWhere(`((t.status IN (:...open) AND ((t.escrowModel = 'destination' AND t.captureBefore < :limit) OR (t.escrowModel = 'platform' AND t.status IN ('sequestre', 'livree') AND COALESCE(t.autoConfirmAt, t.shipBy) < :limit) OR (t.status = 'litige' AND t.updatedAt < :stale) OR (t.status = 'livree' AND t.escrowModel = 'platform' AND t.autoConfirmAt IS NULL AND t.shippedAt < :manual))) OR t.paymentIssue IS NOT NULL)`, { open: ['sequestre', 'livree', 'litige'], limit: new Date(Date.now() + ESCROW_ADMIN_ALERT_HOURS * 3_600_000), stale: new Date(Date.now() - 7 * 86_400_000), manual: new Date(Date.now() - 10 * 86_400_000) })
         .orderBy('COALESCE(t.autoConfirmAt, t.shipBy, t.captureBefore)', 'ASC');
     }
     qb.skip((page - 1) * pageSize).take(pageSize);
@@ -508,6 +508,13 @@ export class AdminService {
   }
 
   /** Fiche détaillée d'une transaction : parties, annonce, expédition, échéances, journal lié. */
+  /** L'administration lève le signalement « paiement inconnu » : la tâche périodique reprend la vente (journalisé). */
+  async retryPayment(ctx: AdminContext, id: string) {
+    const tx = await this.paymentsService.clearPaymentIssue(id);
+    await this.audit(ctx, 'transaction.retry_payment', 'transaction', id, { status: tx.status });
+    return this.getTransaction(id);
+  }
+
   async getTransaction(id: string) {
     const tx = await this.transactionsRepo.findOne({ where: { id } });
     if (!tx) throw new NotFoundException('Transaction introuvable.');

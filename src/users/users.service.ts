@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { Conversation } from '../conversations/conversation.entity';
 import { Message } from '../conversations/message.entity';
 import { Listing } from '../listings/listing.entity';
@@ -97,6 +97,12 @@ export class UsersService {
 
   findByPhone(phoneNumber: string) {
     return this.usersRepo.findOne({ where: { phoneNumber } });
+  }
+
+  /** Identifiants des administrateurs actifs (alertes internes). */
+  async findAdminIds(): Promise<string[]> {
+    const admins = await this.usersRepo.find({ where: { accountType: 'admin', deletedAt: IsNull() }, select: ['id'] });
+    return admins.map((a) => a.id);
   }
 
   findById(id: string) {

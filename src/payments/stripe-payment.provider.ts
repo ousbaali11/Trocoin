@@ -204,6 +204,23 @@ export class StripePaymentProvider implements IPaymentProvider {
     }
   }
 
+  /**
+   * Lecture d'un paiement (AUDIT §65) : « No such payment_intent » (identifiant d'un autre environnement — clés de test
+   * changées, bac à sable recréé — ou donnée effacée chez le prestataire) devient une erreur métier `paiement_absent`,
+   * traitée une fois pour toutes au lieu d'être retentée à chaque passage de la tâche périodique.
+   */
+  private async retrieveIntent(id: string, params?: Stripe.PaymentIntentRetrieveParams): Promise<Stripe.PaymentIntent> {
+    try {
+      return await this.stripe.paymentIntents.retrieve(id, params);
+    } catch (err) {
+      const e = err as { code?: string; statusCode?: number; message?: string };
+      if (e?.code === 'resource_missing' || e?.statusCode === 404 || /No such payment_intent/i.test(e?.message || '')) {
+        throw new PaymentProviderError('paiement_absent', `Paiement ${id} inconnu du prestataire (${e?.message || 'introuvable'}) : il appartient à un autre environnement ou a été effacé chez lui.`);
+      }
+      throw err;
+    }
+  }
+
   /** Identifiant de session de paiement encore présent (retour et webhook manqués) : on retrouve le paiement lui-même. */
   private async intentIdOf(providerPaymentId: string): Promise<string> {
     if (!providerPaymentId.startsWith('cs_')) return providerPaymentId;
@@ -220,7 +237,7 @@ export class StripePaymentProvider implements IPaymentProvider {
    */
   async capture(providerPaymentId: string) {
     const id = await this.intentIdOf(providerPaymentId);
-    const intent = await this.stripe.paymentIntents.retrieve(id);
+    const intent = await this.retrieveIntent(id);
     if (intent.status === 'succeeded') return { status: 'succeeded' as const };
     if (intent.status === 'canceled') throw new PaymentProviderError('autorisation_expiree', "L'autorisation bancaire de cet achat a expiré ou a été annulée chez le prestataire : l'argent n'a jamais été encaissé et ne peut plus l'être.");
     try {
@@ -240,7 +257,13 @@ export class StripePaymentProvider implements IPaymentProvider {
     } catch (err) {
       return err instanceof PaymentProviderError ? { state: 'en_attente', detail: err.message } : { state: 'inconnue', detail: (err as Error).message };
     }
-    const intent = await this.stripe.paymentIntents.retrieve(id, { expand: ['latest_charge'] });
+    let intent: Stripe.PaymentIntent;
+    try {
+      intent = await this.retrieveIntent(id, { expand: ['latest_charge'] });
+    } catch (err) {
+      if (err instanceof PaymentProviderError) return { state: 'inconnue', detail: err.message };
+      throw err;
+    }
     const charge = intent.latest_charge && typeof intent.latest_charge !== 'string' ? intent.latest_charge : null;
     if (charge?.refunded) return { state: 'remboursee', detail: 'remboursement intégral émis' };
     if (intent.status === 'succeeded') return { state: 'encaissee', detail: charge?.amount_refunded ? `remboursé partiellement : ${(charge.amount_refunded / 100).toFixed(2)} €` : undefined };
@@ -254,7 +277,7 @@ export class StripePaymentProvider implements IPaymentProvider {
     // depuis le solde de la plateforme ; ancien modèle destination : avec annulation du transfert).
     const id = await this.intentIdOf(providerPaymentId).catch((err) => { if (err instanceof PaymentProviderError) return null; throw err; });
     if (!id) return { status: 'rembourse' as const }; // jamais payé : rien à rendre
-    const intent = await this.stripe.paymentIntents.retrieve(id, { expand: ['latest_charge'] });
+    const intent = await this.retrieveIntent(id, { expand: ['latest_charge'] });
     const charge = intent.latest_charge && typeof intent.latest_charge !== 'string' ? intent.latest_charge : null;
     if (intent.status === 'requires_capture') {
       await this.stripe.paymentIntents.cancel(id);
@@ -269,7 +292,7 @@ export class StripePaymentProvider implements IPaymentProvider {
     // `source_transaction` : le transfert est adossé à la charge de l'acheteur ; Stripe l'exécute quand ces
     // fonds sont disponibles, sans dépendre du solde disponible global de la plateforme (sinon le virement
     // serait refusé tant que la charge n'est pas réglée, environ 7 jours en France).
-    const intent = await this.stripe.paymentIntents.retrieve(params.providerPaymentId);
+    const intent = await this.retrieveIntent(await this.intentIdOf(params.providerPaymentId));
     if (intent.status !== 'succeeded') throw new Error(`Paiement ${params.providerPaymentId} non capturé (${intent.status}) : transfert impossible.`);
     const chargeId = typeof intent.latest_charge === 'string' ? intent.latest_charge : intent.latest_charge?.id;
     if (!chargeId) throw new Error(`Paiement ${params.providerPaymentId} sans charge : transfert impossible.`);

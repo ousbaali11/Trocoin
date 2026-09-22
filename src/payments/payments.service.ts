@@ -134,6 +134,32 @@ export class PaymentsService implements OnApplicationBootstrap {
     }
   }
 
+  /**
+   * Paiement que le prestataire ne reconnaît plus, ou autorisation expirée (AUDIT §65) : signalé UNE fois sur la vente
+   * (`paymentIssue`), retiré des files de la tâche périodique, administrateurs prévenus. Avant, chaque réveil du serveur
+   * rejouait l'appel et remplissait le journal d'erreurs, sans que personne ne soit prévenu.
+   */
+  private async flagPaymentIssue(tx: Transaction, err: unknown, step: string): Promise<boolean> {
+    if (!(err instanceof PaymentProviderError) || !['paiement_absent', 'autorisation_expiree'].includes(err.code)) return false;
+    const issue = `${step} : ${err.message}`;
+    await this.transactionsRepo.update({ id: tx.id, paymentIssue: IsNull() }, { paymentIssue: issue, paymentIssueAt: new Date() });
+    this.logger.warn(`Transaction ${tx.id} signalée à l'administration (plus de nouvel essai automatique) — ${issue}`);
+    for (const adminId of await this.usersService.findAdminIds()) {
+      await this.notifications.notify(adminId, { type: 'transaction', title: 'Vente à traiter : paiement inconnu du prestataire', body: `Transaction ${tx.id.slice(0, 8)} (${tx.status}, ${tx.amount} €) : ${err.message} Tranchez-la depuis la console (annuler, rembourser ou réessayer).`, link: `/admin/litiges/${tx.id}` });
+    }
+    return true;
+  }
+
+  /** L'administration lève le signalement (clés rétablies, donnée revenue) : la tâche périodique reprend cette vente. */
+  async clearPaymentIssue(transactionId: string): Promise<Transaction> {
+    const tx = await this.transactionsRepo.findOne({ where: { id: transactionId } });
+    if (!tx) throw new NotFoundException('Transaction introuvable.');
+    await this.transactionsRepo.update(tx.id, { paymentIssue: null, paymentIssueAt: null });
+    tx.paymentIssue = null;
+    tx.paymentIssueAt = null;
+    return tx;
+  }
+
   /** État réel du paiement chez le prestataire, pour la fiche admin (au mieux, jamais bloquant). */
   async inspectPayment(tx: Transaction): Promise<{ state: PaymentState; detail?: string }> {
     if (!tx.providerPaymentId || !this.paymentProvider.inspect) return { state: 'inconnue' };
@@ -580,7 +606,7 @@ export class PaymentsService implements OnApplicationBootstrap {
   @Cron('*/15 * * * *')
   async runEscrowSchedule(now: Date = new Date()): Promise<{ reminders: number; notices: number; confirmed: number; captured: number; cancelled: number; transferred: number }> {
     const result = { reminders: 0, notices: 0, confirmed: 0, captured: 0, cancelled: 0, transferred: 0 };
-    const open = await this.transactionsRepo.find({ where: { status: In(['sequestre', 'livree', 'litige']) }, take: 500 });
+    const open = await this.transactionsRepo.find({ where: { status: In(['sequestre', 'livree', 'litige']), paymentIssue: IsNull() }, take: 500 });
     for (const tx of open) {
       try {
         if (!tx.captureBefore) {
@@ -681,12 +707,13 @@ export class PaymentsService implements OnApplicationBootstrap {
           }
         }
       } catch (e) {
+        if (await this.flagPaymentIssue(tx, e, 'échéance du séquestre')) continue;
         this.logger.error(`Échéance du séquestre ${tx.id} : ${(e as Error).message}`);
       }
     }
 
     // 3. Modèle platform : virements en attente (vendeur sans compte de versement au moment de la confirmation)
-    const pendingPayouts = await this.transactionsRepo.find({ where: [{ status: 'confirme', escrowModel: 'platform', transferId: IsNull(), capturedAt: Not(IsNull()) }, { status: 'confirme', escrowModel: 'platform', transferId: Like('en-cours:%'), capturedAt: Not(IsNull()) }], take: 100 });
+    const pendingPayouts = await this.transactionsRepo.find({ where: [{ status: 'confirme', escrowModel: 'platform', transferId: IsNull(), capturedAt: Not(IsNull()), paymentIssue: IsNull() }, { status: 'confirme', escrowModel: 'platform', transferId: Like('en-cours:%'), capturedAt: Not(IsNull()), paymentIssue: IsNull() }], take: 100 });
     for (const tx of pendingPayouts) {
       try {
         if (await this.payoutSeller(tx)) {
@@ -694,6 +721,7 @@ export class PaymentsService implements OnApplicationBootstrap {
           await this.notifications.notify(tx.sellerId, { type: 'transaction', title: 'Versement effectué', body: `Le montant de votre vente (${this.sellerPayout(tx)} €) vient d'être viré sur votre compte de paiement.`, link: `/compte/transactions/${tx.id}` });
         }
       } catch (e) {
+        if (await this.flagPaymentIssue(tx, e, 'virement au vendeur')) continue;
         this.logger.error(`Virement en attente ${tx.id} : ${(e as Error).message}`);
       }
     }
@@ -728,7 +756,9 @@ export class PaymentsService implements OnApplicationBootstrap {
       .take(100)
       .getMany();
     for (const tx of items) this.logger.warn(`Séquestre à échéance : transaction ${tx.id} (${tx.status}, ${tx.escrowModel}) échéance ${this.escrowDeadline(tx).toISOString()}`);
-    return items;
+    // Paiements inconnus du prestataire (AUDIT §65) : à traiter par l'administration
+    const flagged = await this.transactionsRepo.find({ where: { paymentIssue: Not(IsNull()), status: In(['sequestre', 'livree', 'litige', 'confirme']) }, take: 100 });
+    return [...items, ...flagged.filter((f) => !items.some((i) => i.id === f.id))];
   }
 
   /**
@@ -1176,7 +1206,14 @@ export class PaymentsService implements OnApplicationBootstrap {
     }
     if (decision === 'annuler') {
       if (tx.confirmedAt) throw new BadRequestException('Vente déjà confirmée : utilisez « rembourser ».');
-      await this.providerCall(() => this.refundBuyer(tx));
+      try {
+        await this.providerCall(() => this.refundBuyer(tx));
+      } catch (err) {
+        // Paiement inconnu du prestataire (AUDIT §65) : rien à rendre chez lui, la vente est close et la note le dit
+        const e = err as { getResponse?: () => { code?: string } };
+        if (e?.getResponse?.()?.code !== 'paiement_absent') throw err;
+        note = `${note} (paiement inconnu du prestataire : aucun mouvement d'argent possible)`;
+      }
       await this.shipping.cancelLabelFor(tx.id);
       tx.status = 'annulee';
       tx.resolutionNote = note;

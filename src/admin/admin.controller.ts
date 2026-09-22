@@ -131,6 +131,12 @@ export class AdminController {
     return this.admin.getTransaction(id);
   }
 
+  /** Paiement inconnu du prestataire (AUDIT §65) : lève le signalement pour que la tâche périodique réessaie. */
+  @Post('transactions/:id/retry-payment')
+  retryPayment(@Req() req: any, @Param('id', ParseUUIDPipe) id: string) {
+    return this.admin.retryPayment(this.ctx(req), id);
+  }
+
   /** Décision admin sur une transaction en séquestre, expédiée ou en litige (fraude, conflit) : rembourser, libérer, annuler. */
   @Post('transactions/:id/resolve')
   resolveTransaction(@Req() req: any, @Param('id', ParseUUIDPipe) id: string, @Body() dto: AdminResolveTransactionDto) {

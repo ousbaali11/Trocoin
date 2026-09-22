@@ -51,6 +51,10 @@ export class HealthController {
       version: process.env.APP_VERSION || packageVersion,
       // Base des liens envoyés par e-mail (confirmation, mot de passe, changement d'adresse) : vérifiable depuis l'extérieur
       siteUrl: resolveSiteUrl(),
+      // Webhooks du prestataire de paiement (AUDIT §65) : présence des secrets, jamais leur valeur
+      // Ventes signalées « paiement inconnu du prestataire » en attente d'une décision de l'administration (AUDIT §65)
+      paymentIssues: Number((await this.dataSource.query('SELECT COUNT(*) AS n FROM transactions WHERE "paymentIssue" IS NOT NULL'))[0]?.n ?? 0),
+      ...(process.env.PAYMENT_PROVIDER === 'stripe' ? { stripeWebhooks: { platform: !!process.env.STRIPE_WEBHOOK_SECRET, connectedAccounts: !!process.env.STRIPE_CONNECT_WEBHOOK_SECRET } } : {}),
     };
   }
 }

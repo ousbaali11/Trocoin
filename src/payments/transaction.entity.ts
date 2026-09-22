@@ -219,6 +219,16 @@ export class Transaction {
   @Column({ type: DATE_TYPE, nullable: true })
   transferredAt?: Date | null;
 
+  /**
+   * Paiement que le prestataire ne reconnaît plus (AUDIT §65) — clés d'un autre environnement de test, données effacées
+   * chez lui… — ou autorisation expirée : la tâche périodique ne retente plus, l'administration est prévenue et tranche.
+   */
+  @Column({ type: 'text', nullable: true })
+  paymentIssue?: string | null;
+
+  @Column({ type: DATE_TYPE, nullable: true })
+  paymentIssueAt?: Date | null;
+
   @CreateDateColumn({ type: DATE_TYPE })
   createdAt: Date;
 

@@ -3485,3 +3485,41 @@ Un second endpoint Stripe « Trocoin-test », **même URL** (`/transactions/webh
   un évènement signé avec aucun des deux reste refusé (400 « Signature Stripe invalide »).
 - Test `phase13` : évènement de paiement signé avec le premier secret → accepté ; `account.updated` signé avec le second →
   accepté ; croisé (lun
+
+## 65. « No such payment_intent » au réveil du serveur : trois ventes dont le prestataire ne connaît plus le paiement — 22 septembre 2026
+
+Trois erreurs à chaque démarrage de l'API (échéances rejouées au réveil, §63) : `b5684cd6…` (échéance du séquestre),
+`d835e61f…` et `8af99dc4…` (virement en attente), toutes en *No such payment_intent: 'pi_3UG…5YWLqgMw96…'*.
+
+### 1. De quoi il s'agit
+
+- Aucune de ces ventes n'appartient aux dix comptes de démonstration ni aux comptes temporaires des tours précédents
+  (ceux-ci n'ont jamais payé : retour par « ← » puis abandon, ventes effacées). Ce sont donc des **achats réels de test
+  faits avec une carte de test par le propriétaire** entre deux de ses comptes (§59–§61) : un séquestre encore ouvert et
+  deux ventes confirmées dont le virement attendait un compte de versement.
+- Les identifiants `pi_3UG…5YWLqgMw96…` portent le même suffixe de compte que le premier webhook
+  (`we_1UFhaP5YWLqgMw96…`, 14 septembre) : ils ont été créés dans l'environnement de test Stripe **d'origine**. Depuis, un
+  **nouvel environnement de test** (bac à sable « Trocoin », webhook « Trocoin-test ») a été mis en place et l'API utilise ses
+  clés : ces paiements n'existent pas dans ce bac à sable → « No such payment_intent ». Ils n'ont été ni supprimés ni
+  simulés : ils vivent dans l'ancien environnement. L'argent est de l'argent de test ; aucun vrai flux n'est concerné.
+- Sans correctif, la tâche rejouait ces trois appels à chaque passage (et à chaque réveil), sans prévenir personne.
+
+### 2. Correctif
+
+- Prestataire : « No such payment_intent » devient une erreur métier **`paiement_absent`** (comme `autorisation_expiree`).
+- Tâche périodique : une vente qui échoue pour l'une de ces deux raisons est **signalée une fois** (`transactions.paymentIssue`,
+  `paymentIssueAt`, migration `1789610000000`), **retirée des files** (échéances, virements), et **les administrateurs
+  reçoivent une notification** pointant vers la fiche. Plus aucun nouvel essai automatique.
+- Console : bandeau « Paiement à traiter par l'administration » sur la fiche, présence dans la file « à échéance » et le
+  compteur de la barre latérale ; bouton **« Réessayer automatiquement »** (lève le signalement, journalisé) ; **« Annuler »**
+  fonctionne même si le prestataire ne connaît pas le paiement (rien à rendre chez lui, la note le dit) ; `/health` compte
+  les ventes signalées (`paymentIssues`) — preuve vérifiable de l'extérieur.
+- Pour ces trois ventes : au prochain réveil, elles sont signalées puis silencieuses ; à trancher dans la console
+  (« Annuler » pour le séquestre ; pour les deux confirmées, « Réessayer » après retour aux clés d'origine, ou annulation).
+
+### 3. Le message de démarrage « comptes connectés signés »
+
+Il n'est émis que si `STRIPE_CONNECT_WEBHOOK_SECRET` est présent au démarrage : dans l'extrait fourni, seules les erreurs
+apparaissent (le message est une ligne `LOG [Paiement(stripe)] Stripe MODE TEST · webhook signé, comptes connectés signés`,
+plus haut). Pour ne plus dépendre des logs, `/health` expose désormais `stripeWebhooks: { platform, connectedAccounts }`
+(présence des secrets, jamais leur valeur).

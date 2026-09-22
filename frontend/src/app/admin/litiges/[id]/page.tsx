@@ -17,6 +17,8 @@ interface AdminTxDetail {
   id: string;
   buyerId: string;
   sellerId: string;
+  paymentIssue?: string | null;
+  paymentIssueAt?: string | null;
   provider?: { state: "autorisee" | "encaissee" | "annulee" | "remboursee" | "en_attente" | "inconnue"; detail?: string };
   status: string;
   amount: number;
@@ -128,6 +130,12 @@ export default function AdminTransactionPage() {
         </div>
       )}
       {tx.disputeReason && <div className="a-alert danger">Litige ouvert par {tx.disputeOpenedBy === tx.buyerId ? "l'acheteur" : "le vendeur"} : « {tx.disputeReason} »</div>}
+      {tx.paymentIssue && (
+        <div className="a-alert danger" data-testid="payment-issue">
+          <strong>Paiement à traiter par l'administration</strong> (signalé le {tx.paymentIssueAt ? formatDateTime(tx.paymentIssueAt) : "—"}, la tâche automatique ne réessaie plus) : {tx.paymentIssue}
+          <div style={{ marginTop: 8 }}><button type="button" className="a-btn" disabled={busy} onClick={async () => { setBusy(true); try { setTx(await api<AdminTxDetail>(`/admin/transactions/${id}/retry-payment`, { method: "POST" })); toast("Signalement levé : la tâche automatique réessaiera.", "success"); } catch (e) { toast((e as Error).message, "error"); } finally { setBusy(false); } }}>Réessayer automatiquement</button></div>
+        </div>
+      )}
       {tx.resolutionNote && <div className="a-alert">Décision : {tx.resolutionNote}{tx.autoResolution && ` (automatique : ${AUTO_LABEL[tx.autoResolution] ?? tx.autoResolution})`}</div>}
 
       <div className="a-two">

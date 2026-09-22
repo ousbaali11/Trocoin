@@ -243,6 +243,14 @@ et se terminent avec l'ancienne logique.
    « en_attente » sans paiement est annulée après 30 minutes (relecture au retour de l'acheteur,
    webhook, ou tâche périodique toutes les 10 minutes).
 
+**Changer de clés ou d'environnement de test Stripe (AUDIT §65).** Les paiements déjà enregistrés en base
+(`transactions.providerPaymentId`, `pi_…`) n'existent que dans l'environnement Stripe où ils ont été créés : après un
+passage à un autre bac à sable (nouvelles clés `sk_test_…`), Stripe répond « No such payment_intent » pour les ventes
+antérieures encore ouvertes ou en attente de virement. L'API les signale alors **une fois** (`paymentIssue`, notification
+aux administrateurs, compteur `paymentIssues` de `/health`) et ne les retente plus ; l'administrateur les tranche depuis
+la console (« Annuler » — aucun mouvement d'argent possible — ou « Réessayer automatiquement » après avoir remis les
+bonnes clés). Ne changez d'environnement que sans vente ouverte, ou tranchez-les ensuite.
+
 Le retour de l'acheteur (`/compte/transactions/<id>?paiement=retour`) relit la session chez
 Stripe : le webhook n'est pas indispensable pour confirmer, mais il l'est pour les annulations
 et remboursements faits depuis le tableau de bord Stripe.
