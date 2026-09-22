@@ -30,7 +30,7 @@ import { StripeConnectService } from '../users/stripe-connect.service';
 import { UsersService } from '../users/users.service';
 import { CheckoutSync, IPaymentProvider, PaymentProviderError, PaymentState } from './payment-provider.interface';
 import { CHECKOUT_TTL_MINUTES, PAYMENT_PROVIDER } from './payments.constants';
-import { traceWebhookAccepted, traceWebhookRejected } from './webhook-trace';
+import { countSignatures, traceWebhookAccepted, traceWebhookRejected } from './webhook-trace';
 import { ChosenPickupPoint, DeliveryAddress, DeliveryMethod, DeliveryMode, Transaction, TransactionStatus } from './transaction.entity';
 
 /**
@@ -870,7 +870,7 @@ export class PaymentsService implements OnApplicationBootstrap {
     try {
       event = this.paymentProvider.parseWebhook(rawBody, signature);
     } catch (err) {
-      traceWebhookRejected((err as Error).message);
+      traceWebhookRejected(`${(err as Error).message.split('\n')[0].slice(0, 120)} [signatures v1 dans l'en-tête : ${countSignatures(signature)} ; corps brut : ${rawBody ? rawBody.length + ' octets' : 'absent'}]`);
       throw err;
     }
     traceWebhookAccepted(event.raw, event.accountId);

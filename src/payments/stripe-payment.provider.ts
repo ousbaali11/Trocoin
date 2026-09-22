@@ -61,7 +61,7 @@ export class StripePaymentProvider implements IPaymentProvider {
       throw new Error('STRIPE_SECRET_KEY manquant : configurez-le dans .env pour utiliser PAYMENT_PROVIDER=stripe.');
     }
     this.stripe = new Stripe(key);
-    this.webhookSecrets = [this.config.get<string>('STRIPE_WEBHOOK_SECRET'), this.config.get<string>('STRIPE_CONNECT_WEBHOOK_SECRET')].filter((s): s is string => !!s);
+    this.webhookSecrets = [this.config.get<string>('STRIPE_WEBHOOK_SECRET'), this.config.get<string>('STRIPE_CONNECT_WEBHOOK_SECRET')].map((s) => (s || '').trim()).filter((s) => !!s);
     const connect = this.config.get<string>('STRIPE_CONNECT_WEBHOOK_SECRET') ? ', comptes connectés signés' : ', comptes connectés NON configurés (STRIPE_CONNECT_WEBHOOK_SECRET absent : account.updated ignoré)';
     this.logger.log(`Stripe ${key.startsWith('sk_test_') ? 'MODE TEST' : 'mode réel'} · webhook ${this.webhookSecrets.length ? 'signé' + connect : 'NON configuré (STRIPE_WEBHOOK_SECRET absent)'}`);
   }

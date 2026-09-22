@@ -25,6 +25,18 @@ export function traceWebhookAccepted(type: string, accountId?: string): void {
   webhookTrace.lastAccountId = accountId ?? null;
 }
 
+/** Forme d'un secret de signature, sans en révéler la valeur : « ok », « espaces » (à nettoyer) ou « inattendu » (pas un whsec_). */
+export function describeSecret(value: string | undefined): 'absent' | 'ok' | 'espaces' | 'inattendu' {
+  if (!value) return 'absent';
+  if (/\s/.test(value)) return 'espaces';
+  return /^whsec_[A-Za-z0-9]{16,}$/.test(value) ? 'ok' : 'inattendu';
+}
+
+/** Nombre de signatures v1 présentes dans l'en-tête reçu (0 = en-tête absent ou d'une autre forme). */
+export function countSignatures(header: string | undefined): number {
+  return (header || '').split(',').filter((p) => p.trim().startsWith('v1=')).length;
+}
+
 export function traceWebhookRejected(reason: string): void {
   webhookTrace.received += 1;
   webhookTrace.rejected += 1;
