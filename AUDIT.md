@@ -3552,3 +3552,15 @@ Troisième essai (1.38.2) : `platformSecretFormat: ok`, `connectedAccountsSecret
 chacun, corps brut ≈ 8 Ko), 3 refusés. Conclusion : les évènements arrivent, le corps brut est intact, mais **le secret
 posé sur Render n'est pas celui de l'endpoint qui les envoie** — à re-copier depuis Stripe (endpoint « Trocoin-test »,
 portée comptes connectés, *Reveal* du Signing secret), puis nouvel essai. La preuve de bout en bout reste à obtenir.
+
+**Clés et webhooks réalignés par le propriétaire dans un seul environnement de test** (la cause du refus de signature : clés et
+endpoints répartis entre deux environnements Stripe isolés). Vérification 1.38.3 :
+- `/health` : `platform: true`, `connectedAccounts: true`, formats `ok` / `ok`.
+- **Webhook plateforme, nouvelle URL — CLOS** : page de paiement créée puis abandonnée (aucune carte) → `checkout.session.expired`
+  **accepté en 7 s**, signature vérifiée (`accepted: 2, rejected: 0`, un `charge.refunded` accepté juste avant). La correction de
+  l'ancienne adresse onrender.com n'a rien cassé.
+- **Webhook comptes connectés — encore ouvert** : formulaire rejoué (compte temporaire, mobile) → compte actif en 4,4 s par la
+  réponse du formulaire, mais **aucun évènement reçu** en 120 s (`received` inchangé), alors que l'essai précédent en
+  générait trois. L'endpoint `trocoin_wb_test` n'envoie donc rien à cette URL : à vérifier côté Stripe (URL exacte, portée
+  « comptes connectés », évènement `account.updated`, activé) — un « envoi d'évènement de test » depuis sa fiche doit
+  apparaître dans `/health.stripeWebhooks` (`accepted`, `lastType`). Comptes temporaires supprimés (204).
