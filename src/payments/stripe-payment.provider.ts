@@ -46,7 +46,13 @@ import { CHECKOUT_TTL_MINUTES } from './payments.constants';
 @Injectable()
 export class StripePaymentProvider implements IPaymentProvider {
   private readonly stripe: Stripe;
-  private readonly webhookSecret?: string;
+  /**
+   * Secrets de signature des webhooks (AUDIT §64). Deux points de terminaison Stripe visent la même URL :
+   * celui du compte plateforme (paiements : STRIPE_WEBHOOK_SECRET) et celui des « comptes connectés »
+   * (account.updated : STRIPE_CONNECT_WEBHOOK_SECRET, facultatif). Chaque évènement n'est signé qu'avec l'un des
+   * deux : la signature est essayée avec chaque secret connu.
+   */
+  private readonly webhookSecrets: string[];
   private readonly logger = new Logger('Paiement(stripe)');
 
   constructor(private config: ConfigService) {
@@ -55,8 +61,9 @@ export class StripePaymentProvider implements IPaymentProvider {
       throw new Error('STRIPE_SECRET_KEY manquant : configurez-le dans .env pour utiliser PAYMENT_PROVIDER=stripe.');
     }
     this.stripe = new Stripe(key);
-    this.webhookSecret = this.config.get<string>('STRIPE_WEBHOOK_SECRET') || undefined;
-    this.logger.log(`Stripe ${key.startsWith('sk_test_') ? 'MODE TEST' : 'mode réel'} · webhook ${this.webhookSecret ? 'signé' : 'NON configuré (STRIPE_WEBHOOK_SECRET absent)'}`);
+    this.webhookSecrets = [this.config.get<string>('STRIPE_WEBHOOK_SECRET'), this.config.get<string>('STRIPE_CONNECT_WEBHOOK_SECRET')].filter((s): s is string => !!s);
+    const connect = this.config.get<string>('STRIPE_CONNECT_WEBHOOK_SECRET') ? ', comptes connectés signés' : ', comptes connectés NON configurés (STRIPE_CONNECT_WEBHOOK_SECRET absent : account.updated ignoré)';
+    this.logger.log(`Stripe ${key.startsWith('sk_test_') ? 'MODE TEST' : 'mode réel'} · webhook ${this.webhookSecrets.length ? 'signé' + connect : 'NON configuré (STRIPE_WEBHOOK_SECRET absent)'}`);
   }
 
   private toCents(euros: number): number {
@@ -153,14 +160,19 @@ export class StripePaymentProvider implements IPaymentProvider {
   }
 
   parseWebhook(rawBody: Buffer, signature: string | undefined): PaymentWebhookEvent {
-    if (!this.webhookSecret) throw new BadRequestException('Webhook Stripe non configuré (STRIPE_WEBHOOK_SECRET).');
+    if (this.webhookSecrets.length === 0) throw new BadRequestException('Webhook Stripe non configuré (STRIPE_WEBHOOK_SECRET).');
     if (!signature) throw new BadRequestException('En-tête stripe-signature absent.');
-    let event: Stripe.Event;
-    try {
-      event = this.stripe.webhooks.constructEvent(rawBody, signature, this.webhookSecret);
-    } catch (e) {
-      throw new BadRequestException(`Signature Stripe invalide : ${(e as Error).message}`);
+    let event: Stripe.Event | undefined;
+    let lastError: Error | undefined;
+    for (const secret of this.webhookSecrets) {
+      try {
+        event = this.stripe.webhooks.constructEvent(rawBody, signature, secret);
+        break;
+      } catch (e) {
+        lastError = e as Error;
+      }
     }
+    if (!event) throw new BadRequestException(`Signature Stripe invalide : ${lastError?.message ?? 'aucun secret ne correspond'}`);
     const base = { id: event.id, raw: event.type };
     switch (event.type) {
       case 'checkout.session.completed':

@@ -238,5 +238,30 @@ describe('Phase 13 : paiement hébergé (Checkout, capture différée) et webhoo
       const unconfigured = new StripePaymentProvider({ get: (k: string) => (k === 'STRIPE_SECRET_KEY' ? 'sk_test_fictive' : undefined) } as unknown as ConfigService);
       expect(() => unconfigured.parseWebhook(ev.payload, ev.header)).toThrow(/STRIPE_WEBHOOK_SECRET/);
     });
+
+    it('deux points de terminaison sur la même URL (AUDIT §64) : un évènement signé avec le secret plateforme OU avec le secret « comptes connectés » est accepté, tout autre secret est refusé', () => {
+      const connectSecret = 'whsec_connect_secret_9876543210';
+      const both = new StripePaymentProvider({ get: (k: string) => ({ STRIPE_SECRET_KEY: 'sk_test_fictive', STRIPE_WEBHOOK_SECRET: secret, STRIPE_CONNECT_WEBHOOK_SECRET: connectSecret })[k] } as unknown as ConfigService);
+      const sign = (event: object, withSecret: string) => {
+        const payload = JSON.stringify(event);
+        return { payload: Buffer.from(payload), header: stripe.webhooks.generateTestHeaderString({ payload, secret: withSecret }) };
+      };
+      // Compte plateforme : paiement, signé avec le premier secret
+      const paid = sign({ id: 'evt_p1', object: 'event', type: 'checkout.session.completed', data: { object: { id: 'cs_p1', object: 'checkout.session', client_reference_id: 'tx-p1' } } }, secret);
+      expect(both.parseWebhook(paid.payload, paid.header)).toMatchObject({ type: 'checkout_completed', providerSessionId: 'cs_p1' });
+      // Comptes connectés : état du compte de versement, signé avec le second secret
+      const updated = sign({ id: 'evt_a1', object: 'event', type: 'account.updated', account: 'acct_1', data: { object: { id: 'acct_1', object: 'account', payouts_enabled: true, capabilities: { transfers: 'active' }, requirements: { currently_due: [] } } } }, connectSecret);
+      expect(both.parseWebhook(updated.payload, updated.header)).toMatchObject({ type: 'account_updated', accountId: 'acct_1' });
+      // Croisés : chaque évènement est aussi accepté s'il est signé avec l'autre secret connu (Stripe n'en utilise qu'un, l'API essaie les deux)
+      const crossed = sign({ id: 'evt_a2', object: 'event', type: 'account.updated', account: 'acct_2', data: { object: { id: 'acct_2', object: 'account' } } }, secret);
+      expect(both.parseWebhook(crossed.payload, crossed.header).type).toBe('account_updated');
+      // Aucun des deux : refusé
+      const forged = stripe.webhooks.generateTestHeaderString({ payload: updated.payload.toString(), secret: 'whsec_inconnu_0000' });
+      expect(() => both.parseWebhook(updated.payload, forged)).toThrow(/Signature Stripe invalide/);
+      // Sans le second secret (environnements sans ce webhook), le premier fonctionne comme avant et le second est refusé
+      const single = new StripePaymentProvider({ get: (k: string) => ({ STRIPE_SECRET_KEY: 'sk_test_fictive', STRIPE_WEBHOOK_SECRET: secret })[k] } as unknown as ConfigService);
+      expect(single.parseWebhook(paid.payload, paid.header).type).toBe('checkout_completed');
+      expect(() => single.parseWebhook(updated.payload, updated.header)).toThrow(/Signature Stripe invalide/);
+    });
   });
 });

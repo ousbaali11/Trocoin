@@ -93,6 +93,10 @@ export function validateEnv(env: Record<string, unknown>): Record<string, unknow
   if (env.PAYMENT_PROVIDER === 'stripe' && !env.STRIPE_WEBHOOK_SECRET) {
     errors.push('STRIPE_WEBHOOK_SECRET est requis quand PAYMENT_PROVIDER=stripe (signature des webhooks, Stripe → Developers → Webhooks).');
   }
+  // AUDIT §64 : second point de terminaison (comptes connectés), facultatif — mais s'il est renseigné, c'est un secret de signature
+  if (env.STRIPE_CONNECT_WEBHOOK_SECRET && !/^whsec_/.test(String(env.STRIPE_CONNECT_WEBHOOK_SECRET))) {
+    errors.push('STRIPE_CONNECT_WEBHOOK_SECRET doit être le « Signing secret » (whsec_…) du point de terminaison « comptes connectés », pas une clé API.');
+  }
 
   if (errors.length > 0) {
     throw new Error(`Configuration invalide :\n - ${errors.join('\n - ')}`);

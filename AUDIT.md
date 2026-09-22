@@ -3471,3 +3471,17 @@ public : **compte de versement actif en 3,9 s** — « … versées automatiquem
 état `{ onboardingComplete: true, kind: formulaire, ibanLast4: 2606, requirements: [] }` (capacité de virement active chez le
 prestataire, aucune pièce demandée à ce stade), IBAN complet absent de toute réponse. Compte temporaire supprimé, compte de
 versement fermé chez le prestataire.
+
+## 64. Second point de terminaison webhook Stripe (comptes connectés) : deux secrets de signature — 22 septembre 2026
+
+Un second endpoint Stripe « Trocoin-test », **même URL** (`/transactions/webhook/stripe`), portée « Comptes connectés »
+(évènement `account.updated`), avec **son propre secret**. Le code ne connaissait que `STRIPE_WEBHOOK_SECRET`.
+
+- Nouvelle variable **`STRIPE_CONNECT_WEBHOOK_SECRET`** (même convention que `STRIPE_CONNECT_RETURN_URL`), facultative :
+  sans elle, tout fonctionne comme avant (les évènements des comptes connectés sont alors refusés à la signature — état du
+  compte de versement relu à la visite de la page Paiements). Si elle est renseignée, elle doit commencer par `whsec_`
+  (contrôle au démarrage).
+- `StripePaymentProvider.parseWebhook` essaie **chaque secret connu** (`constructEvent` avec le premier, puis le second) ;
+  un évènement signé avec aucun des deux reste refusé (400 « Signature Stripe invalide »).
+- Test `phase13` : évènement de paiement signé avec le premier secret → accepté ; `account.updated` signé avec le second →
+  accepté ; croisé (lun

@@ -233,6 +233,10 @@ et se terminent avec l'ancienne logique.
    `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`,
    `payment_intent.canceled`, `charge.refunded` → *Signing secret* = `STRIPE_WEBHOOK_SECRET`.
    (Créé le 14 septembre 2026 pour le compte de test : endpoint `we_1UFhaP5YWLqgMw96qQYHFUhZ`.)
+   **Second endpoint, comptes connectés (AUDIT §64)** : *Add endpoint* → même URL → *Listen to* **Events on Connected
+   accounts** → évènement `account.updated` → son *Signing secret* (différent du premier) = `STRIPE_CONNECT_WEBHOOK_SECRET`.
+   Les deux endpoints visent la même URL : l'API essaie chaque secret connu. Variable facultative (sans elle, l'état du
+   compte de versement n'est relu qu'à la visite de la page Paiements).
 3. Render → Environment : `PAYMENT_PROVIDER=stripe`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
    `SITE_URL` (URL de retour après paiement). Le démarrage refuse une configuration incomplète.
 4. Test : carte `4242 4242 4242 4242`, date future, CVC quelconque. Une transaction
