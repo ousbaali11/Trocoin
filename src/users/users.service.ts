@@ -488,7 +488,7 @@ export class UsersService {
   }
 
   // ----- Stripe Connect -----
-  async setPayoutInfo(userId: string, patch: { payoutAccountKind?: 'formulaire' | 'guide' | null; payoutIbanLast4?: string | null; payoutRequirements?: string[] | null; stripeOnboardingComplete?: boolean }) {
+  async setPayoutInfo(userId: string, patch: { payoutAccountKind?: 'formulaire' | 'guide' | null; payoutIbanLast4?: string | null; payoutRequirements?: string[] | null; stripeOnboardingComplete?: boolean; payoutWebhookAt?: Date | null }) {
     await this.usersRepo.update(userId, { ...patch, payoutRequirements: patch.payoutRequirements === undefined ? undefined : patch.payoutRequirements && patch.payoutRequirements.length ? JSON.stringify(patch.payoutRequirements) : null } as Partial<User>);
   }
 

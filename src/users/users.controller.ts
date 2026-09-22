@@ -166,6 +166,7 @@ export class UsersController {
     } catch {
       recent = [];
     }
-    return { ...safe, stripeConnected: !!stripeAccountId, notificationPrefs: UsersService.prefsOf(user), recentLocations: recent };
+    // AUDIT §66 : état persisté du compte de versement (sans appel au prestataire) et date du dernier webhook « comptes connectés » reçu
+    return { ...safe, stripeConnected: !!stripeAccountId, payout: { complete: !!user.stripeOnboardingComplete, kind: user.payoutAccountKind ?? null, ibanLast4: user.payoutIbanLast4 ?? null, webhookAt: user.payoutWebhookAt ?? null }, notificationPrefs: UsersService.prefsOf(user), recentLocations: recent };
   }
 }

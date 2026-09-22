@@ -3,6 +3,7 @@ import request from 'supertest';
 import { SHIPPING_PROVIDER } from '../src/shipping/shipping.constants';
 import { IShippingProvider } from '../src/shipping/shipping-provider.interface';
 import { StripeConnectService } from '../src/users/stripe-connect.service';
+import { UsersService } from '../src/users/users.service';
 import { createApp, createListing, login } from './utils';
 
 /**
@@ -75,6 +76,26 @@ describe('Phase 38 : compte de versement (refus Stripe) et options de réception
     expect(status.status).toBe(200);
     expect(status.body).toMatchObject({ connected: false, onboardingComplete: false });
     restore();
+  });
+
+  it('webhook « comptes connectés » (AUDIT §66) : account.updated active le compte de versement et date sa réception, sans visite de la page', async () => {
+    const seller = await login(app);
+    const restore = fakeStripe({ accounts: { listExternalAccounts: async () => ({ data: [{ last4: '2606' }] }) } });
+    try {
+      const svc = app.get(StripeConnectService);
+      const users = app.get(UsersService);
+      await users.setStripeAccount(seller.id, 'acct_hook_1', false);
+      const before = await request(server).get('/users/me').set(seller.auth).expect(200);
+      expect(before.body.payout).toMatchObject({ complete: false, webhookAt: null });
+      await svc.applyAccountUpdate('acct_hook_1', { id: 'acct_hook_1', type: 'custom', payouts_enabled: true, charges_enabled: false, capabilities: { transfers: 'active' }, requirements: { currently_due: [], past_due: [] } } as never);
+      const after = await request(server).get('/users/me').set(seller.auth).expect(200);
+      expect(after.body.payout).toMatchObject({ complete: true, kind: 'formulaire', ibanLast4: '2606' });
+      expect(after.body.payout.webhookAt).toBeTruthy();
+      // Compte inconnu : ignoré sans erreur
+      await svc.applyAccountUpdate('acct_inconnu', { id: 'acct_inconnu' } as never);
+    } finally {
+      restore();
+    }
   });
 
   it('options de réception : quatre appels au prestataire en parallèle, puis servis de mémoire', async () => {

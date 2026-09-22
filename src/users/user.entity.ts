@@ -149,6 +149,10 @@ export class User {
   @Column({ type: 'text', nullable: true })
   payoutRequirements?: string | null;
 
+  /** Dernier évènement `account.updated` reçu du prestataire pour ce compte (AUDIT §66) : preuve que le webhook « comptes connectés » fonctionne. */
+  @Column({ type: DATE_TYPE, nullable: true })
+  payoutWebhookAt?: Date | null;
+
   // ----- Réputation -----
   @Column({ type: 'float', default: 0 })
   ratingAvg: number;

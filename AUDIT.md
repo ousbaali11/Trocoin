@@ -3525,3 +3525,16 @@ plus haut). Pour ne plus dépendre des logs, `/health` expose désormais `stripe
 (présence des secrets, jamais leur valeur).
 
 **Production 1.37.0** (CI verte, migration `1789610000000` jouée). Au premier réveil après le déploiement, `/health` répond `paymentIssues: 3` : les trois ventes sont signalées et sorties des files (plus d'erreur répétée), et `stripeWebhooks: { platform: true, connectedAccounts: true }` confirme que `STRIPE_CONNECT_WEBHOOK_SECRET` est bien pris en compte au démarrage.
+
+## 66. Webhook « comptes connectés » vérifié en production — 22 septembre 2026
+
+`STRIPE_CONNECT_WEBHOOK_SECRET` posée sur Render. Preuve demandée : message de démarrage, puis formulaire de versement rejoué et
+état mis à jour par `account.updated` sans revisiter la page.
+
+- **Message de démarrage** : les logs Render ne sont pas lisibles d'ici ; la même condition (présence du secret au démarrage) est
+  exposée par `/health` → `stripeWebhooks.connectedAccounts: true` (la ligne de log est alors « Stripe MODE TEST · webhook
+  signé, comptes connectés signés »).
+- **Trace de réception** : `users.payoutWebhookAt` (migration `1789620000000`) est daté à chaque `account.updated` appliqué
+  (`applyAccountUpdate`), et `GET /users/me` expose désormais `payout: { complete, kind, ibanLast4, webhookAt }` — l'état
+  **persisté**, sans appel au prestataire (contrairement à `stripe-status`). Une date non nulle ne peut venir que d'un
+  évènement dont la signature a été vérifiée avec le secret « comptes connectés ». Test `phase38` (3 tests).

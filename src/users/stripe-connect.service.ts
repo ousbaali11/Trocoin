@@ -263,6 +263,8 @@ export class StripeConnectService {
     if (!user) return;
     const before = user.stripeOnboardingComplete;
     const status = await this.recordAccountState(user.id, account);
+    await this.usersService.setPayoutInfo(user.id, { payoutWebhookAt: new Date() });
+    this.logger.log(`account.updated reçu pour ${accountId} (membre ${user.id}) : ${status.onboardingComplete ? 'actif' : 'en attente'}${status.requirements.length ? ` — manque ${status.requirements.join(', ')}` : ''}`);
     if (status.onboardingComplete && !before) this.logger.log(`Compte de versement ${accountId} activé pour ${user.id}`);
   }
 
