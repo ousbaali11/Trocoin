@@ -190,13 +190,16 @@ export class StripeConnectService {
       ...(phone ? { phone } : {}),
     };
     const externalAccount = { object: 'bank_account' as const, country: 'FR', currency: 'eur', account_number: iban, account_holder_name: holder, account_holder_type: 'individual' as const };
-    const tos = { date: Math.floor(Date.now() / 1000), ip: ip || '0.0.0.0' };
+    void ip;
+    // Plateforme établie en France : le prestataire exige que l'identité passe par un « account token » (les conditions y
+    // sont attestées : tos_shown_and_accepted) — refus « must create accounts via account tokens » sinon (AUDIT §63).
+    const accountToken = () => stripe.tokens.create({ account: { business_type: 'individual', individual, tos_shown_and_accepted: true } });
     try {
       let accountId = user.stripeAccountId;
       let existing: Stripe.Account | null = null;
       if (accountId) existing = await stripe.accounts.retrieve(accountId).catch(() => null);
       if (existing && existing.type === 'custom') {
-        await stripe.accounts.update(accountId!, { individual, business_type: 'individual', tos_acceptance: tos });
+        await stripe.accounts.update(accountId!, { account_token: (await accountToken()).id });
         const bank = await stripe.accounts.createExternalAccount(accountId!, { external_account: externalAccount as unknown as string });
         await stripe.accounts.updateExternalAccount(accountId!, bank.id, { default_for_currency: true });
       } else {
@@ -204,11 +207,9 @@ export class StripeConnectService {
         const created = await stripe.accounts.create({
           type: 'custom',
           country: 'FR',
-          business_type: 'individual',
+          account_token: (await accountToken()).id,
           capabilities: { transfers: { requested: true } },
-          individual,
           external_account: externalAccount as unknown as string,
-          tos_acceptance: tos,
           business_profile: { mcc: '5399', url: `${resolveSiteUrl()}/vendeurs/${user.id}`, product_description: "Vente d'objets d'occasion entre particuliers sur Trocoin" },
           metadata: { userId: user.id },
         });
