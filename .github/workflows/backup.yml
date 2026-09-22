@@ -33,11 +33,21 @@ jobs:
           else
             echo "present=true" >> "$GITHUB_OUTPUT"
           fi
-      - name: Installer pg_dump 16
+      - name: Installer pg_dump (même version majeure que le serveur)
         if: steps.cfg.outputs.present == 'true'
+        # AUDIT §63 : « aborting because of server version mismatch » — le serveur (Neon) a changé de version majeure ;
+        # le client est pris au dépôt PostgreSQL officiel dans la version du serveur, lue avant le dump.
         run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
           sudo apt-get update -qq
-          sudo apt-get install -y -qq postgresql-client-16 >/dev/null
+          sudo apt-get install -y -qq postgresql-client-17 >/dev/null
+          MAJOR=$(psql "$DATABASE_URL_BACKUP" -tAc "show server_version" | cut -d. -f1)
+          echo "serveur PostgreSQL $MAJOR"
+          if [ "$MAJOR" != "17" ]; then sudo apt-get install -y -qq "postgresql-client-$MAJOR" >/dev/null; fi
+          export PATH="/usr/lib/postgresql/$MAJOR/bin:$PATH"
+          echo "/usr/lib/postgresql/$MAJOR/bin" >> "$GITHUB_PATH"
           pg_dump --version
       - name: Dump + chiffrement
         if: steps.cfg.outputs.present == 'true'

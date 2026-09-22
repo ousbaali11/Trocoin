@@ -190,7 +190,7 @@ function PaiementsInner() {
             </label>
             {errorBox}
             <div className="row">
-              <button type="submit" className="btn btn-primary" disabled={!canSubmit} data-testid="payout-submit">{busy ? "Enregistrement…" : "Enregistrer mon compte de versement"}</button>
+              <button type="submit" className="btn btn-primary" disabled={!canSubmit} data-testid="payout-submit" style={{ maxWidth: "100%", whiteSpace: "normal" }}>{busy ? "Enregistrement…" : "Enregistrer mon compte"}</button>
               {editing && <button type="button" className="btn btn-outline" onClick={() => { setEditing(false); setFormError(null); }}>Annuler</button>}
             </div>
             <p className="small muted" style={{ margin: 0 }}>Ces informations sont celles qu&apos;exige la réglementation sur les paiements pour verser un particulier. Au-delà d&apos;un certain volume de ventes, une pièce d&apos;identité pourra vous être demandée : vous en serez prévenu ici.</p>
