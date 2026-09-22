@@ -3523,3 +3523,5 @@ Il n'est émis que si `STRIPE_CONNECT_WEBHOOK_SECRET` est présent au démarrage
 apparaissent (le message est une ligne `LOG [Paiement(stripe)] Stripe MODE TEST · webhook signé, comptes connectés signés`,
 plus haut). Pour ne plus dépendre des logs, `/health` expose désormais `stripeWebhooks: { platform, connectedAccounts }`
 (présence des secrets, jamais leur valeur).
+
+**Production 1.37.0** (CI verte, migration `1789610000000` jouée). Au premier réveil après le déploiement, `/health` répond `paymentIssues: 3` : les trois ventes sont signalées et sorties des files (plus d'erreur répétée), et `stripeWebhooks: { platform: true, connectedAccounts: true }` confirme que `STRIPE_CONNECT_WEBHOOK_SECRET` est bien pris en compte au démarrage.
