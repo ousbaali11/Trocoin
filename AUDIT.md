@@ -3538,3 +3538,17 @@ plus haut). Pour ne plus dépendre des logs, `/health` expose désormais `stripe
   (`applyAccountUpdate`), et `GET /users/me` expose désormais `payout: { complete, kind, ibanLast4, webhookAt }` — l'état
   **persisté**, sans appel au prestataire (contrairement à `stripe-status`). Une date non nulle ne peut venir que d'un
   évènement dont la signature a été vérifiée avec le secret « comptes connectés ». Test `phase38` (3 tests).
+
+**Production 1.38.0 → 1.38.2.** Formulaire rejoué (compte temporaire, mobile) : compte actif en 4 s par la réponse du
+formulaire, puis **aucun `account.updated` appliqué en 120 s**. Une trace en mémoire des webhooks (`/health.stripeWebhooks` :
+reçus, acceptés, refusés, dernière erreur — jamais de contenu ni de secret) montre la cause : **3 évènements reçus, 3 refusés**
+à la signature (*No signatures found matching the expected signature*) avec les deux secrets connus. Les évènements
+arrivent donc bien du prestataire jusqu'à l'API ; c'est la valeur de `STRIPE_CONNECT_WEBHOOK_SECRET` posée sur Render qui
+ne correspond pas au secret de signature de l'endpoint « comptes connectés ». La 1.38.2 ajoute le format des secrets
+(`ok` / `espaces` / `inattendu`, sans valeur) et le nombre de signatures v1 reçues, et lit les secrets sans espaces
+parasites. Compte temporaire supprimé (204) à chaque essai.
+
+Troisième essai (1.38.2) : `platformSecretFormat: ok`, `connectedAccountsSecretFormat: ok`, 3 évènements reçus (1 signature v1
+chacun, corps brut ≈ 8 Ko), 3 refusés. Conclusion : les évènements arrivent, le corps brut est intact, mais **le secret
+posé sur Render n'est pas celui de l'endpoint qui les envoie** — à re-copier depuis Stripe (endpoint « Trocoin-test »,
+portée comptes connectés, *Reveal* du Signing secret), puis nouvel essai. La preuve de bout en bout reste à obtenir.
