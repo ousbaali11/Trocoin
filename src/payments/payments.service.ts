@@ -30,6 +30,7 @@ import { StripeConnectService } from '../users/stripe-connect.service';
 import { UsersService } from '../users/users.service';
 import { CheckoutSync, IPaymentProvider, PaymentProviderError, PaymentState } from './payment-provider.interface';
 import { CHECKOUT_TTL_MINUTES, PAYMENT_PROVIDER } from './payments.constants';
+import { traceWebhookAccepted, traceWebhookRejected } from './webhook-trace';
 import { ChosenPickupPoint, DeliveryAddress, DeliveryMethod, DeliveryMode, Transaction, TransactionStatus } from './transaction.entity';
 
 /**
@@ -865,7 +866,14 @@ export class PaymentsService implements OnApplicationBootstrap {
   async handleWebhook(rawBody: Buffer | undefined, signature: string | undefined): Promise<{ received: true; handled: string }> {
     if (!this.paymentProvider.parseWebhook) throw new NotFoundException('Aucun webhook pour ce fournisseur de paiement.');
     if (!rawBody) throw new BadRequestException('Corps brut manquant.');
-    const event = this.paymentProvider.parseWebhook(rawBody, signature);
+    let event: ReturnType<NonNullable<IPaymentProvider['parseWebhook']>>;
+    try {
+      event = this.paymentProvider.parseWebhook(rawBody, signature);
+    } catch (err) {
+      traceWebhookRejected((err as Error).message);
+      throw err;
+    }
+    traceWebhookAccepted(event.raw, event.accountId);
     this.logger.log(`Webhook ${event.raw} (${event.id}) → ${event.type}`);
     if (event.type === 'checkout_completed' || event.type === 'checkout_expired') {
       const tx = await this.findByProviderRef(event.transactionId, event.providerSessionId);
@@ -879,7 +887,13 @@ export class PaymentsService implements OnApplicationBootstrap {
         }
       }
     } else if (event.type === 'account_updated' && event.accountId) {
-      await this.stripeConnect.applyAccountUpdate(event.accountId, event.account as never);
+      try {
+        await this.stripeConnect.applyAccountUpdate(event.accountId, event.account as never);
+      } catch (err) {
+        // Trace visible dans /health, puis 500 : le prestataire réessaiera
+        traceWebhookRejected(`account.updated ${event.accountId} : ${(err as Error).message}`);
+        throw err;
+      }
     } else if (event.type === 'payment_canceled' && event.providerPaymentId) {
       const tx = await this.transactionsRepo.findOne({ where: { providerPaymentId: event.providerPaymentId } });
       if (tx && ['sequestre', 'livree'].includes(tx.status)) {

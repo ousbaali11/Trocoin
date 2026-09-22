@@ -4,6 +4,7 @@ import { DataSource } from 'typeorm';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { resolveSiteUrl } from '../config/env.validation';
+import { webhookTrace } from '../payments/webhook-trace';
 
 /** Version lue dans package.json à l'exécution (pas d'import JSON : il déplacerait la sortie de tsc hors de dist/). */
 const packageVersion: string = (() => {
@@ -54,7 +55,7 @@ export class HealthController {
       // Webhooks du prestataire de paiement (AUDIT §65) : présence des secrets, jamais leur valeur
       // Ventes signalées « paiement inconnu du prestataire » en attente d'une décision de l'administration (AUDIT §65)
       paymentIssues: Number((await this.dataSource.query('SELECT COUNT(*) AS n FROM transactions WHERE "paymentIssue" IS NOT NULL'))[0]?.n ?? 0),
-      ...(process.env.PAYMENT_PROVIDER === 'stripe' ? { stripeWebhooks: { platform: !!process.env.STRIPE_WEBHOOK_SECRET, connectedAccounts: !!process.env.STRIPE_CONNECT_WEBHOOK_SECRET } } : {}),
+      ...(process.env.PAYMENT_PROVIDER === 'stripe' ? { stripeWebhooks: { platform: !!process.env.STRIPE_WEBHOOK_SECRET, connectedAccounts: !!process.env.STRIPE_CONNECT_WEBHOOK_SECRET, ...webhookTrace } } : {}),
     };
   }
 }
