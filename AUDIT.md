@@ -3457,3 +3457,17 @@ navigateur sur le prestataire simulé et par le parcours réel jusqu'à la page 
 - Navigateur : `31-versement-iban-archivage` (formulaire IBAN → compte actif « •••• 2606 », IBAN jamais réaffiché ; litige →
   état du prestataire sur la fiche admin → décision ; annonce archivée : bandeau admin, 404 membres, absente de « Mes
   annonces ») à 375 px et sur grand écran ; `30` adaptée au formulaire.
+
+**Production 1.35.1 → 1.35.2.** Premier essai réel du formulaire (compte temporaire, IBAN de test public, mobile 375 px) :
+refus du prestataire *« Connect platforms based in FR must create accounts via account tokens »* — rendu en clair sous le
+formulaire (plus d'erreur interne), compte et état inchangés. Une plateforme établie en France doit transmettre
+l'identité par un jeton de compte : corrigé en 1.35.2 (`tokens.create({ account })` puis `account_token`, conditions
+attestées dans le jeton). La sauvegarde hebdomadaire de la base échouait depuis le passage du serveur en PostgreSQL 18
+(« server version mismatch ») : `pg_dump` est désormais installé dans la version majeure du serveur — passage manuel
+réussi (dump de 162 Ko, archive vérifiée).
+
+**Production 1.35.2** (CI verte). Nouvel essai réel du formulaire sur téléphone 375 px, compte temporaire, IBAN de test
+public : **compte de versement actif en 3,9 s** — « … versées automatiquement … sur le compte se terminant par •••• 2606 »,
+état `{ onboardingComplete: true, kind: formulaire, ibanLast4: 2606, requirements: [] }` (capacité de virement active chez le
+prestataire, aucune pièce demandée à ce stade), IBAN complet absent de toute réponse. Compte temporaire supprimé, compte de
+versement fermé chez le prestataire.
