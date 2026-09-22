@@ -3660,7 +3660,8 @@ notés avec leur décision.
   production (sinon dix échecs de connexion bloquaient tout le site dix minutes).
 - **Front** : politique de sécurité du contenu (`Content-Security-Policy`) sur toutes les pages — scripts et styles du
   site seulement, connexions vers l'API (HTTP + WebSocket) et Sentry, aucun cadre tiers, aucun envoi de formulaire ailleurs.
-  Les jetons restent en `localStorage` (cookie `HttpOnly` : chantier ultérieur, noté).
+  Les jetons restent en `localStorage` (cookie `HttpOnly` : chantier ultérieur, noté). Correctif 1.40.1 : la CSP bloquait les
+  suggestions de communes (`api-adresse.data.gouv.fr`, repéré par la CI ; hôte ajouté).
 
 ### Argent (paiements, séquestre, versements, livraison)
 
@@ -3712,7 +3713,7 @@ notés avec leur décision.
 - **Divers** : titre de trois espaces refusé (trim avant la longueur), prix effacé au passage en « gratuit/échange »
   (`null`, `undefined` était ignoré), réordonnancement jusqu'à 100 photos, favoris sans annonces retirées/refusées/en
   pause, signalements sans l'administrateur ni sa note, `createdBy`/`externalRef`/`moderationReason` hors des projections
-  publiques, compteur de vues dédoublonné (une vue par adresse et par annonce par heure, limite dédiée), duplication
+  publiques, compteur de vues dédoublonné pour les visiteurs anonymes (une vue par adresse et par annonce par heure, limite dédiée), duplication
   limitée et sans compteurs copiés, recherche de la console avec `%`/`_` échappés.
 - **Baisse de prix** : les membres qui ont l'annonce en favori sont prévenus.
 - Notés, non corrigés : quotas vérifiés puis écrits sans verrou (dépassement par requêtes parallèles, faible enjeu) ;

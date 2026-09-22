@@ -11,7 +11,7 @@ const CSP = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https: http://localhost:*",
   "font-src 'self' data:",
-  `connect-src 'self' ${API} ${WS} https://*.sentry.io https://*.ingest.sentry.io`,
+  `connect-src 'self' ${API} ${WS} https://api-adresse.data.gouv.fr https://*.sentry.io https://*.ingest.sentry.io`, // suggestions de communes (base adresse nationale)
   "frame-src 'none'",
   "frame-ancestors 'none'",
   "base-uri 'self'",

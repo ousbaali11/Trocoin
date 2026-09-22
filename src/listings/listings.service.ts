@@ -868,12 +868,15 @@ export class ListingsService {
     if (!listing || listing.userId === userId) return { counted: false };
     if (userId) await this.viewsRepo.save(this.viewsRepo.create({ userId, listingId, viewedAt: new Date() }));
     if (listing.status !== 'en_ligne') return { counted: false };
-    const key = `${userId || ip || '?'}:${listingId}`;
-    const now = Date.now();
-    const last = this.recentViews.get(key);
-    if (last && now - last < 3_600_000) return { counted: false };
-    this.recentViews.set(key, now);
-    if (this.recentViews.size > 50_000) for (const [k, t] of this.recentViews) if (now - t > 3_600_000) this.recentViews.delete(k);
+    // Visiteur anonyme : une vue par adresse et par annonce par heure (boucles, robots) ; un membre connecté compte à chaque affichage
+    if (!userId) {
+      const key = `${ip || '?'}:${listingId}`;
+      const now = Date.now();
+      const last = this.recentViews.get(key);
+      if (last && now - last < 3_600_000) return { counted: false };
+      this.recentViews.set(key, now);
+      if (this.recentViews.size > 50_000) for (const [k, t] of this.recentViews) if (now - t > 3_600_000) this.recentViews.delete(k);
+    }
     await this.listingsRepo.increment({ id: listingId }, 'viewsCount', 1);
     return { counted: true };
   }
