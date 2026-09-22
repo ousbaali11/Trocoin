@@ -98,6 +98,60 @@ describe('Phase 38 : compte de versement (refus Stripe) et options de réception
     }
   });
 
+  it('compte de versement orphelin (AUDIT §67) : identifiant inconnu des clés actuelles → remis à zéro, message « recommencez », nouveau compte possible ; balayage global', async () => {
+    const seller = await login(app);
+    const users = app.get(UsersService);
+    await users.setStripeAccount(seller.id, 'acct_ancien_environnement', true);
+    await users.setPayoutInfo(seller.id, { payoutAccountKind: 'guide', payoutIbanLast4: '1234' });
+    const dead = (id: string) => (id === 'acct_ancien_environnement' ? Promise.reject(Object.assign(new Error('You requested an account link for an account that is not connected to your platform or does not exist.'), { type: 'StripeInvalidRequestError', statusCode: 400 })) : Promise.resolve({ id, type: 'express', payouts_enabled: false, charges_enabled: false, capabilities: {}, requirements: { currently_due: ['external_account'] } }));
+    const created: string[] = [];
+    const restore = fakeStripe({
+      accounts: { retrieve: (id: string) => dead(id), create: async () => { created.push(`acct_neuf${created.length + 1}`); return { id: created[created.length - 1] }; }, listExternalAccounts: async () => ({ data: [] }) },
+      accountLinks: { create: async ({ account }: { account: string }) => (account === 'acct_ancien_environnement' ? dead(account) : { url: `https://connect.stripe.com/setup/e/${account}` }) },
+    });
+    try {
+      // 1. L'état lu sur la page Paiements : plus d'erreur brute, configuration remise à zéro et signalée
+      const status = await request(server).get('/users/me/stripe-status').set(seller.auth).expect(200);
+      expect(status.body).toMatchObject({ connected: false, onboardingComplete: false, kind: null, ibanLast4: null, previousInvalidated: true });
+      const me = await request(server).get('/users/me').set(seller.auth).expect(200);
+      expect(me.body.stripeConnected).toBe(false);
+      expect(me.body.payout).toMatchObject({ complete: false, kind: null, ibanLast4: null });
+      const notif = await request(server).get('/notifications').set(seller.auth).expect(200);
+      expect(notif.body.some((n: any) => n.title === 'Compte de versement à reconfigurer')).toBe(true);
+      // 2. Recommencer : un nouveau compte est créé sans conflit
+      const link = await request(server).post('/users/me/stripe-onboarding-link').set(seller.auth).expect(201);
+      expect(link.body.accountId).toBe('acct_neuf1');
+      expect(link.body.url).toContain('acct_neuf1');
+      // 3. Cas du lien direct sur un identifiant mort (sans passage par l'état) : remis à zéro puis nouveau compte, message jamais brut
+      await users.setStripeAccount(seller.id, 'acct_ancien_environnement', true);
+      const again = await request(server).post('/users/me/stripe-onboarding-link').set(seller.auth).expect(201);
+      expect(again.body.accountId).toBe('acct_neuf2');
+      // 4. Balayage global : un autre membre avec un identifiant mort est remis à zéro sans qu'il visite la page
+      const other = await login(app);
+      await users.setStripeAccount(other.id, 'acct_ancien_environnement', true);
+      const sweep = await app.get(StripeConnectService).sweepOrphanedAccounts();
+      expect(sweep.reset).toBeGreaterThanOrEqual(1);
+      expect((await request(server).get('/users/me').set(other.auth).expect(200)).body.stripeConnected).toBe(false);
+      const health = await request(server).get('/health').expect(200);
+      expect(health.body.payoutAccounts).toBeUndefined(); // mode mock hors Stripe : rien à exposer
+    } finally {
+      restore();
+    }
+  });
+
+  it("compte professionnel réversible (AUDIT §68) : retour au compte particulier, données d'entreprise effacées ; refusé pour un particulier", async () => {
+    const user = await login(app);
+    await request(server).post('/users/me/become-individual').set(user.auth).expect(400);
+    const users = app.get(UsersService);
+    await (users as unknown as { usersRepo: { update: (id: string, p: object) => Promise<unknown> } }).usersRepo.update(user.id, { accountType: 'professionnel', siret: '73282932000074', shopName: 'Atelier Test', siretVerified: true });
+    expect((await request(server).get('/users/me').set(user.auth).expect(200)).body.accountType).toBe('professionnel');
+    const back = await request(server).post('/users/me/become-individual').set(user.auth).expect(201);
+    expect(back.body.accountType).toBe('particulier');
+    expect(back.body.siret ?? null).toBeNull();
+    expect(back.body.shopName ?? null).toBeNull();
+    expect(back.body.siretVerified).toBe(false);
+  });
+
   it('options de réception : quatre appels au prestataire en parallèle, puis servis de mémoire', async () => {
     const seller = await login(app);
     const buyer = await login(app);

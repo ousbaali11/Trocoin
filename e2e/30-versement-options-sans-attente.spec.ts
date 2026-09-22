@@ -30,7 +30,7 @@ test('compte de versement : le refus du prestataire est affiché en clair et res
   const error = page.getByTestId('payout-setup-error');
   await expect(error).toContainText('Les versements ne sont pas encore ouverts sur Trocoin');
   await expect(error).toContainText('Votre argent reste en sécurité');
-  await expect(error).toContainText('Détail technique (mode test)');
+  await expect(error).not.toContainText('StripeInvalidRequestError'); // AUDIT §67 : jamais d'erreur technique brute à l'écran
   await expect(start).toBeEnabled(); // on peut réessayer, le bouton ne reste pas sur « Redirection… »
   if (isMobile) await expectNoHorizontalOverflow(page);
 });

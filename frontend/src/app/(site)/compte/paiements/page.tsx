@@ -15,6 +15,7 @@ interface PayoutStatus {
   ibanLast4?: string | null;
   requirements?: string[];
   needsHostedStep?: boolean;
+  previousInvalidated?: boolean;
 }
 
 interface PayoutForm {
@@ -123,7 +124,7 @@ function PaiementsInner() {
   const errorBox = formError && (
     <div className="alert alert-error" role="alert" data-testid="payout-setup-error" style={{ margin: "12px 0 0" }}>
       {formError.message}
-      {formError.reason && <span className="small" style={{ display: "block", marginTop: 6, opacity: 0.85 }}>Détail technique (mode test) : {formError.reason}</span>}
+
     </div>
   );
 
@@ -146,6 +147,11 @@ function PaiementsInner() {
           </div>
         )}
 
+        {status?.previousInvalidated && (
+          <div className="alert alert-info" role="status" data-testid="payout-reset-notice" style={{ margin: "0 0 12px" }}>
+            <strong>Votre configuration précédente n&apos;est plus valable</strong> (elle appartenait à un ancien environnement de notre prestataire). Recommencez-la ci-dessous : cela ne prend qu&apos;une minute.
+          </div>
+        )}
         {status && !status.onboardingComplete && status.connected && (status.requirements?.length || status.needsHostedStep) ? (
           <div className="alert alert-info" style={{ margin: "0 0 12px" }} data-testid="payout-pending">
             <strong>Compte de versement en cours de validation.</strong>

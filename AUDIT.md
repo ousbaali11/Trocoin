@@ -3575,3 +3575,45 @@ formulaire, page jamais rechargée**. Compte temporaire supprimé. Le webhook pl
 Pour mémoire : le format `v2.core.account.updated` (« thin events », API v2) n'est pas pris en charge ; il ne le sera que
 si Stripe retire l'évènement classique `account.updated` — rien d'urgent, les destinations « classiques » restent prises en
 charge pour les comptes existants.
+
+## 67. Comptes de versement orphelins après le changement d'environnement du prestataire — 22 septembre 2026
+
+Un compte professionnel (« Jamal T. ») avait configuré son compte de versement avant l'unification des clés dans un seul
+environnement de test : son `stripeAccountId` appartient à l'ancien environnement et n'existe plus pour les clés actuelles.
+« Configurer mon compte de versement » affichait l'erreur brute du prestataire (*You requested an account link for an
+account that is not connected to your platform or does not exist*).
+
+- **Détection** : `isUnknownAccount` reconnaît aussi ce message (en plus de `account_invalid`, `resource_missing`, « No such
+  account »), distinct des autres refus.
+- **Remise à zéro** (`resetOrphanedAccount`) : `stripeAccountId`, statut, type, IBAN (4 derniers), exigences, date de webhook
+  effacés ; notification « Compte de versement à reconfigurer » ; journal. Déclenchée à la lecture de l'état (page Paiements),
+  au lien de configuration guidée et au formulaire IBAN — puis un **nouveau compte est créé sans conflit**.
+- **Message clair** : la page affiche « Votre configuration précédente n'est plus valable … Recommencez-la ci-dessous » et le
+  formulaire (particulier) ou le bouton (professionnel). Le « détail technique (mode test) » n'est plus jamais affiché.
+- **Balayage global** (`sweepOrphanedAccounts`) : tous les comptes enregistrés sont vérifiés chez le prestataire au démarrage
+  (20 s) et chaque nuit ; les orphelins sont remis à zéro et prévenus ; résultat exposé par `/health.payoutAccounts`
+  (`checked`, `reset`, `unreachable`, sans identifiant).
+- Test `phase38` : identifiant mort → état « recommencez » sans erreur brute, notification, nouveau compte `acct_neuf1`, lien
+  direct sur identifiant mort → remis à zéro puis `acct_neuf2`, balayage d'un autre membre.
+
+## 68. Compte « Jamal T. » affiché professionnel : cause et retour au compte particulier — 22 septembre 2026
+
+Le propriétaire indique que ce compte n'a jamais été voulu professionnel ; l'interface affiche « Compte professionnel » et
+« Ma boutique ».
+
+**Cause, d'après le code** (la base de production n'est pas lisible d'ici — pas de compte administrateur dans `private/` — et
+ce compte n'a pas d'annonce en ligne qui exposerait son profil) : il n'existe **aucun basculement automatique**. Un compte ne
+devient professionnel que par trois actions explicites : (1) à l'inscription, en choisissant « Professionnel » — pré-coché
+si l'on arrive par le lien « Créer un compte professionnel » du pied de page —, avec un **SIRET valide contrôlé au registre**
+(`registerPro`) ; (2) dans **Paramètres → « Passer en compte professionnel »** : SIRET (14 chiffres, contrôlé) + nom
+commercial + bouton « Activer le compte professionnel » (`POST /users/me/become-pro`, `UsersService.becomePro`, l.285) ;
+(3) par un administrateur (fiche utilisateur de la console, `accountType`). Aucun chemin ne pose `professionnel` sans SIRET
+valide : le compte a donc été activé par l'une de ces actions (le SIRET affiché dans Paramètres dit lequel a été saisi).
+Point faible réel : **le choix n'était pas réversible depuis le site**, et il s'appliquait sans confirmation.
+
+**Corrections** : `POST /users/me/become-individual` (retour au compte particulier : SIRET, raison sociale, boutique effacés ;
+refusé tant que la boutique a des membres) ; bouton « Repasser en compte particulier » dans Paramètres → Ma boutique, avec
+boîte de confirmation ; « Activer le compte professionnel » demande désormais une confirmation explicite (SIRET et enseigne
+rappelés, réversibilité annoncée). Pour « Jamal T. » : Paramètres → Ma boutique → « Repasser en compte particulier », ou
+console → fiche utilisateur → type « particulier ». Test `phase38` (retour au particulier, données effacées, 400 pour un
+particulier).

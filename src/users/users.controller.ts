@@ -80,6 +80,13 @@ export class UsersController {
     return this.sanitizeSelf(await this.usersService.setShopLogo(req.user.userId, url));
   }
 
+  /** Retour au compte particulier (AUDIT §68) : réversible depuis Paramètres, données d'entreprise effacées. */
+  @UseGuards(JwtAuthGuard)
+  @Post('me/become-individual')
+  async becomeIndividual(@Req() req: any) {
+    return this.sanitizeSelf(await this.usersService.becomeIndividual(req.user.userId));
+  }
+
   @UseGuards(JwtAuthGuard)
   @Post('me/become-pro')
   async becomePro(@Req() req: any, @Body() dto: BecomeProDto) {

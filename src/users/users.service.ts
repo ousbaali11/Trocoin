@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Repository } from 'typeorm';
+import { IsNull, Not, Repository } from 'typeorm';
 import { Conversation } from '../conversations/conversation.entity';
 import { Message } from '../conversations/message.entity';
 import { Listing } from '../listings/listing.entity';
@@ -14,6 +14,7 @@ import { SiretVerificationService } from './siret-verification.service';
 import { DELETED_ACCOUNT_LABEL, RetentionService } from '../retention/retention.service';
 import { effectivePrefs, sanitizePrefs, type NotificationPrefs } from '../notifications/notification-prefs';
 import { User } from './user.entity';
+import { ShopMember } from '../shops/shop-member.entity';
 
 /** Validation de la clé de contrôle d'un SIRET (algorithme de Luhn). */
 export function isValidSiret(siret: string): boolean {
@@ -293,6 +294,20 @@ export class UsersService {
     return this.findById(id) as Promise<User>;
   }
 
+  /**
+   * Retour au compte particulier (AUDIT §68) : le passage en professionnel n'était pas réversible depuis le site. Les
+   * données d'entreprise sont effacées (SIRET, raison sociale, boutique) ; refusé tant que la boutique a des membres.
+   */
+  async becomeIndividual(id: string): Promise<User> {
+    const user = await this.findById(id);
+    if (!user) throw new NotFoundException('Utilisateur introuvable.');
+    if (user.accountType !== 'professionnel') throw new BadRequestException("Ce compte n'est pas un compte professionnel.");
+    const members = await this.usersRepo.manager.count(ShopMember, { where: { ownerId: id } });
+    if (members > 0) throw new BadRequestException('Retirez d\'abord les membres de votre boutique (Ma boutique → Équipe) avant de repasser en compte particulier.');
+    await this.usersRepo.update(id, { accountType: 'particulier', siret: null as unknown as string, siretVerified: false, siretVerifiedAt: null as unknown as Date, companyName: null as unknown as string, shopName: null as unknown as string, shopDescription: null as unknown as string, shopWebsite: null as unknown as string, shopAddress: null as unknown as string, shopHours: null as unknown as string, shopLogoUrl: null as unknown as string });
+    return this.findById(id) as Promise<User>;
+  }
+
   /** Profil public : jamais de téléphone / e-mail / SIRET complet exposés. */
   async findPublicProfile(id: string): Promise<PublicProfile | null> {
     const user = await this.findById(id);
@@ -490,6 +505,16 @@ export class UsersService {
   // ----- Stripe Connect -----
   async setPayoutInfo(userId: string, patch: { payoutAccountKind?: 'formulaire' | 'guide' | null; payoutIbanLast4?: string | null; payoutRequirements?: string[] | null; stripeOnboardingComplete?: boolean; payoutWebhookAt?: Date | null }) {
     await this.usersRepo.update(userId, { ...patch, payoutRequirements: patch.payoutRequirements === undefined ? undefined : patch.payoutRequirements && patch.payoutRequirements.length ? JSON.stringify(patch.payoutRequirements) : null } as Partial<User>);
+  }
+
+  /** Compte de versement orphelin (AUDIT §67) : toute référence au prestataire est effacée, un nouveau compte pourra être créé. */
+  async clearStripeAccount(userId: string): Promise<void> {
+    await this.usersRepo.update(userId, { stripeAccountId: null as unknown as string, stripeOnboardingComplete: false, payoutAccountKind: null, payoutIbanLast4: null, payoutRequirements: null, payoutWebhookAt: null });
+  }
+
+  /** Membres ayant un compte de versement enregistré (balayage des orphelins). */
+  findWithStripeAccount(limit = 500): Promise<User[]> {
+    return this.usersRepo.find({ where: { stripeAccountId: Not(IsNull()), deletedAt: IsNull() }, select: ['id', 'stripeAccountId', 'stripeOnboardingComplete', 'payoutAccountKind'], take: limit });
   }
 
   findByStripeAccount(stripeAccountId: string): Promise<User | null> {

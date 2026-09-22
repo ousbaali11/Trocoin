@@ -12,11 +12,13 @@ import { UserBlock } from './user-block.entity';
 import { User } from './user.entity';
 import { UsersController } from './users.controller';
 import { SiretVerificationService } from './siret-verification.service';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { UsersService } from './users.service';
 
 @Module({
   imports: [
     RetentionModule,
+    NotificationsModule,
     TypeOrmModule.forFeature([User, UserBlock, Listing, Conversation, Message, Review, Transaction, Favorite]),
   ],
   controllers: [UsersController],

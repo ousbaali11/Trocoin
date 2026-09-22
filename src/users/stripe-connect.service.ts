@@ -1,4 +1,7 @@
-import { BadRequestException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException, OnApplicationBootstrap, ServiceUnavailableException } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
+import { NotificationsService } from '../notifications/notifications.service';
+import { payoutSweep } from './payout-sweep';
 import { PAYMENT_DISABLED_MESSAGE } from '../payments/disabled-payment.provider';
 import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
@@ -39,6 +42,8 @@ export interface PayoutStatus {
   requirements: string[];
   /** Vrai quand une pièce doit être fournie sur la page sécurisée du prestataire (lien « Compléter la vérification »). */
   needsHostedStep: boolean;
+  /** La configuration précédente (compte d'un autre environnement du prestataire, ou effacé) vient d'être remise à zéro : recommencer (AUDIT §67). */
+  previousInvalidated?: boolean;
 }
 
 /**
@@ -60,7 +65,7 @@ export interface PayoutStatus {
  * voir AUDIT.md.
  */
 @Injectable()
-export class StripeConnectService {
+export class StripeConnectService implements OnApplicationBootstrap {
   private readonly logger = new Logger('StripeConnect');
   private readonly stripe?: Stripe;
   private readonly mode: 'mock' | 'stripe' | 'disabled';
@@ -70,6 +75,7 @@ export class StripeConnectService {
   constructor(
     private config: ConfigService,
     private usersService: UsersService,
+    private notifications: NotificationsService,
   ) {
     const provider = this.config.get<string>('PAYMENT_PROVIDER') || 'mock';
     const key = this.config.get<string>('STRIPE_SECRET_KEY');
@@ -124,7 +130,7 @@ export class StripeConnectService {
         return { url: (await createLink(accountId)).url, accountId, mode: 'stripe' };
       } catch (err) {
         if (!this.isUnknownAccount(err) || !user.stripeAccountId) throw err;
-        this.logger.warn(`Compte Connect ${accountId} inconnu de Stripe pour ${userId} : un nouveau compte est créé`);
+        await this.resetOrphanedAccount(userId, accountId, 'lien de configuration');
         accountId = await createAccount();
         return { url: (await createLink(accountId)).url, accountId, mode: 'stripe' };
       }
@@ -133,9 +139,51 @@ export class StripeConnectService {
     }
   }
 
+  /**
+   * Compte de versement orphelin (AUDIT §67) : l'identifiant enregistré n'existe pas pour les clés actuelles (autre
+   * environnement du prestataire, compte effacé). Toute référence est effacée, le membre est prévenu, et il peut
+   * recommencer sans conflit — au lieu de retenter indéfiniment vers un identifiant mort.
+   */
+  private async resetOrphanedAccount(userId: string, accountId: string, where: string): Promise<void> {
+    await this.usersService.clearStripeAccount(userId);
+    payoutSweep.reset += 1;
+    this.logger.warn(`Compte de versement ${accountId} de ${userId} inconnu du prestataire (${where}) : référence effacée, configuration à recommencer`);
+    await this.notifications.notify(userId, { type: 'transaction', title: 'Compte de versement à reconfigurer', body: "Votre configuration précédente n'est plus valable. Recommencez-la depuis « Paiements » pour recevoir vos versements.", link: '/compte/paiements' }).catch(() => undefined);
+  }
+
+  /** Tous les comptes de versement enregistrés sont vérifiés chez le prestataire ; les orphelins sont remis à zéro. */
+  @Cron('15 5 * * *')
+  async sweepOrphanedAccounts(): Promise<{ checked: number; reset: number; unreachable: number }> {
+    const result = { checked: 0, reset: 0, unreachable: 0 };
+    if (this.mode !== 'stripe') return result;
+    for (const user of await this.usersService.findWithStripeAccount()) {
+      result.checked += 1;
+      try {
+        await this.stripe!.accounts.retrieve(user.stripeAccountId!);
+      } catch (err) {
+        if (this.isUnknownAccount(err)) {
+          await this.resetOrphanedAccount(user.id, user.stripeAccountId!, 'balayage');
+          result.reset += 1;
+        } else {
+          result.unreachable += 1;
+        }
+      }
+    }
+    payoutSweep.lastRunAt = new Date().toISOString();
+    payoutSweep.checked = result.checked;
+    payoutSweep.unreachable = result.unreachable;
+    this.logger.log(`Balayage des comptes de versement : ${result.checked} vérifié(s), ${result.reset} orphelin(s) remis à zéro, ${result.unreachable} illisible(s)`);
+    return result;
+  }
+
+  onApplicationBootstrap() {
+    if (process.env.NODE_ENV === 'test' || this.mode !== 'stripe') return;
+    setTimeout(() => this.sweepOrphanedAccounts().catch((e) => this.logger.error(`Balayage des comptes de versement : ${(e as Error).message}`)), 20_000).unref();
+  }
+
   private isUnknownAccount(err: unknown): boolean {
     const e = err as { code?: string; statusCode?: number; message?: string };
-    return e?.code === 'account_invalid' || e?.code === 'resource_missing' || (e?.statusCode === 403 && /does not have access to account|application access may have been revoked/i.test(e?.message || ''));
+    return e?.code === 'account_invalid' || e?.code === 'resource_missing' || /not connected to your platform or does not exist|No such account|does not have access to account|application access may have been revoked/i.test(e?.message || '');
   }
 
   /** Refus de Stripe → 503 en français ; la cause exacte est journalisée, et jointe à la réponse avec des clés de test. */
@@ -197,7 +245,15 @@ export class StripeConnectService {
     try {
       let accountId = user.stripeAccountId;
       let existing: Stripe.Account | null = null;
-      if (accountId) existing = await stripe.accounts.retrieve(accountId).catch(() => null);
+      if (accountId) {
+        existing = await stripe.accounts.retrieve(accountId).catch(async (err) => {
+          if (this.isUnknownAccount(err)) {
+            await this.resetOrphanedAccount(userId, accountId!, 'formulaire');
+            accountId = undefined;
+          }
+          return null;
+        });
+      }
       if (existing && existing.type === 'custom') {
         await stripe.accounts.update(accountId!, { account_token: (await accountToken()).id });
         const bank = await stripe.accounts.createExternalAccount(accountId!, { external_account: externalAccount as unknown as string });
@@ -303,7 +359,8 @@ export class StripeConnectService {
     } catch (err) {
       this.logger.warn(`État du compte de versement de ${userId} illisible : ${(err as Error).message}`);
       if (this.isUnknownAccount(err)) {
-        return { ...known(), connected: false, onboardingComplete: false };
+        await this.resetOrphanedAccount(userId, user.stripeAccountId, 'état');
+        return { connected: false, onboardingComplete: false, mode: 'stripe', kind: null, ibanLast4: null, requirements: [], needsHostedStep: false, previousInvalidated: true };
       }
       return known();
     }

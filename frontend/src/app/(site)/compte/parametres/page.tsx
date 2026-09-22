@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { api, mediaUrl } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast-context";
+import { useConfirm } from "@/lib/confirm-context";
 import type { NotificationPrefs, SellerSummary } from "@/lib/types";
 import { Modal } from "@/components/ui/Modal";
 import { PasswordInput } from "@/components/ui/PasswordInput";
@@ -25,6 +26,7 @@ const NOTIF_ROWS: Array<{ key: keyof NotificationPrefs; label: string; help: str
 export default function ParametresPage() {
   const { user, refresh, logout } = useAuth();
   const { toast } = useToast();
+  const confirmDialog = useConfirm();
   const router = useRouter();
   const [form, setForm] = useState({ displayName: "", city: "", postalCode: "" });
   const [shop, setShop] = useState({ shopName: "", shopDescription: "", shopAddress: "", shopHours: "", shopWebsite: "" });
@@ -94,7 +96,22 @@ export default function ParametresPage() {
     }
   };
 
+  const becomeIndividual = async () => {
+    if (!(await confirmDialog({ title: 'Repasser en compte particulier ?', text: "Le badge Pro, la page boutique, les statistiques avancées et les dépôts illimités seront retirés ; votre SIRET et les informations de la boutique seront effacés. Vous pourrez redevenir professionnel plus tard en indiquant à nouveau votre SIRET.", confirmLabel: 'Repasser en particulier', danger: true }))) return;
+    setBusy(true);
+    try {
+      await api('/users/me/become-individual', { method: 'POST' });
+      await refresh();
+      toast('Votre compte est de nouveau un compte particulier.', 'success');
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
   const becomePro = async () => {
+    // AUDIT §68 : passage explicite, confirmé — un clic mal compris changeait le compte sans retour possible
+    if (!(await confirmDialog({ title: 'Activer le compte professionnel ?', text: `Votre compte deviendra un compte professionnel (SIRET ${pro.siret}, enseigne « ${pro.shopName.trim()} ») : badge Pro, page boutique, obligations d'un vendeur professionnel. Réversible depuis Paramètres.`, confirmLabel: 'Activer' }))) return;
     setBusy(true);
     try {
       await api("/users/me/become-pro", { method: "POST", body: pro });
@@ -345,6 +362,7 @@ export default function ParametresPage() {
             <div className="row">
               <button className="btn btn-primary" disabled={busy} onClick={() => save(shop, "Boutique enregistrée.")}>Enregistrer la boutique</button>
               <Link href="/compte/boutique" className="btn btn-outline">Équipe et import de catalogue</Link>
+              <button type="button" className="btn btn-ghost" disabled={busy} onClick={becomeIndividual} data-testid="become-individual" style={{ color: "var(--brick)" }}>Repasser en compte particulier</button>
             </div>
           </>
         ) : user.accountType === "admin" ? (
@@ -356,7 +374,7 @@ export default function ParametresPage() {
               <div className="field"><label htmlFor="siret">SIRET</label><input id="siret" className="input" value={pro.siret} onChange={(e) => setPro({ ...pro, siret: e.target.value.replace(/\D/g, "").slice(0, 14) })} inputMode="numeric" /></div>
               <div className="field"><label htmlFor="psn">Nom commercial</label><input id="psn" className="input" value={pro.shopName} onChange={(e) => setPro({ ...pro, shopName: e.target.value })} maxLength={80} /></div>
             </div>
-            <button className="btn btn-primary" disabled={busy || pro.siret.length !== 14 || pro.shopName.trim().length < 2} onClick={becomePro}>Activer le compte professionnel</button>
+            <button className="btn btn-primary" disabled={busy || pro.siret.length !== 14 || pro.shopName.trim().length < 2} onClick={becomePro} data-testid="become-pro">Activer le compte professionnel</button>
           </>
         )}
       </section>
