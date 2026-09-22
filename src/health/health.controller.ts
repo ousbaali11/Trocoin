@@ -6,6 +6,7 @@ import { join } from 'path';
 import { resolveSiteUrl } from '../config/env.validation';
 import { describeSecret, webhookTrace } from '../payments/webhook-trace';
 import { payoutSweep } from '../users/payout-sweep';
+import { payoutTrace } from '../payments/payout-trace';
 
 /** Version lue dans package.json à l'exécution (pas d'import JSON : il déplacerait la sortie de tsc hors de dist/). */
 const packageVersion: string = (() => {
@@ -40,6 +41,14 @@ export class HealthController {
 
   /** Comptage mis en cache 60 s : la sonde est appelée toutes les 30 s par plusieurs superviseurs (AUDIT §69). */
   private issuesCache: { at: number; n: number } | null = null;
+  /** Virements aux vendeurs en attente (vente confirmée, fonds encaissés, aucune référence de virement) — cache 60 s (AUDIT §70). */
+  private pendingCache: { at: number; n: number } | null = null;
+  private async pendingPayoutsCount(): Promise<number> {
+    if (this.pendingCache && Date.now() - this.pendingCache.at < 60_000) return this.pendingCache.n;
+    const n = Number((await this.dataSource.query(`SELECT COUNT(*) AS n FROM transactions WHERE status = 'confirme' AND "escrowModel" = 'platform' AND "capturedAt" IS NOT NULL AND "paymentIssue" IS NULL AND ("transferId" IS NULL OR "transferId" LIKE 'en-cours:%')`))[0]?.n ?? 0);
+    this.pendingCache = { at: Date.now(), n };
+    return n;
+  }
   private async paymentIssuesCount(): Promise<number> {
     if (this.issuesCache && Date.now() - this.issuesCache.at < 60_000) return this.issuesCache.n;
     const n = Number((await this.dataSource.query('SELECT COUNT(*) AS n FROM transactions WHERE "paymentIssue" IS NOT NULL'))[0]?.n ?? 0);
@@ -66,7 +75,7 @@ export class HealthController {
       // Ventes signalées « paiement inconnu du prestataire » en attente d'une décision de l'administration (AUDIT §65)
       paymentIssues: await this.paymentIssuesCount(),
       // AUDIT §69 : l'identifiant du compte de versement d'un membre n'est plus exposé en clair (4 derniers caractères)
-      ...(process.env.PAYMENT_PROVIDER === 'stripe' ? { stripeWebhooks: { platform: !!process.env.STRIPE_WEBHOOK_SECRET, connectedAccounts: !!process.env.STRIPE_CONNECT_WEBHOOK_SECRET, platformSecretFormat: describeSecret(process.env.STRIPE_WEBHOOK_SECRET), connectedAccountsSecretFormat: describeSecret(process.env.STRIPE_CONNECT_WEBHOOK_SECRET), ...webhookTrace, lastAccountId: webhookTrace.lastAccountId ? `…${webhookTrace.lastAccountId.slice(-4)}` : null }, payoutAccounts: payoutSweep } : {}),
+      ...(process.env.PAYMENT_PROVIDER === 'stripe' ? { stripeWebhooks: { platform: !!process.env.STRIPE_WEBHOOK_SECRET, connectedAccounts: !!process.env.STRIPE_CONNECT_WEBHOOK_SECRET, platformSecretFormat: describeSecret(process.env.STRIPE_WEBHOOK_SECRET), connectedAccountsSecretFormat: describeSecret(process.env.STRIPE_CONNECT_WEBHOOK_SECRET), ...webhookTrace, lastAccountId: webhookTrace.lastAccountId ? `…${webhookTrace.lastAccountId.slice(-4)}` : null }, payoutAccounts: payoutSweep, payouts: { pending: await this.pendingPayoutsCount(), ...payoutTrace } } : {}),
     };
   }
 }

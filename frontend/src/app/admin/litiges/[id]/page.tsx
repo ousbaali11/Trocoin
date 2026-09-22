@@ -18,6 +18,7 @@ interface AdminTxDetail {
   buyerId: string;
   sellerId: string;
   paymentIssue?: string | null;
+  providerTransfer?: string | null;
   paymentIssueAt?: string | null;
   provider?: { state: "autorisee" | "encaissee" | "annulee" | "remboursee" | "en_attente" | "inconnue"; detail?: string };
   status: string;
@@ -159,7 +160,7 @@ export default function AdminTransactionPage() {
             {tx.escrowModel !== "destination" && tx.shipBy && (tx.status === "sequestre" || (tx.status === "livree" && tx.deliveryMethod === "main_propre")) && <li data-testid="admin-ship-by">Expédition / remise attendue avant le {formatDateTime(tx.shipBy)} (sinon annulation et remboursement automatiques)</li>}
             {tx.escrowModel === "destination" && tx.captureBefore && open && <li>Date limite de capture de l&apos;autorisation : {formatDateTime(tx.captureBefore)} (action automatique la veille)</li>}
             {tx.confirmedAt && <li>Confirmée{tx.escrowModel === "destination" ? " / capturée" : ""} : {formatDateTime(tx.confirmedAt)}</li>}
-            {tx.escrowModel !== "destination" && tx.status === "confirme" && (tx.transferredAt ? <li data-testid="admin-transferred-at">Virement au vendeur : {formatDateTime(tx.transferredAt)}</li> : <li className="a-pill danger" style={{ display: "inline-block" }}>Virement au vendeur en attente (compte de versement absent) — retenté automatiquement</li>)}
+            {tx.escrowModel !== "destination" && tx.status === "confirme" && (tx.transferredAt ? <li data-testid="admin-transferred-at">Virement au vendeur : {formatDateTime(tx.transferredAt)}</li> : <li className="a-pill danger" style={{ display: "inline-block" }} data-testid="admin-transfer-pending">{tx.providerTransfer ? `Virement déjà présent chez le prestataire (${tx.providerTransfer}) mais non enregistré : repris automatiquement au prochain passage` : "Virement au vendeur en attente (compte de versement absent ou refus du prestataire) — retenté automatiquement"}</li>)}
             {tx.disputeAllowedUntil && tx.status === "confirme" && <li>Litige encore possible pour l&apos;acheteur jusqu&apos;au {formatDateTime(tx.disputeAllowedUntil)}</li>}
             {tx.resolvedAt && <li>Résolue : {formatDateTime(tx.resolvedAt)}</li>}
           </ul>

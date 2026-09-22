@@ -3749,3 +3749,46 @@ communes (`api-adresse.data.gouv.fr`) et le dédoublonnage des vues comptait un 
 (typecheck, 231 tests API sur SQLite et PostgreSQL 16, image Docker, Playwright desktop + mobile, déploiement) ; `/health` →
 `version 1.40.1`, `payoutAccounts { checked: 2, reset: 0, unreachable: 0 }`, `stripeWebhooks.lastAccountId` masqué. Vérifié dans le
 navigateur sur www.trocoin.fr : en-tête `Content-Security-Policy` servi, suggestion « Lyon (toute la ville) » proposée.
+
+## 70. Virement bloqué par une clé d'idempotence en conflit — 22 septembre 2026
+
+Journal de production, à chaque passage de la tâche périodique (toutes les 15 min et à chaque réveil) :
+`Virement en attente 48b57551-… : Keys for idempotent requests can only be used with the same parameters they were first
+used with. Try using a key other than 'payout-48b57551-…'`.
+
+**Cause, d'après le code (la base de production et le tableau de bord du prestataire ne sont pas lisibles d'ici).** La clé
+d'idempotence du virement était fixe : `payout-<identifiant de la vente>`. Le prestataire mémorise chaque clé avec les
+paramètres de sa première utilisation (24 h) et refuse toute nouvelle requête portant la même clé avec d'autres
+paramètres. Deux façons, toutes deux présentes ce jour-là, de changer les paramètres entre deux tentatives :
+1. **le libellé variait selon le chemin d'appel** — `Trocoin · vente <titre>` quand le virement partait de la tâche
+   périodique (réception présumée, échéance), `Trocoin · vente <identifiant d'annonce>` depuis la confirmation de
+   l'acheteur ou la reprise d'un virement en attente ; une première tentative exécutée chez le prestataire (réponse perdue
+   pendant une mise en veille, ou refus enregistré), puis une reprise par l'autre chemin → conflit à chaque passage ;
+2. **le compte de destination a changé** — remise à zéro d'un compte de versement orphelin (§67, ce jour-là) puis nouveau
+   compte : même clé, autre `destination`.
+L'hypothèse « clé utilisée dans l'ancien environnement » ne tient pas telle quelle : les clés d'idempotence sont propres
+à chaque environnement (bac à sable) du prestataire et ne vivent que 24 h ; c'est bien la conséquence du changement
+d'environnement (comptes orphelins remplacés) et/ou une reprise par un autre chemin, dans l'environnement actuel. Le
+propriétaire peut lever le doute depuis le tableau de bord du prestataire : Transferts → `transfer_group` =
+`48b57551-c1a9-4476-aa93-2bfa66b23d95` (un virement présent = première tentative exécutée, réponse perdue ; absent =
+refus enregistré, puis paramètres changés).
+
+**Correctifs**
+- Clé d'idempotence liée aux paramètres qui comptent : `payout-<vente>-<empreinte(destination, montant, charge)>`. Même vente
+  et même compte → même clé (toujours idempotent) ; compte de versement remplacé → autre clé, aucun conflit.
+- Libellé identique à chaque tentative (`Trocoin · vente <8 premiers caractères de l'identifiant>`), quel que soit le chemin.
+- Avant tout virement, le prestataire est interrogé (`transfers.list` par `transfer_group`, virements annulés ignorés) : un
+  virement déjà fait — réponse perdue — est réutilisé, jamais recréé.
+- Conflit malgré tout (ancienne clé fixe encore mémorisée, paramètres changés dans les 24 h) : nouvelle clé une seule
+  fois, conflit compté.
+- Diagnostic : `/health.payouts` (`pending` = ventes confirmées sans référence de virement, `attempts`, `created`, `reused`,
+  `keyConflicts`, `failed`, `lastError`, `lastErrorAt`, `lastTransferAt`) ; la fiche de la console indique, pour un
+  virement en attente, s'il existe déjà chez le prestataire.
+
+**Déblocage.** Aucune action manuelle : la vente 48b57551 (et toute autre dans le même cas — elles sont reprises par lots
+de 100 à chaque passage) est retentée au premier passage de la tâche après le déploiement (8 s après le démarrage, puis
+toutes les 15 min) avec la nouvelle clé ; si un virement existait déjà, il est réutilisé. Résultat lu dans `/health.payouts`.
+
+Test `phase42` : clés identiques/différentes selon le compte, ancienne clé en conflit → nouvelle clé (une fois) et
+virement créé, virement existant réutilisé (annulé ignoré), libellé identique par les deux chemins et reprise au passage
+suivant après un refus.

@@ -538,9 +538,12 @@ export class AdminService {
     let decisions = [...(open || refundableAfterCapture ? ['rembourser'] : []), ...(open ? ['liberer'] : []), ...(open && !tx.confirmedAt ? ['annuler'] : [])];
     if (provider.state === 'annulee') decisions = open && !tx.confirmedAt ? ['annuler'] : [];
     if (provider.state === 'remboursee') decisions = [];
+    // Virement au vendeur en attente : existe-t-il déjà chez le prestataire ? (AUDIT §70)
+    const providerTransfer = tx.status === 'confirme' && (!tx.transferId || tx.transferId.startsWith('en-cours:')) ? await this.paymentsService.findProviderTransfer(tx) : null;
     return {
       ...safe,
       provider,
+      providerTransfer,
       hasHandoverCode: !!handoverCode,
       decisions,
       buyer: party(buyer),

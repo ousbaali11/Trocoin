@@ -29,6 +29,7 @@ import { carrierTrackingUrl } from '../shipping/tracking-url';
 import { StripeConnectService } from '../users/stripe-connect.service';
 import { UsersService } from '../users/users.service';
 import { CheckoutSync, IPaymentProvider, PaymentProviderError, PaymentState } from './payment-provider.interface';
+import { payoutTrace, tracePayoutError } from './payout-trace';
 import { CHECKOUT_TTL_MINUTES, PAYMENT_PROVIDER } from './payments.constants';
 import { countSignatures, traceWebhookAccepted, traceWebhookRejected } from './webhook-trace';
 import { ChosenPickupPoint, DeliveryAddress, DeliveryMethod, DeliveryMode, Transaction, TransactionStatus } from './transaction.entity';
@@ -170,6 +171,15 @@ export class PaymentsService implements OnApplicationBootstrap {
       return await Promise.race([this.paymentProvider.inspect(tx.providerPaymentId), new Promise<{ state: PaymentState; detail: string }>((r) => setTimeout(() => r({ state: 'inconnue', detail: 'prestataire injoignable' }), 6_000).unref())]);
     } catch (e) {
       return { state: 'inconnue', detail: (e as Error).message };
+    }
+  }
+  /** Virement présent chez le prestataire pour cette vente (AUDIT §70 : diagnostic d'un virement « en attente »). */
+  async findProviderTransfer(tx: Transaction): Promise<string | null> {
+    if (!this.isPlatform(tx) || !this.paymentProvider.findTransfer) return null;
+    try {
+      return await Promise.race([this.paymentProvider.findTransfer(tx.id), new Promise<null>((r) => setTimeout(() => r(null), 6_000).unref())]);
+    } catch {
+      return null;
     }
   }
   private readonly logger = new Logger('Paiements');
@@ -524,6 +534,7 @@ export class PaymentsService implements OnApplicationBootstrap {
       return false;
     }
     let transferId: string;
+    payoutTrace.attempts += 1;
     try {
       // AUDIT §69 : une réservation reprise après la fenêtre d'idempotence du prestataire (24 h) recréait un virement
       const existing = staleReservation && this.paymentProvider.findTransfer ? await this.paymentProvider.findTransfer(tx.id) : null;
@@ -533,12 +544,15 @@ export class PaymentsService implements OnApplicationBootstrap {
       sellerConnectedAccountId: accountId,
       amountEuros: this.sellerPayout(tx),
       transactionId: tx.id,
-        description: `Trocoin · vente ${title ?? tx.listingId}`,
+        description: `Trocoin · vente ${tx.id.slice(0, 8)}`, // AUDIT §70 : libellé identique à chaque tentative (le titre variait selon le chemin d'appel)
       }));
     } catch (e) {
       await this.transactionsRepo.update({ id: tx.id, transferId: reservation }, { transferId: null });
+      tracePayoutError((e as Error).message);
       throw e;
     }
+    payoutTrace.created += 1;
+    payoutTrace.lastTransferAt = new Date().toISOString();
     tx.transferId = transferId;
     tx.transferredAt = new Date();
     await this.transactionsRepo.save(tx);

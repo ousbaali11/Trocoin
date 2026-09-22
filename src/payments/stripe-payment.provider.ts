@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
+import { createHash } from 'crypto';
+import { payoutTrace } from './payout-trace';
 import {
   CheckoutResult,
   CheckoutSync,
@@ -43,6 +45,18 @@ import { CHECKOUT_TTL_MINUTES } from './payments.constants';
  * test 4242, autorisation en attente de capture, capture à la confirmation, annulation → PaymentIntent
  * annulé (AUDIT.md §15).
  */
+/** Clé d'idempotence d'un virement (AUDIT §70) : la vente ET les paramètres qui comptent (destination, montant, charge). */
+export function transferIdempotencyKey(transactionId: string, destination: string, amountCents: number, chargeId: string): string {
+  const fingerprint = createHash('sha256').update(`${destination}|${amountCents}|${chargeId}`).digest('hex').slice(0, 16);
+  return `payout-${transactionId}-${fingerprint}`;
+}
+
+/** Refus Stripe « clé déjà utilisée avec d'autres paramètres ». */
+export function isIdempotencyConflict(err: unknown): boolean {
+  const e = err as { type?: string; code?: string; message?: string };
+  return e?.type === 'StripeIdempotencyError' || e?.code === 'idempotency_key_in_use' || /idempotent requests/i.test(e?.message || '');
+}
+
 @Injectable()
 export class StripePaymentProvider implements IPaymentProvider {
   private readonly stripe: Stripe;
@@ -296,21 +310,44 @@ export class StripePaymentProvider implements IPaymentProvider {
     if (intent.status !== 'succeeded') throw new Error(`Paiement ${params.providerPaymentId} non capturé (${intent.status}) : transfert impossible.`);
     const chargeId = typeof intent.latest_charge === 'string' ? intent.latest_charge : intent.latest_charge?.id;
     if (!chargeId) throw new Error(`Paiement ${params.providerPaymentId} sans charge : transfert impossible.`);
-    const transfer = await this.stripe.transfers.create({
-      amount: this.toCents(params.amountEuros),
+    // AUDIT §70 : un virement déjà fait pour cette vente (réponse perdue, serveur endormi en plein appel) est réutilisé,
+    // jamais recréé — et jamais retenté avec une clé en conflit
+    const existing = await this.findTransfer(params.transactionId);
+    if (existing) {
+      payoutTrace.reused += 1;
+      return { transferId: existing };
+    }
+    const amount = this.toCents(params.amountEuros);
+    const body: Stripe.TransferCreateParams = {
+      amount,
       currency: 'eur',
       destination: params.sellerConnectedAccountId,
       source_transaction: chargeId,
       transfer_group: params.transactionId,
       description: params.description,
       metadata: { transactionId: params.transactionId },
-    }, { idempotencyKey: `payout-${params.transactionId}` });
-    return { transferId: transfer.id };
+    };
+    // Clé d'idempotence liée aux paramètres qui comptent (AUDIT §70) : la clé fixe `payout-<vente>` refusait toute nouvelle
+    // tentative dès qu'un paramètre changeait (compte de versement remplacé, libellé différent selon le chemin d'appel) —
+    // « Keys for idempotent requests can only be used with the same parameters » à chaque passage, sans fin.
+    const key = transferIdempotencyKey(params.transactionId, params.sellerConnectedAccountId, amount, chargeId);
+    try {
+      const transfer = await this.stripe.transfers.create(body, { idempotencyKey: key });
+      return { transferId: transfer.id };
+    } catch (err) {
+      if (!isIdempotencyConflict(err)) throw err;
+      // Clé déjà utilisée avec d'autres paramètres (ancienne clé fixe, ou compte de versement changé dans les 24 h) : la
+      // vente n'a pas de virement chez le prestataire (vérifié ci-dessus) → nouvelle clé, une seule fois
+      payoutTrace.keyConflicts += 1;
+      const transfer = await this.stripe.transfers.create(body, { idempotencyKey: `${key}-r${Date.now()}` });
+      return { transferId: transfer.id };
+    }
   }
 
+  /** Virement déjà fait pour cette vente chez le prestataire (non annulé), sinon null. */
   async findTransfer(transactionId: string): Promise<string | null> {
-    const list = await this.stripe.transfers.list({ transfer_group: transactionId, limit: 1 });
-    return list.data[0]?.id ?? null;
+    const list = await this.stripe.transfers.list({ transfer_group: transactionId, limit: 10 });
+    return list.data.find((t) => !t.reversed)?.id ?? null;
   }
 
   async reverseTransfer(transferId: string) {
