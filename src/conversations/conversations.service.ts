@@ -33,6 +33,10 @@ export const QUICK_REPLIES = [
  * Signaux d'arnaque dans un message (AUDIT §69) : demande de paiement hors plateforme, lien vers un autre site, IBAN ou
  * numéro de carte. Renvoie un code d'avertissement, ou null. Heuristique volontairement simple et explicable.
  */
+/** Réponse automatique du catalogue de démonstration (AUDIT §71) : honnête sur la nature de l'annonce et sur le délai. */
+export const DEMO_AUTO_REPLY =
+  "Bonjour et merci pour votre message ! Cette annonce fait partie du catalogue de lancement de Trocoin : elle est gérée par l'équipe du site, qui vous répondra ici dès que possible (en général sous 24 h). Aucun paiement n'est demandé sur cette annonce : toute remise se fait en main propre, après échange par cette messagerie.";
+
 export function detectScamSignals(text: string): 'paiement_hors_site' | 'lien_externe' | 'coordonnees_bancaires' | null {
   const t = text.toLowerCase();
   if (/\b[a-z]{2}\d{2}(?:\s?[a-z0-9]{4}){3,7}\b/i.test(text.replace(/[-.]/g, ' ')) && /\bfr\d{2}\b|iban|rib\b/i.test(t)) return 'coordonnees_bancaires';
@@ -217,12 +221,15 @@ export class ConversationsService {
     const cover = listing ? await this.photosRepo.findOne({ where: { listingId: listing.id }, order: { sortOrder: 'ASC' } }) : null;
     const blocked = await this.usersService.isBlockedEitherWay(userId, otherId);
     const blockedByMe = blocked && (await this.usersService.hasBlocked(userId, otherId));
+    // Vendeur sans paiement sécurisé (désactivé ou compte de démonstration, AUDIT §71) : le fil ne propose pas « Acheter »
+    const seller = listing ? await this.usersService.findById(listing.userId) : null;
+    const securePayment = !!seller && !seller.securePaymentDisabled && !seller.isDemoAccount;
     return {
       ...c,
       role: c.buyerId === userId ? 'acheteur' : 'vendeur',
       other,
       listing: listing
-        ? { id: listing.id, title: listing.title, price: listing.price, priceType: listing.priceType, status: listing.status, coverUrl: cover?.url || null, userId: listing.userId }
+        ? { id: listing.id, title: listing.title, price: listing.price, priceType: listing.priceType, status: listing.status, coverUrl: cover?.url || null, userId: listing.userId, securePayment }
         : null,
       messages,
       blocked,
@@ -383,10 +390,38 @@ export class ConversationsService {
     await this.conversationsRepo.update(c.id, { lastMessageAt: saved.createdAt, ...unhide });
     await this.notifications.notify(otherId, { type: 'message', title: 'Nouveau message', body: notifBody, link: `/compte/messages/${c.id}` });
     this.broadcast('new', saved, c);
+    // AUDIT §71 : message d'un membre à un compte de démonstration → réponse automatique honnête (une fois par conversation)
+    // et administration prévenue, pour qu'aucun visiteur ne reste sans réponse
+    if (message.senderId === c.buyerId && message.type !== 'system') await this.afterMessageToDemoSeller(c, saved).catch((e) => this.logger.warn(`Réponse automatique impossible : ${(e as Error).message}`));
     return saved;
   }
 
-  async postMessage(conversationId: string, senderId: string, content: string): Promise<Message> {
+  /** Réponse automatique du catalogue de démonstration et alerte à l'administration (AUDIT §71). */
+  private async afterMessageToDemoSeller(c: Conversation, incoming: Message): Promise<void> {
+    const seller = await this.usersService.findById(c.sellerId);
+    if (!seller?.isDemoAccount) return;
+    const fromSeller = await this.messagesRepo.find({ where: { conversationId: c.id, senderId: c.sellerId }, order: { createdAt: 'DESC' }, take: 50 });
+    const alreadyReplied = fromSeller.some((m) => m.meta?.auto === 'demo');
+    if (!alreadyReplied) {
+      const reply = this.messagesRepo.create({ conversationId: c.id, senderId: c.sellerId, type: 'text', content: DEMO_AUTO_REPLY, meta: { auto: 'demo' } });
+      reply.createdAt = new Date(incoming.createdAt.getTime() + 1);
+      const saved = await this.messagesRepo.save(reply);
+      await this.conversationsRepo.update(c.id, { lastMessageAt: saved.createdAt });
+      this.broadcast('new', saved, c);
+    }
+    // L'administration est prévenue au premier message et à chaque relance après une réponse de l'équipe (pas à chaque message d'une même salve)
+    const previous = await this.messagesRepo.find({ where: { conversationId: c.id, type: Not('system') }, order: { createdAt: 'DESC' }, take: 3 });
+    const beforeIncoming = previous.filter((m) => m.id !== incoming.id && !(m.meta?.auto === 'demo'));
+    const lastOther = beforeIncoming[0];
+    if (lastOther && lastOther.senderId === c.buyerId) return;
+    const buyer = await this.usersService.findById(c.buyerId);
+    const listing = await this.listingsRepo.findOne({ where: { id: c.listingId } });
+    for (const adminId of await this.usersService.findAdminIds()) {
+      await this.notifications.notify(adminId, { type: 'systeme', title: 'Message sur un compte de démonstration', body: `${buyer?.displayName ?? 'Un membre'} a écrit à ${seller.displayName} au sujet de « ${listing?.title ?? 'une annonce'} » : à traiter depuis la console (Catalogue de démonstration).`, link: '/admin/demonstration' });
+    }
+  }
+
+  async postMessage(conversationId: string, senderId: string, content: string, extraMeta?: Record<string, string | number | boolean | null>): Promise<Message> {
     const { c, otherId } = await this.assertCanWrite(conversationId, senderId);
     const trimmed = (content || '').trim();
     if (!trimmed) throw new BadRequestException('Message vide.');
@@ -394,7 +429,8 @@ export class ConversationsService {
     // AUDIT §69 : signaux d'arnaque classiques (paiement hors Trocoin, lien externe, IBAN, coordonnées bancaires) → le
     // message est livré mais porte un avertissement affiché au destinataire ; rien n'est bloqué (un lien peut être légitime)
     const warning = detectScamSignals(trimmed);
-    return this.persist(c, otherId, this.messagesRepo.create({ conversationId, senderId, type: 'text', content: trimmed, meta: warning ? { warning } : null }), trimmed.length > 80 ? trimmed.slice(0, 77) + '…' : trimmed);
+    const meta = { ...(extraMeta ?? {}), ...(warning ? { warning } : {}) };
+    return this.persist(c, otherId, this.messagesRepo.create({ conversationId, senderId, type: 'text', content: trimmed, meta: Object.keys(meta).length ? meta : null }), trimmed.length > 80 ? trimmed.slice(0, 77) + '…' : trimmed);
   }
 
   /** Photo dans la conversation (URL déjà vérifiée et stockée par le contrôleur). */

@@ -7,6 +7,7 @@ import { AppThrottlerGuard } from './common/guards/app-throttler.guard';
 import { createRedisFromEnv, RedisThrottlerStorage } from './common/throttler/redis-throttler.storage';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AdminModule } from './admin/admin.module';
+import { DemoCatalogueModule } from './demo-catalogue/demo-catalogue.module';
 import { HealthController } from './health/health.controller';
 import { MediaController } from './common/upload/media.controller';
 import { AuthModule } from './auth/auth.module';
@@ -79,6 +80,7 @@ import { UsersModule } from './users/users.module';
     NotificationsModule,
     SavedSearchesModule,
     AdminModule,
+    DemoCatalogueModule,
     DevModule,
   ],
   controllers: [HealthController, MediaController],

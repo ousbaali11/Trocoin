@@ -355,3 +355,20 @@ typecheck, 54 tests e2e sur SQLite **et** sur PostgreSQL 16 (schéma créé uniq
 migrations), build de production de l'API, `npm audit` (échec si vulnérabilité ≥ haute),
 typecheck + `next build` du front avec une URL d'API de production, build de l'image Docker.
 Render et Vercel redéploient à chaque push sur `main` : ne fusionner que si la CI est verte.
+
+## 10. Catalogue de démonstration (AUDIT §71)
+
+Le catalogue de lancement (50 comptes vendeurs fictifs, 600 annonces, photos libres de droits) se crée **depuis la console**
+(*Catalogue de démonstration → Créer le catalogue de démonstration*), jamais depuis l'extérieur : les limites de débit de l'API
+l'interdisent et le travail est fait côté serveur (comptes, annonces, téléchargement et traitement des photos).
+
+- Durée : plusieurs dizaines de minutes (une photo à la fois, ~1 700 photos). La page se met à jour seule ; si l'API redémarre
+  (déploiement, veille), relancer reprend là où c'était arrêté, sans doublon.
+- **Identifiants** : à la fin, bouton « Récupérer les identifiants des comptes créés » → fichier `.md` téléchargé, à garder
+  hors du dépôt ; ils sont effacés de la mémoire du serveur après lecture. En cas de perte : fiche utilisateur → mot de passe
+  temporaire.
+- **Photos** : le jeu de données (`src/demo-catalogue/data/photos.json`) est produit avant déploiement par
+  `node scripts/demo-catalogue/resolve-photos.js` — clé Pexels dans `private/pexels.key` (créée sur pexels.com/api, gratuite),
+  sinon Wikimedia Commons (CC0). Rien à configurer sur Render : le serveur télécharge les photos depuis leur source.
+- Messages reçus par ces comptes : réponse automatique puis suivi sur la même page de la console (voir
+  `docs/annonces-demonstration.md`).

@@ -3798,3 +3798,68 @@ suivant après un refus.
 attente de virement (48b57551) a été virée au premier passage avec la nouvelle clé ; aucun virement antérieur n'existait chez
 le prestataire pour cette vente (`reused: 0`), ce qui désigne un refus enregistré sous l'ancienne clé fixe puis des paramètres
 différents (libellé et/ou compte de destination), et non une réponse perdue. Aucune autre vente dans ce cas (`pending: 0`).
+
+## 71. Catalogue de démonstration : 600 annonces réparties par catégorie, 50 comptes vendeurs — 25 septembre 2026
+
+Demande : environ 600 annonces réalistes réparties de façon cohérente entre les familles, 40 à 60 comptes vendeurs fictifs
+(prénoms et noms variés, origines française, européenne et arabe), photos uniquement issues de banques d'images libres de
+droits à usage commercial et sincèrement fidèles à l'objet, remise en main propre uniquement, numéro toujours masqué,
+indicateur interne « démo », identifiants remis hors dépôt, gestion honnête du volume de messages, documentation dans
+`docs/annonces-demonstration.md`.
+
+### Ce qui est livré (1.42.0)
+
+- **Jeu de données versionné** (`src/demo-catalogue/data/`) produit par `scripts/demo-catalogue/build.js` : 50 comptes
+  (`accounts.json`, sans mot de passe ; numéros de la plage ARCEP réservée à la fiction 06 39 98 00 11 → 00 60, e-mails
+  `ousbaali11+demo-<pseudo>@gmail.com`) et 600 annonces (`listings.json`) tirées de 190 archétypes par sous-catégorie avec
+  variantes déterministes (marques, modèles, tailles, couleurs, années, kilométrages, prix arrondis de façon réaliste,
+  phrases de clôture variées), attributs validés contre les schémas et texte passé par la modération au moment du build
+  (deux archétypes corrigés : « résine » de bracelet de montre déclenchait la règle « stupéfiants »). Répartition :
+  véhicules 95, maison-jardin 95, mode 90, loisirs 80, électronique 70, famille 40, immobilier 35, services 30, animaux 20
+  (accessoires uniquement : aucune vente d'animal, qui exigerait un vrai numéro d'identification), matériel pro 20, emploi
+  15, vacances 10 ; 10 à 15 annonces par compte, dates de publication réparties sur 45 jours.
+- **Photos** (`photos.json`, produit par `scripts/demo-catalogue/resolve-photos.js`) : 2 à 5 par annonce, jamais
+  réutilisées d'une annonce à l'autre, chaque entrée consignant source, identifiant, auteur, licence et page d'origine.
+  Sources : Pexels (clé d'API dans `private/pexels.key`, jamais commitée) en priorité, Wikimedia Commons (fichiers CC0 par
+  données structurées, nom de fichier devant contenir un mot significatif de la requête) à défaut. Aucune image copiée
+  d'un site de petites annonces.
+- **Ensemencement côté serveur** (`DemoCatalogueService`, routes `admin/demo-catalogue`, page console « Catalogue de
+  démonstration ») : les limites de débit de l'API publique (60 dépôts et 60 envois de photos par heure et par adresse, 10
+  inscriptions par heure) interdisent un envoi externe de cette taille. Idempotent et repris là où il s'était arrêté
+  (comptes par e-mail, annonces par `externalRef = demo:<clé>`, photos manquantes seulement) ; photos téléchargées puis
+  passées par le traitement des membres (ré-encodage sans métadonnées, vignette 480 px, stockage courant) ; comptes
+  `isDemoAccount`, `securePaymentDisabled`, `phonePublic: false`, e-mail marqué confirmé ; annonces sans livraison ; mots
+  de passe générés à la création et **remis une seule fois** (bouton « Récupérer les identifiants », fichier téléchargé,
+  puis effacés de la mémoire) ; exécution et réponses tracées au journal d'audit.
+- **Messages entrants — choix documenté (option A + suivi centralisé)** : au premier message d'un membre à un compte de
+  démonstration, réponse automatique honnête (catalogue de lancement géré par l'équipe, réponse sous 24 h en général,
+  aucun paiement demandé, remise en main propre), étiquetée comme telle dans la conversation, une seule fois par
+  conversation ; administrateurs prévenus (premier message et relances après réponse de l'équipe) ; page console listant
+  les conversations des comptes de démonstration, celles qui attendent une réponse, le fil, et une réponse au nom du compte
+  **signée « Équipe Trocoin »** (étiquette côté membre). Une seule boîte à surveiller, personne sans réponse, personne trompé.
+- **Garde-fous vérifiés** : devis non éligible et achat refusé (400) sur ces annonces, « Voir le numéro » → 404,
+  `isDemoAccount` absent de toute réponse publique (fiche, profil), photos servies avec vignette.
+- Tests `phase43` (3 scénarios : ensemencement de 12 annonces avec photos simulées et reprise sans doublon, identifiants
+  remis une fois, routes admin ; garde-fous publics ; réponse automatique unique, notification admin, réponse d'équipe
+  signée, refus sur une conversation sans compte démo).
+
+### Vérification
+- **Fil de conversation** : pas de bouton « Acheter » quand le vendeur ne propose pas le paiement sécurisé (compte de
+  démonstration ou paiement désactivé) — `listing.securePayment` dans le détail d'une conversation (repéré pendant la
+  vérification : le bouton menait à un refus 400).
+
+### Vérification
+
+- Typecheck API et front : 0 erreur. `phase43` : 3/3. Régression `phase12`, `phase28`, `phase36`,
+  `phase41`, `phase19` : 22/22 (0 échec).
+- **Répétition locale complète** (24 septembre 2026, API compilée sur SQLite, front reconstruit) : 50 comptes, 600
+  annonces créées sans échec en 1 037 s, 600 en ligne, répartition par famille identique au jeu de données dans la
+  recherche publique. Fiches vérifiées dans le navigateur (photos, « remise en main propre uniquement », aucun bouton
+  « Acheter » ni « Voir le numéro ») ; API : devis `eligible: false`, achat 400, numéro 404, `isDemoAccount` absent ;
+  réponse automatique étiquetée puis réponse « Équipe Trocoin » depuis la console, étiquetée côté membre.
+- **Photos : point bloquant assumé.** Sans clé Pexels, seul Wikimedia Commons (CC0) a pu servir : 326 annonces sur 600
+  couvertes et une planche-contact de contrôle montrant des images souvent hors sujet (voiture d'un autre âge, landau
+  ancien pour une poussette récente). `photos.json` est donc livré **vide** et le bouton de la console reste désactivé
+  tant que la couverture est inférieure à 90 % : la clé Pexels du propriétaire (gratuite, `private/pexels.key`) est
+  requise pour résoudre les photos, contrôler la planche-contact, puis déployer et lancer le catalogue en production.
+  Aucun compte ni aucune annonce de démonstration n'existe en production à ce stade.

@@ -247,7 +247,7 @@ export interface ConversationSummary {
   createdAt: string;
   role: "acheteur" | "vendeur";
   other: SellerSummary | null;
-  listing: { id: string; title: string; price?: number | null; priceType: PriceType; status: ListingStatus; coverUrl: string | null; userId?: string } | null;
+  listing: { id: string; title: string; price?: number | null; priceType: PriceType; status: ListingStatus; coverUrl: string | null; userId?: string; /** false : vendeur sans paiement sécurisé (désactivé ou compte de démonstration, AUDIT §71) */ securePayment?: boolean } | null;
   lastMessage: { content?: string; senderId: string; createdAt: string; type?: Message["type"] } | null;
   unreadCount: number;
 }
@@ -259,7 +259,7 @@ export interface Message {
   /** Message automatique de suivi de vente (type « system ») : étape, vente concernée, données d'affichage. */
   systemEvent?: SystemEvent | null;
   transactionId?: string | null;
-  meta?: (Record<string, string | number | null> & { warning?: "paiement_hors_site" | "lien_externe" | "coordonnees_bancaires" | null }) | null;
+  meta?: (Record<string, string | number | null> & { warning?: "paiement_hors_site" | "lien_externe" | "coordonnees_bancaires" | null; auto?: string | null; staff?: number | null }) | null;
   content?: string;
   attachmentUrl?: string | null;
   offerAmount?: number | null;

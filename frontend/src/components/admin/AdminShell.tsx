@@ -39,6 +39,7 @@ const GROUPS: Array<{ title: string; items: NavItem[] }> = [
     items: [
       { href: "/admin/reglages", label: "Monétisation et formules" },
       { href: "/admin/pages", label: "Pages légales (CMS)" },
+      { href: "/admin/demonstration", label: "Catalogue de démonstration" },
     ],
   },
   { title: "Traçabilité", items: [{ href: "/admin/journal", label: "Journal d'audit" }] },

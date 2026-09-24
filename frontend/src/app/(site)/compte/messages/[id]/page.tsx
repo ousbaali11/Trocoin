@@ -315,7 +315,7 @@ export default function ConversationPage() {
           )}
         </div>
         <div className="row conv-actions" style={{ gap: 4, marginLeft: "auto" }}>
-          {isBuyer && !saleOpen && conv.listing?.status === "en_ligne" && <Link href={`/annonces/${conv.listing.id}?acheter=1`} className="btn btn-dark btn-sm" data-testid="conv-buy">{conv.acceptedOffer ? `Payer ${formatEuros(conv.acceptedOffer.amount)}` : "Acheter"}</Link>}
+          {isBuyer && !saleOpen && conv.listing?.status === "en_ligne" && conv.listing.securePayment !== false && <Link href={`/annonces/${conv.listing.id}?acheter=1`} className="btn btn-dark btn-sm" data-testid="conv-buy">{conv.acceptedOffer ? `Payer ${formatEuros(conv.acceptedOffer.amount)}` : "Acheter"}</Link>}
           <button className="btn btn-ghost btn-sm" onClick={() => setReportOpen(true)} style={{ color: "var(--brick)" }}>Signaler</button>
           {conv.blocked && !conv.blockedByMe ? <span className="small muted" title="Cette personne vous a bloqué">Bloqué</span> : <button className="btn btn-ghost btn-sm" onClick={toggleBlock}>{conv.blocked ? "Débloquer" : "Bloquer"}</button>}
         </div>
@@ -384,6 +384,8 @@ export default function ConversationPage() {
                 </div>
               ) : (
                 <>
+                  {m.meta?.auto === "demo" && <div className="small muted" style={{ marginBottom: 2, fontSize: ".72rem" }} data-testid="auto-reply-label">Réponse automatique du catalogue de démonstration</div>}
+                  {m.meta?.staff === 1 && <div className="small muted" style={{ marginBottom: 2, fontSize: ".72rem" }} data-testid="staff-reply-label">Réponse de l&apos;équipe Trocoin</div>}
                   <div style={bubble}>{m.content}</div>
                   {!mine && m.meta?.warning && (
                     <div className="alert alert-warning small" role="alert" data-testid="scam-warning" style={{ margin: "6px 0 0", padding: "8px 10px" }}>
