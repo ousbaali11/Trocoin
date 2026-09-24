@@ -3863,3 +3863,10 @@ indicateur interne « démo », identifiants remis hors dépôt, gestion honnêt
   tant que la couverture est inférieure à 90 % : la clé Pexels du propriétaire (gratuite, `private/pexels.key`) est
   requise pour résoudre les photos, contrôler la planche-contact, puis déployer et lancer le catalogue en production.
   Aucun compte ni aucune annonce de démonstration n'existe en production à ce stade.
+
+**Production 1.42.1 — 24 septembre 2026, 23 h 12 UTC.** La CI de 1.42.0 a échoué sur le seul test navigateur qui énumère
+les liens de la console (`e2e/21`, le lien « Catalogue de démonstration » manquait à la liste attendue) : liste mise à
+jour en 1.42.1, CI verte (six étapes, déploiement Render inclus). `/health` : `version 1.42.1`, `payouts.pending 0`,
+`paymentIssues 3` (les trois ventes signalées connues depuis §67, inchangées). La recherche publique compte 60 annonces
+en ligne, aucune de démonstration ; `GET /admin/demo-catalogue` sans jeton → 401. Le catalogue n'est **pas** créé en
+production : il attend la clé Pexels et un clic du propriétaire dans la console.
