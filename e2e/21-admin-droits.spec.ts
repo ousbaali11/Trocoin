@@ -38,7 +38,7 @@ test('navigation regroupée par domaine, compteurs et retour au site', async ({ 
   const nav = page.getByRole('complementary', { name: 'Navigation de la console' });
   await expect(nav.locator('.admin-nav-title')).toHaveText(["Vue d'ensemble", 'Comptes', 'Annonces', 'Transactions', 'Configuration', 'Traçabilité']);
   // Les entrées de file de travail portent un compteur (annonces à vérifier, signalements, litiges + séquestres à échéance) selon l'état de la base
-  await expect(nav.getByRole('link')).toHaveText([/^Tableau de bord$/, /^Utilisateurs$/, /^Annonces\d*$/, /^Signalements\d*$/, /^Transactions et litiges\d*$/, /^Monétisation et formules$/, /^Pages légales \(CMS\)$/, /^Journal d'audit$/, /^← Retour au site public$/]);
+  await expect(nav.getByRole('link')).toHaveText([/^Tableau de bord$/, /^Utilisateurs$/, /^Annonces\d*$/, /^Signalements\d*$/, /^Transactions et litiges\d*$/, /^Monétisation et formules$/, /^Pages légales \(CMS\)$/, /^Catalogue de démonstration$/, /^Journal d'audit$/, /^← Retour au site public$/]);
   await expect(nav.getByRole('link', { name: 'Tableau de bord' })).toHaveAttribute('aria-current', 'page');
 });
 
