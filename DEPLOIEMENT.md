@@ -368,7 +368,9 @@ l'interdisent et le travail est fait côté serveur (comptes, annonces, téléch
   hors du dépôt ; ils sont effacés de la mémoire du serveur après lecture. En cas de perte : fiche utilisateur → mot de passe
   temporaire.
 - **Photos** : le jeu de données (`src/demo-catalogue/data/photos.json`) est produit avant déploiement par
-  `node scripts/demo-catalogue/resolve-photos.js` — clé Pexels dans `private/pexels.key` (créée sur pexels.com/api, gratuite),
-  sinon Wikimedia Commons (CC0). Rien à configurer sur Render : le serveur télécharge les photos depuis leur source.
+  `node scripts/demo-catalogue/resolve-photos.js --source pexels` — clé Pexels dans `private/pexels.key` (créée sur
+  pexels.com/api, gratuite). Le repli Wikimedia Commons (CC0) existe mais ses images se sont révélées hors sujet : ne pas
+  l'utiliser pour la production. Contrôle visuel : `node scripts/demo-catalogue/contact-sheet.js`. Rien à configurer sur
+  Render : le serveur télécharge les photos depuis leur source.
 - Messages reçus par ces comptes : réponse automatique puis suivi sur la même page de la console (voir
   `docs/annonces-demonstration.md`).

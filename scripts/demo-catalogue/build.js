@@ -86,8 +86,8 @@ ARCHETYPES.forEach((arch, ai) => {
     const [pmin, pmax] = arch.photos || [2, 4];
     const photosWanted = pmin + Math.floor(rng() * (pmax - pmin + 1));
     let queries = Array.isArray(arch.q) ? arch.q : [arch.q];
-    if (arch.qByOpt) queries = [arch.q[idx[arch.qByOpt] % arch.q.length]];
-    else if (queries.length > 1) queries = [pick(rng, queries), ...queries];
+    if (arch.qByOpt) queries = [arch.q[idx[arch.qByOpt] % arch.q.length], ...(arch.qFallback || [])]; // requête propre à l'option, puis repli générique
+    else if (queries.length > 1 && !arch.qFirst) queries = [pick(rng, queries), ...queries]; // qFirst : ordre figé (première requête = couverture)
     let cityKey = null;
     if (arch.city) cityKey = arch.cityByOpt ? arch.city[idx[arch.cityByOpt] % arch.city.length] : Array.isArray(arch.city) ? pick(rng, arch.city) : arch.city;
     const mod = moderateText(title, description);

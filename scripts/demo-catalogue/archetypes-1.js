@@ -11,7 +11,7 @@ module.exports = [
     price: [7900, 14500], cond: BON,
     attrs: { marque: 'Peugeot', modele: '208', annee: '{annee}', kilometrage: '{km}', carburant: '{carb}', boite: '{boite}', type_vehicule: 'Citadine', portes: '5', couleur: '{Couleur}', controle_technique: true },
     opts: { version: ['1.2 PureTech 75', '1.2 PureTech 100', '1.5 BlueHDi 100', 'Allure', 'Active'], annee: [2017, 2018, 2019, 2020, 2021], km: [42000, 58000, 71000, 89000, 103000, 118000], carb: ['Essence', 'Essence', 'Diesel'], boite: ['Manuelle', 'Manuelle', 'Automatique'], couleur: ['gris', 'blanc', 'noir', 'bleu', 'rouge'], ct: ['Aucun frais à prévoir.', 'Distribution faite à 60 000 km.', 'Révision complète effectuée en mai.'] },
-    q: ['Peugeot 208 car', 'small hatchback car street'], photos: [3, 5],
+    q: ['Peugeot 208 car', 'small hatchback car street'], qFirst: true, photos: [3, 5],
   }),
   V('voitures', 6, {
     title: 'Renault Clio {gen} {version}, {annee}',
@@ -22,12 +22,12 @@ module.exports = [
     q: ['Renault Clio car', 'compact car parked'], photos: [3, 5],
   }),
   V('voitures', 5, {
-    title: 'Citroën C3 {version} {annee}, {km} km',
-    desc: 'Citroën C3 {version}, {annee}, {km} km. Confort de suspension typique de la marque, caméra de recul, Apple CarPlay. Toujours garée au garage. {ct}',
+    title: 'Renault Captur {version} {annee}, {km} km',
+    desc: 'Renault Captur {version}, {annee}, {km} km. Position de conduite surélevée, coffre modulable, caméra de recul, Apple CarPlay. Toujours garée au garage. {ct}',
     price: [7200, 13900], cond: BON,
-    attrs: { marque: 'Citroën', modele: 'C3', annee: '{annee}', kilometrage: '{km}', carburant: '{carb}', boite: '{boite}', type_vehicule: 'Citadine', portes: '5', couleur: '{Couleur}', controle_technique: true },
-    opts: { version: ['PureTech 83 Feel', 'PureTech 110 Shine', 'BlueHDi 100 Feel'], annee: [2017, 2018, 2019, 2020, 2021], km: [45000, 61000, 78000, 95000, 112000], carb: ['Essence', 'Essence', 'Diesel'], boite: ['Manuelle', 'Automatique'], couleur: ['blanc', 'gris', 'bleu', 'rouge'], ct: ['Pneus neufs à l\'avant.', 'Batterie remplacée en 2025.', 'Carnet complet.'] },
-    q: ['Citroën C3 car', 'white city car'], photos: [3, 4],
+    attrs: { marque: 'Renault', modele: 'Captur', annee: '{annee}', kilometrage: '{km}', carburant: '{carb}', boite: '{boite}', type_vehicule: '4x4 / SUV / Crossover', portes: '5', couleur: '{Couleur}', controle_technique: true },
+    opts: { version: ['TCe 90 Zen', 'TCe 130 Intens', 'dCi 95 Business'], annee: [2017, 2018, 2019, 2020, 2021], km: [45000, 61000, 78000, 95000, 112000], carb: ['Essence', 'Essence', 'Diesel'], boite: ['Manuelle', 'Automatique'], couleur: ['blanc', 'gris', 'bleu', 'rouge'], ct: ['Pneus neufs à l\'avant.', 'Batterie remplacée en 2025.', 'Carnet complet.'] },
+    q: ['Renault Captur'], photos: [3, 4], // Citroën C3 abandonnée : Pexels n'a que des Citroën anciennes, le Captur y est très bien couvert
   }),
   V('voitures', 5, {
     title: 'Volkswagen {modele} {version} {annee}',
@@ -35,7 +35,7 @@ module.exports = [
     price: [11900, 24500], cond: BON,
     attrs: { marque: 'Volkswagen', modele: '{modele}', annee: '{annee}', kilometrage: '{km}', carburant: '{carb}', boite: '{boite}', type_vehicule: '{type}', portes: '5', couleur: '{Couleur}', controle_technique: true },
     opts: { modele: ['Golf', 'Polo', 'T-Roc', 'Tiguan'], version: ['1.0 TSI 95', '1.5 TSI 130', '2.0 TDI 150', '1.6 TDI 115'], annee: [2017, 2018, 2019, 2020, 2021, 2022], km: [52000, 68000, 84000, 99000, 127000], carb: ['Essence', 'Diesel'], boite: ['Manuelle', 'Automatique', 'Automatique'], type: ['Berline', 'Citadine', '4x4 / SUV / Crossover'], couleur: ['gris', 'noir', 'blanc', 'bleu'], ct: ['Contrôle technique OK.', 'Deux pneus neufs.', 'Vendu avec jeu de pneus hiver.'] },
-    q: ['Volkswagen Golf car', 'Volkswagen car parked'], photos: [3, 5],
+    q: ['Volkswagen Golf car', 'Volkswagen Polo car', 'Volkswagen T-Roc SUV', 'Volkswagen Tiguan'], qByOpt: 'modele', qFallback: ['Volkswagen car parked'], photos: [3, 5],
   }),
   V('voitures', 4, {
     title: 'Toyota Yaris Hybride {annee}, {km} km',
@@ -50,8 +50,8 @@ module.exports = [
     desc: 'Dacia {modele} {version} de {annee}, {km} km, première main. Voiture simple et fiable, entretien régulier, aucun voyant. Idéale pour un premier véhicule ou les trajets quotidiens. {ct}',
     price: [6900, 15500], cond: BON,
     attrs: { marque: 'Dacia', modele: '{modele}', annee: '{annee}', kilometrage: '{km}', carburant: '{carb}', boite: 'Manuelle', type_vehicule: '{type}', portes: '5', couleur: '{Couleur}', controle_technique: true, premiere_main: true },
-    opts: { modele: ['Sandero', 'Duster', 'Logan'], version: ['Stepway TCe 90', '1.5 dCi 115', 'SCe 65 Essential', 'Prestige'], annee: [2017, 2019, 2020, 2021, 2022], km: [39000, 55000, 72000, 90000, 108000], carb: ['Essence', 'Diesel', 'GPL'], type: ['Citadine', '4x4 / SUV / Crossover', 'Berline'], couleur: ['blanc', 'gris', 'bleu', 'marron'], ct: ['Crochet d\'attelage.', 'Barres de toit fournies.', 'Contrôle technique du mois dernier.'] },
-    q: ['Dacia Duster', 'Dacia Sandero car'], photos: [3, 4],
+    opts: { modele: ['Sandero', 'Duster', 'Duster'], version: ['Stepway TCe 90', '1.5 dCi 115', 'SCe 65 Essential', 'Prestige'], annee: [2017, 2019, 2020, 2021, 2022], km: [39000, 55000, 72000, 90000, 108000], carb: ['Essence', 'Diesel', 'GPL'], type: ['Citadine', '4x4 / SUV / Crossover', 'Berline'], couleur: ['blanc', 'gris', 'bleu', 'marron'], ct: ['Crochet d\'attelage.', 'Barres de toit fournies.', 'Contrôle technique du mois dernier.'] },
+    q: ['Dacia Sandero Stepway', 'Dacia Duster', 'Dacia Duster'], qByOpt: 'modele', photos: [3, 4], // pas de Logan sur Pexels : modèle retiré
   }),
   V('voitures', 4, {
     title: '{marque} {modele} {annee}, {km} km, {carb}',
@@ -68,7 +68,7 @@ module.exports = [
     price: [16900, 31900], cond: ['tres_bon_etat', 'bon_etat'],
     attrs: { marque: 'BMW', modele: '{modele}', annee: '{annee}', kilometrage: '{km}', carburant: '{carb}', boite: 'Automatique', type_vehicule: '{type}', portes: '5', couleur: '{Couleur}', sellerie: 'Cuir', controle_technique: true },
     opts: { modele: ['Série 1', 'Série 3', 'X1'], version: ['118d', '320d', 'sDrive18d', '118i'], annee: [2017, 2018, 2019, 2020], km: [61000, 78000, 94000, 121000], carb: ['Diesel', 'Essence'], type: ['Berline', '4x4 / SUV / Crossover'], couleur: ['noir', 'gris', 'blanc', 'bleu'], ct: ['Garantie 12 mois possible via un garage partenaire.', 'Pneus Michelin récents.', 'Deux jeux de jantes.'] },
-    q: ['BMW 3 series car', 'BMW car parked street'], photos: [3, 5],
+    q: ['BMW 1 series hatchback', 'BMW 3 series car', 'BMW X1 SUV'], qByOpt: 'modele', qFallback: ['BMW car parked street'], photos: [3, 5],
   }),
   V('voitures', 3, {
     title: 'Tesla Model 3 {version} {annee}',
@@ -93,7 +93,7 @@ module.exports = [
     attrs: { marque: '{marque}', modele: '{modele}', annee: '{annee}', kilometrage: '{km}', carburant: '{carb}', boite: '{boite}', type_vehicule: 'Monospace', portes: '5', places: 7, couleur: '{Couleur}', controle_technique: true },
     opts: { marque: ['Renault', 'Citroën', 'Peugeot'], modele: ['Grand Scénic', 'C4 Picasso', '5008'], annee: [2017, 2018, 2019, 2020], km: [78000, 96000, 115000, 138000], carb: ['Diesel', 'Diesel', 'Essence'], boite: ['Manuelle', 'Automatique'], couleur: ['gris', 'noir', 'blanc', 'bleu'], ct: ['Distribution faite.', 'Pneus neufs.', 'Sièges enfant possibles en sus.'] },
     pair: { marque: 'modele' },
-    q: ['family minivan car', 'Peugeot 5008'], photos: [3, 4],
+    q: ['Renault Scenic', 'Citroën C4 Picasso', 'Peugeot 5008'], qByOpt: 'marque', qFallback: ['family minivan car'], photos: [3, 4],
   }),
   V('voitures', 2, {
     title: 'Mini Cooper {annee}, {km} km, toit noir',
@@ -118,7 +118,7 @@ module.exports = [
     attrs: { marque: 'Yamaha', modele: '{modele}', annee: '{annee}', kilometrage: '{km}', cylindree: '{cyl}', type_moto: 'Roadster', permis: '{permis}', couleur: '{Couleur}' },
     opts: { modele: ['MT-07', 'MT-09', 'MT-03'], annee: [2018, 2019, 2020, 2021, 2022], km: [8500, 14000, 21000, 27000, 34000], cyl: [689, 847, 321], perm: ['bridée A2 possible', 'full', 'A2'], permis: ['A2', 'A', 'A2'], couleur: ['bleu', 'noir', 'gris'] },
     pair: { modele: 'cyl' },
-    q: ['Yamaha MT-07 motorcycle', 'naked motorcycle'], photos: [3, 4],
+    q: ['Yamaha MT-07 motorcycle', 'Yamaha MT-09 motorcycle', 'Yamaha MT-03 motorcycle'], qByOpt: 'modele', qFallback: ['Yamaha naked motorcycle'], photos: [3, 4],
   }),
   V('motos', 3, {
     title: 'Honda {modele} {annee}',
@@ -136,7 +136,7 @@ module.exports = [
     attrs: { marque: '{marque}', modele: '{modele}', annee: '{annee}', kilometrage: '{km}', cylindree: 125, type_moto: 'Scooter', permis: 'B', couleur: '{Couleur}' },
     opts: { marque: ['Yamaha', 'Piaggio', 'Vespa'], modele: ['NMAX', 'Medley', 'Primavera'], annee: [2019, 2020, 2021, 2022], km: [5200, 9800, 14300, 19000], couleur: ['blanc', 'gris', 'noir', 'bleu'] },
     pair: { marque: 'modele' },
-    q: ['scooter 125 city', 'Vespa scooter parked'], photos: [2, 4],
+    q: ['Yamaha NMAX scooter', 'Piaggio Medley scooter', 'Vespa scooter parked'], qByOpt: 'marque', qFallback: ['scooter 125 city'], photos: [2, 4],
   }),
   V('motos', 3, {
     title: '{marque} {modele} trail {annee}, {km} km',
@@ -145,7 +145,7 @@ module.exports = [
     attrs: { marque: '{marque}', modele: '{modele}', annee: '{annee}', kilometrage: '{km}', cylindree: '{cyl}', type_moto: 'Trail', permis: 'A', couleur: '{Couleur}' },
     opts: { marque: ['BMW', 'Kawasaki', 'Suzuki'], modele: ['F 750 GS', 'Versys 650', 'DL 650 V-Strom'], annee: [2017, 2018, 2019, 2020, 2021], km: [19000, 27000, 36000, 44000], cyl: [853, 649, 645], couleur: ['blanc', 'vert', 'jaune', 'noir'] },
     pair: { marque: 'modele', modele: 'cyl' },
-    q: ['adventure motorcycle touring', 'BMW GS motorcycle'], photos: [3, 4],
+    q: ['BMW GS motorcycle', 'Kawasaki Versys motorcycle', 'Suzuki V-Strom motorcycle'], qByOpt: 'marque', qFallback: ['adventure motorcycle touring'], photos: [3, 4],
   }),
   V('motos', 2, {
     title: 'Triumph {modele} {annee}',
@@ -162,7 +162,7 @@ module.exports = [
     attrs: { marque: '{marque}', modele: '{modele}', annee: '{annee}', kilometrage: '{km}', carburant: '{carb}', boite: 'Manuelle', ptac: '{ptac}' },
     opts: { marque: ['Renault', 'Peugeot', 'Citroën', 'Fiat'], modele: ['Trafic', 'Expert', 'Jumpy', 'Ducato'], version: ['L1H1 dCi 120', 'L2H1 BlueHDi 120', 'Fourgon 2.0 HDi', 'L2H2 2.3 MultiJet'], annee: [2016, 2017, 2018, 2019, 2020], km: [98000, 124000, 143000, 167000, 189000], carb: ['Diesel'], ptac: [2800, 3000, 3100, 3500] },
     pair: { marque: 'modele' },
-    q: ['white cargo van', 'Renault Trafic van'], photos: [3, 4],
+    q: ['Renault Trafic van', 'white cargo van', 'white cargo van', 'white cargo van'], qByOpt: 'marque', photos: [3, 4], // Pexels : Peugeot/Citroën anciens et aucun Ducato → fourgon blanc générique
   }),
   V('utilitaires', 4, {
     title: '{marque} {modele} {annee}, fourgonnette',
@@ -171,7 +171,7 @@ module.exports = [
     attrs: { marque: '{marque}', modele: '{modele}', annee: '{annee}', kilometrage: '{km}', carburant: 'Diesel', boite: 'Manuelle', ptac: 2000 },
     opts: { marque: ['Renault', 'Citroën', 'Peugeot', 'Volkswagen'], modele: ['Kangoo', 'Berlingo', 'Partner', 'Caddy'], annee: [2015, 2017, 2018, 2019, 2020], km: [87000, 112000, 136000, 158000] },
     pair: { marque: 'modele' },
-    q: ['small delivery van', 'Renault Kangoo van'], photos: [2, 4],
+    q: ['Renault Kangoo van', 'white delivery van', 'white delivery van', 'white delivery van'], qByOpt: 'marque', qFallback: ['small delivery van'], photos: [2, 4], // Pexels : Caddy = combis anciens, Berlingo absent
   }),
   V('caravaning', 4, {
     title: 'Camping-car {marque} {annee}, {couchages} couchages',
@@ -196,7 +196,7 @@ module.exports = [
     attrs: { type_bateau: '{typeAttr}', longueur: '{longueur}', annee: '{annee}' },
     opts: { type: ['Semi-rigide', 'Bateau à moteur', 'Voilier'], typeAttr: ['Semi-rigide', 'Bateau à moteur', 'Voilier'], marque: ['Zodiac', 'Jeanneau', 'Bénéteau', 'Quicksilver'], longueur: [4.5, 5.5, 6.2, 7], annee: [2008, 2012, 2016, 2019], moteur: ['Yamaha 60 ch', 'Mercury 115 ch', 'Suzuki 40 ch', 'inboard diesel 20 ch'] },
     pair: { type: 'typeAttr' },
-    q: ['motor boat harbor', 'sailboat marina', 'rigid inflatable boat'], qByOpt: 'type', photos: [3, 4],
+    q: ['rigid inflatable boat', 'motor boat harbor', 'sailboat marina'], qByOpt: 'type', photos: [3, 4],
   }),
   V('nautisme', 2, {
     title: 'Kayak {type} {places} place{s}',
@@ -205,7 +205,7 @@ module.exports = [
     attrs: { type_bateau: 'Kayak / Paddle', longueur: '{longueur}', annee: '{annee}' },
     opts: { type: ['gonflable', 'rigide sit-on-top'], places: [1, 2], s: ['', 's'], s2: ['', 's'], marque: ['Itiwit', 'Sevylor', 'Tahe'], longueur: [3.2, 3.8, 4.1], annee: [2021, 2022, 2023] },
     pair: { places: 's', places2: 's2' },
-    q: ['kayak lake', 'inflatable kayak'], photos: [2, 3],
+    q: ['inflatable kayak', 'kayak lake'], qByOpt: 'type', photos: [2, 3],
   }),
   V('pieces-auto', 4, {
     title: '4 jantes alu {pouces}" {marque} avec pneus {saison}',
@@ -231,7 +231,7 @@ module.exports = [
     attrs: { type_piece: '{typePiece}', compatibilite: '{marque} {modele} {annees}' },
     opts: { piece: ['Phare avant droit', 'Rétroviseur gauche', 'Autoradio', 'Alternateur', 'Pare-chocs avant'], typePiece: ['Éclairage', 'Carrosserie', 'Électronique', 'Moteur', 'Carrosserie'], marque: ['Renault', 'Peugeot', 'Citroën', 'Volkswagen'], modele: ['Mégane', '308', 'C4', 'Polo'], annees: ['2012-2016', '2014-2019', '2016-2020', '2018-2022'], etat: ['fonctionnel', 'bon état', 'sans casse'] },
     pair: { piece: 'typePiece', marque: 'modele' },
-    q: ['car headlight part', 'car spare parts'], photos: [2, 3],
+    q: ['car headlight part', 'car side mirror', 'car radio dashboard', 'car alternator', 'car front bumper'], qByOpt: 'piece', qFallback: ['car spare parts'], photos: [2, 3],
   }),
 
   // ---------------------------------------------------------------- Immobilier (35)

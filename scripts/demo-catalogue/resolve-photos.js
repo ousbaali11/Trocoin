@@ -38,7 +38,19 @@ async function pexels(q) {
 }
 
 const STOP = new Set(['car','street','living','room','home','set','with','and','the','for','city','photo','image','modern','bright','interior','exterior','table','desk','outdoor','wall','pair','floor','vintage','france','french']);
-const relevant = (q, title) => { const t = title.toLowerCase(); const words = q.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 3 && !STOP.has(w)); return words.length === 0 || words.some((w) => t.includes(w)); };
+// Pénalités (Pexels) : photo d'objet ancien, monochrome, logo ou marque en gros plan, ou marque automobile absente de la
+// requête (une Fiat 500 pour une « citadine » Citroën) — sauf si la requête le demande (« vintage wall clock »).
+const OLD = /\b(vintage|old|antique|classic|retro|monochrome|black and white|rusty|weathered|logo|emblem|branding|nostalgi\w*|rally|racing|race|drift\w*|motorsport|cosplay\w*|costume|sign|dolls?|pupp\w*|dog)\b/i;
+const BRANDS = /\b(fiat|volkswagen|vw|bmw|audi|mercedes|toyota|renault|peugeot|citro[eë]n|ford|opel|honda|tesla|dacia|hyundai|kia|skoda|nissan|mazda|volvo|porsche|ferrari|lamborghini|jeep|jaguar|lexus|suzuki|subaru|chevrolet|dodge|smart|daihatsu|triumph|kawasaki|yamaha|ktm|ducati|vespa|piaggio|beetle)\b/gi;
+const score = (q, alt) => {
+  const ql = fold(q); const a = fold(alt || '');
+  let s = relevant(q, a) ? 2 : 0;
+  const old = a.match(OLD); if (old && !old.some((w) => ql.includes(w.toLowerCase()))) s -= 3;
+  const brands = a.match(BRANDS) || []; if (brands.some((b) => !ql.includes(b.toLowerCase()))) s -= 3;
+  return s;
+};
+const fold = (s) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // « Citroën » ≡ « Citroen »
+const relevant = (q, title) => { const t = fold(title); const words = fold(q).split(/[^a-z0-9]+/).filter((w) => w.length >= 3 && !STOP.has(w)); return words.length === 0 || words.some((w) => t.includes(w)); };
 async function commons(q) {
   if (cache.commons[q]) return cache.commons[q];
   const search = `${q} filetype:bitmap haswbstatement:P275=Q6938433`;
@@ -70,10 +82,13 @@ async function commons(q) {
     if (!only && !args.force && existing[l.key] && existing[l.key].length >= 2) continue;
     const wanted = l.photosWanted;
     const picked = [];
-    const sources = sourcePref === 'commons' ? ['commons'] : pexelsKey ? ['pexels', 'commons'] : ['commons'];
+    // --source pexels : Pexels seul (pas de repli Commons, dont les images se sont révélées hors sujet — AUDIT §71)
+    const sources = sourcePref === 'commons' ? ['commons'] : args.source === 'pexels' ? ['pexels'] : pexelsKey ? ['pexels', 'commons'] : ['commons'];
     for (const src of sources) {
       for (const q of l.photoQueries) {
-        const cands = src === 'pexels' ? await pexels(q) : (await commons(q)).filter((c) => relevant(q, c.alt || ''));
+        // Pexels : les photos dont le texte alternatif cite un mot significatif de la requête passent en premier (la
+        // photo de couverture est la première retenue) ; les autres restent disponibles ensuite pour ne pas perdre de couverture
+        const cands = src === 'pexels' ? (await pexels(q)).slice().sort((a, b) => score(q, b.alt) - score(q, a.alt)) : (await commons(q)).filter((c) => relevant(q, c.alt || ''));
         for (const c of cands) {
           if (picked.length >= wanted) break;
           if (used.has(c.id)) continue;

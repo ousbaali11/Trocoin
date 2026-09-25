@@ -3870,3 +3870,45 @@ jour en 1.42.1, CI verte (six étapes, déploiement Render inclus). `/health` : 
 `paymentIssues 3` (les trois ventes signalées connues depuis §67, inchangées). La recherche publique compte 60 annonces
 en ligne, aucune de démonstration ; `GET /admin/demo-catalogue` sans jeton → 401. Le catalogue n'est **pas** créé en
 production : il attend la clé Pexels et un clic du propriétaire dans la console.
+
+## 72. Catalogue de démonstration : photos Pexels résolues pour les 600 annonces, contrôle visuel — 25 septembre 2026
+
+Suite du §71 : clé d'API Pexels déposée par le propriétaire dans `private/pexels.key` (jamais commitée).
+
+### Ce qui est livré (1.43.0)
+
+- **Couverture 600 / 600 annonces, 1 692 photos, toutes Pexels** (licence Pexels, usage commercial, sans attribution
+  requise ; source, auteur, page d'origine consignés dans `photos.json`), 2 à 5 photos par annonce comme prévu, aucune
+  photo réutilisée d'une annonce à l'autre, 0 annonce en dessous du nombre souhaité. Le seuil de 90 % du bouton console
+  (`MIN_PHOTO_COVERAGE`) est dépassé : la page « Catalogue de démonstration » affiche le bouton actif.
+- **`resolve-photos.js --source pexels`** : Pexels seul (le repli Wikimedia Commons est conservé mais documenté comme
+  inutilisable pour la production). Candidats classés par pertinence du texte alternatif (mot significatif de la
+  requête, accents ignorés) avec pénalités : objet ancien / monochrome / logo en gros plan, compétition ou cosplay, et
+  **marque automobile absente de la requête** (une Fiat 500 pour une citadine d'une autre marque). Limite de débit
+  Pexels (200 requêtes / h) respectée par attente automatique ; cache des requêtes dans `private/`.
+- **Requêtes d'image alignées sur l'objet** dans les archétypes (`qByOpt` par option + `qFallback` générique, `qFirst`
+  pour figer l'ordre) après quatre planches-contact successives : BMW X1 (et non Série 3), Jumpy / Expert / Caddy en
+  fourgons blancs génériques (Pexels n'a que des Citroën / Peugeot anciens et des combis VW), Versys / V-Strom (et non
+  BMW GS), sacs par type (à dos ≠ à main), montres par marque (G-Shock), vestes par type, pièces auto par pièce,
+  bateaux par type (voilier ≠ semi-rigide), MacBook Air ≠ Pro, monospaces par marque, Dacia par modèle, Polo / T-Roc /
+  Tiguan, scooters et MT par modèle, consoles par plateforme (Xbox ≠ PlayStation), canapés par couleur, Lego en
+  briques (les requêtes « Harry Potter » / « Star Wars » renvoyaient Universal Studios et des cosplayeurs), valises,
+  lave-linge, barre de son, poussettes, vêtements enfant, kayak par type, vélo de route.
+- **Deux archétypes changés faute de photos sincères** : Dacia Logan → Duster (1 annonce) et Citroën C3 → Renault
+  Captur (5 annonces ; Pexels n'a aucune C3 récente, le Captur y est très bien couvert). Répartition par famille et par
+  sous-catégorie inchangée (600 annonces, 50 comptes, prix identiques).
+- `contact-sheet.js --only clé1,clé2` : planche ciblée pour recontrôler des cas précis.
+
+### Vérification
+
+- Sept passages de résolution (le premier butant deux fois sur la limite horaire Pexels, reprise automatique) ; résultat
+  final : 600 / 600 annonces, 1 692 photos (233 annonces à 2 photos, 260 à 3, 89 à 4, 18 à 5), 1 692 identifiants
+  Pexels distincts, 0 annonce sous le nombre souhaité.
+- Cinq planches-contact ciblées successives (41 → 55 annonces : cas signalés BMW X1 et Bugaboo Bee 6 + marques et
+  modèles précis) et douze planches aléatoires de 24 annonces : les cas signalés sont réglés (vrais BMW X1, poussettes
+  modernes), et les dérives repérées en route ont été corrigées à la source (voir la liste ci-dessus). Limite assumée :
+  pour un produit précis (Bugaboo Bee 6, Rational, Tissot PRX…), la photo montre un objet de même type et, quand la
+  banque le permet, de même marque, jamais un objet contradictoire (autre marque visible, autre époque).
+- Typecheck API 0 erreur ; `phase43` 3/3 avec le jeu de données résolu (bouton console actif, couverture 100 %).
+- Aucune clé ni image dans le dépôt : `photos.json` ne contient que des URL Pexels et des métadonnées ; la clé reste
+  dans `private/` (grep du diff indexé avant commit).

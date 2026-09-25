@@ -1,6 +1,6 @@
 // Planche-contact de contrôle (AUDIT §71) : N annonces tirées au hasard, première photo résolue + titre, pour vérifier à
 // l'œil que les photos correspondent aux objets. Sortie : private/demo-catalogue-sheet-<n>.jpg (hors dépôt).
-// Usage : node scripts/demo-catalogue/contact-sheet.js [--n 24] [--seed 1] [--family mode]
+// Usage : node scripts/demo-catalogue/contact-sheet.js [--n 24] [--seed 1] [--family mode] [--only clé1,clé2]
 const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
@@ -20,7 +20,9 @@ const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, 
 (async () => {
   fs.mkdirSync(CACHE, { recursive: true });
   const withPhotos = listings.filter((l) => (photos[l.key] || []).length > 0);
-  const chosen = [...withPhotos].sort(() => rng() - 0.5).slice(0, N);
+  // --only clé1,clé2 : contrôle ciblé (cas signalés) ; sinon tirage aléatoire reproductible par --seed
+  const only = args.only ? args.only.split(',') : null;
+  const chosen = only ? only.map((k) => withPhotos.find((l) => l.key === k)).filter(Boolean) : [...withPhotos].sort(() => rng() - 0.5).slice(0, N);
   const W = 300, H = 225, LABEL = 46, COLS = 4;
   const tiles = [];
   for (const [i, l] of chosen.entries()) {
@@ -43,7 +45,7 @@ const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, 
   const sheet = sharp({ create: { width: COLS * W, height: rows * (H + LABEL), channels: 3, background: '#222' } })
     .composite(tiles.map((t, i) => ({ input: t, left: (i % COLS) * W, top: Math.floor(i / COLS) * (H + LABEL) })))
     .jpeg({ quality: 80 });
-  const out = path.join(PRIVATE, `demo-catalogue-sheet-${seed}${args.family ? '-' + args.family : ''}.jpg`);
+  const out = path.join(PRIVATE, `demo-catalogue-sheet-${args.only ? 'cibles' : seed}${args.family ? '-' + args.family : ''}.jpg`);
   await sheet.toFile(out);
   console.log(`${tiles.length} vignettes → ${out}`);
 })();

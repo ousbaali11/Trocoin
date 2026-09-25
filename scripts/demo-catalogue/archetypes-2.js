@@ -19,7 +19,7 @@ module.exports = [
     attrs: { univers: 'Homme', type_vetement: 'Manteau / Veste', taille: '{taille}', marque: '{marque}', couleur: '{Couleur}', matiere: '{matiere}' },
     opts: { type: ['en jean', 'bomber', 'doudoune légère', 'blazer', 'imperméable'], marque: ['Levi\'s', 'Alpha Industries', 'Uniqlo', 'Celio', 'The North Face', 'Jules'], taille: ['M', 'L', 'XL', 'S'], couleur: ['bleu', 'noir', 'vert', 'beige', 'gris'], matiere: ['coton', 'nylon', 'polyester', 'laine mélangée', 'coton'], detail: ['Coupe ajustée, poches zippées.', 'Modèle classique, doublure orange.', 'Compressible dans sa pochette.', 'Deux boutons, doublure intérieure.', 'Capuche amovible, coutures étanches.'], etat: ['impeccable', 'très bon', 'bon'] },
     pair: { type: 'matiere', type2: 'detail' },
-    q: ['denim jacket men', 'bomber jacket', 'men blazer jacket'], photos: [2, 4],
+    q: ['denim jacket men', 'bomber jacket', 'puffer jacket men', 'men blazer jacket', 'rain jacket men'], qByOpt: 'type', photos: [2, 4],
   }),
   V('vetements', 6, {
     title: 'Robe {style} {marque} taille {taille}',
@@ -72,7 +72,7 @@ module.exports = [
     attrs: { univers: '{univAttr}', type_vetement: 'Autre', taille: '{taille}', marque: 'Divers' },
     opts: { univers: ['fille', 'garçon'], univAttr: ['Fille', 'Garçon'], age: ['4 ans', '6 ans', '8 ans', '10 ans'], taille: ['XXS', 'XS', 'XS', 'S'], nb: [12, 15, 18, 20], contenu: ['pantalons, pulls, t-shirts', 'robes, leggings, gilets', 'joggings, sweats, t-shirts'], marques: ['Okaïdi, Vertbaudet, Kiabi', 'Petit Bateau, Zara Kids, H&M', 'Décathlon, Kiabi, Tape à l\'œil'], saison: ['automne-hiver', 'printemps-été', 'toutes saisons'] },
     pair: { univers: 'univAttr', age: 'taille' },
-    q: ['kids clothes folded', 'children clothing pile'], photos: [2, 3],
+    q: ['kids clothes folded'], photos: [2, 3],
   }),
   V('chaussures', 7, {
     title: 'Baskets {marque} {modele} pointure {pointure}',
@@ -115,7 +115,7 @@ module.exports = [
     attrs: { type_accessoire: 'Sac', marque: '{marque}' },
     opts: { type: ['cabas', 'à main', 'à dos', 'bandoulière', 'week-end'], marque: ['Longchamp', 'Lancaster', 'Fjällräven', 'Sézane', 'Eastpak'], matiere: ['cuir', 'toile enduite', 'toile', 'cuir grainé', 'nylon'], couleur: ['noir', 'camel', 'bleu marine', 'vert', 'bordeaux'], dim: ['grand format', 'format moyen', 'format A4'], detail: ['Anses en cuir, fermeture aimantée.', 'Poche zippée intérieure et porte-clés.', 'Compartiment ordinateur 15".', 'Bandoulière réglable amovible.', 'Poche latérale et double fermeture.'], usure: ['légères traces sur les coins', 'aucune usure', 'patine naturelle du cuir'] },
     pair: { type: 'detail' },
-    q: ['leather handbag', 'tote bag', 'backpack canvas'], photos: [2, 4],
+    q: ['tote bag', 'leather handbag', 'backpack canvas', 'crossbody bag leather', 'weekender bag leather'], qByOpt: 'type', photos: [2, 4],
   }),
   V('accessoires-bagagerie', 4, {
     title: 'Valise {marque} {taille} {couleur}',
@@ -124,7 +124,7 @@ module.exports = [
     attrs: { type_accessoire: 'Valise', marque: '{marque}' },
     opts: { marque: ['Samsonite', 'Delsey', 'American Tourister', 'Rimowa'], taille: ['cabine', 'moyenne', 'grande'], dim: ['55 cm', '66 cm', '75 cm'], couleur: ['noir', 'bleu', 'gris', 'argent'], coque: ['rigide polycarbonate', 'souple', 'rigide'], usage: ['deux voyages', 'un an de déplacements pro', 'trois vacances'] },
     pair: { taille: 'dim' },
-    q: ['suitcase luggage', 'travel suitcase wheels'], photos: [2, 3],
+    q: ['travel suitcase wheels'], photos: [2, 3],
   }),
   V('accessoires-bagagerie', 4, {
     title: '{accessoire} {marque}, {etat}',
@@ -142,7 +142,7 @@ module.exports = [
     attrs: { type_bijou: 'Montre', marque: '{marque}', matiere: 'Acier' },
     opts: { marque: ['Seiko', 'Tissot', 'Casio', 'Citizen', 'Orient', 'Swatch'], modele: ['5 Sports', 'PRX', 'G-Shock', 'Eco-Drive', 'Bambino', 'Sistem51'], mouvement: ['automatique', 'quartz', 'automatique', 'solaire'], boitier: [38, 40, 42], bracelet: ['acier', 'cuir', 'nylon', 'caoutchouc'], achat: ['en 2023', 'l\'an dernier', 'en 2022'], etat: ['aucune rayure', 'micro-rayures sur le bracelet', 'verre impeccable'] },
     pair: { marque: 'modele' },
-    q: ['wristwatch automatic', 'watch close up wrist'], photos: [2, 4],
+    q: ['seiko watch', 'tissot watch', 'casio g-shock watch', 'citizen watch', 'orient watch', 'swatch watch'], qByOpt: 'marque', qFallback: ['watch close up wrist'], photos: [2, 4],
   }),
   V('montres-bijoux', 6, {
     title: '{bijou} {matiere} {detail}',
@@ -162,7 +162,7 @@ module.exports = [
     attrs: { type_produit: 'Poussette', marque: '{marque}', couleur: '{Couleur}' },
     opts: { marque: ['Babyzen', 'Cybex', 'Bugaboo', 'Joie', 'Chicco'], modele: ['Yoyo2', 'Balios S', 'Bee 6', 'Versatrax', 'Trio'], couleur: ['noir', 'gris', 'bleu', 'beige'], type: ['compacte cabine', 'tout-terrain', 'citadine', 'trio avec cosy', 'canne légère'], achat: ['en 2024', 'en 2023', 'l\'an dernier'], detail: ['Pliage à une main, se glisse dans un placard.', 'Grandes roues, suspensions, panier XXL.', 'Hamac réversible, nacelle vendue en option.', 'Compatible siège auto, adaptateurs fournis.'] },
     pair: { marque: 'modele' },
-    q: ['baby stroller', 'stroller pram park'], photos: [2, 4],
+    q: ['baby stroller'], photos: [2, 4],
   }),
   V('puericulture', 4, {
     title: 'Siège auto {marque} {groupe} isofix',
@@ -233,7 +233,7 @@ module.exports = [
     attrs: { taille_bebe: '{taille}', type_vetement: 'Lot de vêtements', sexe: '{sexeAttr}', marque: 'Divers' },
     opts: { sexe: ['fille', 'garçon', 'mixte'], sexeAttr: ['Fille', 'Garçon', 'Mixte'], taille: ['3 mois', '6 mois', '9 mois', '12 mois', '18 mois'], nb: [12, 15, 20, 25], contenu: ['bodies, pyjamas, gigoteuse, bonnets', 'pantalons, gilets, t-shirts, chaussettes', 'ensembles, salopettes, pulls'], marques: ['Petit Bateau, Vertbaudet, H&M', 'Kiabi, Okaïdi, Tape à l\'œil', 'Jacadi, Bout\'chou, Zara Baby'] },
     pair: { sexe: 'sexeAttr' },
-    q: ['baby clothes folded', 'newborn clothes lot'], photos: [2, 3],
+    q: ['baby clothes folded'], photos: [2, 3],
   }),
   V('vetements-bebe', 4, {
     title: '{type} bébé {marque} {taille}, {saison}',

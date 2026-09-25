@@ -19,8 +19,10 @@ matériel professionnel ou de locations de vacances).
   validés contre les mêmes schémas que les dépôts des membres. Répartition : véhicules 95, maison & jardin 95, mode 90,
   loisirs 80, électronique 70, famille 40, immobilier 35, services 30, animaux 20 (accessoires uniquement, aucune vente
   d'animal), matériel professionnel 20, emploi 15, locations de vacances 10.
-- **2 à 5 photos par annonce**, uniquement issues de banques d'images libres de droits à usage commercial (Pexels en
-  priorité ; à défaut Wikimedia Commons, fichiers CC0), correspondant sincèrement à l'objet décrit. Chaque photo est
+- **2 à 5 photos par annonce**, uniquement issues d'une banque d'images libre de droits à usage commercial (Pexels ;
+  le repli Wikimedia Commons du script a été écarté, ses images étant hors sujet), correspondant sincèrement à l'objet
+  décrit et contrôlées à l'œil sur planches-contact (requêtes par marque, modèle, type ou couleur ; deux modèles de
+  voiture remplacés faute de photos sincères : Dacia Logan → Duster, Citroën C3 → Renault Captur). Chaque photo est
   consignée avec sa source, son auteur, sa licence et sa page d'origine (`src/demo-catalogue/data/photos.json`). Aucune
   image n'est copiée depuis un autre site de petites annonces ou une place de marché.
 - **Remise en main propre uniquement** : les comptes portent `securePaymentDisabled`, les annonces sont créées sans
@@ -40,8 +42,9 @@ console : *Catalogue de démonstration → Créer le catalogue de démonstration
 
 - Le jeu de données est versionné dans `src/demo-catalogue/data/` (comptes sans mot de passe, annonces, photos résolues) ;
   il est produit par `node scripts/demo-catalogue/build.js` (archétypes par sous-catégorie, variantes déterministes,
-  attributs validés) puis `node scripts/demo-catalogue/resolve-photos.js` (clé Pexels dans `private/pexels.key`, jamais
-  commitée).
+  attributs validés) puis `node scripts/demo-catalogue/resolve-photos.js --source pexels` (clé Pexels dans
+  `private/pexels.key`, jamais commitée ; Pexels seul, car les images Wikimedia Commons se sont révélées hors sujet), et
+  enfin `node scripts/demo-catalogue/contact-sheet.js` pour contrôler à l'œil que les photos correspondent aux objets.
 - L'exécution est **idempotente et reprend d'elle-même** : comptes retrouvés par leur e-mail, annonces par leur référence
   `demo:<clé>`, photos manquantes seulement. Un redémarrage du serveur en cours de route n'abîme rien : relancer suffit.
 - Les photos sont téléchargées depuis leur source puis passent par le traitement des envois de membres (ré-encodage sans

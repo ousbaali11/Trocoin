@@ -10,7 +10,7 @@ module.exports = [
     price: [180, 950], cond: BON,
     attrs: { piece: 'Salon', type_meuble: 'Canapé / Fauteuil', matiere: '{matiere}', couleur: '{Couleur}', marque: '{marque}' },
     opts: { places: ['2', '3', '3', 'd\'angle 5'], matiere: ['velours', 'tissu', 'cuir', 'lin'], couleur: ['vert', 'gris', 'bleu', 'beige', 'jaune'], marque: ['Ikea', 'Maisons du Monde', 'La Redoute Intérieurs', 'Bobochic', 'Poltronesofà'], dim: ['200 × 90 cm', '180 × 85 cm', '230 × 95 cm', '260 × 160 cm'], etat: ['très bon état', 'bon état', 'excellent état'], detail: ['Pieds en bois, coussins déhoussables.', 'Convertible avec matelas 140.', 'Coussins déhoussables lavables.', 'Méridienne côté gauche.'], acces: ['rez-de-chaussée', '3e étage avec ascenseur', '2e étage sans ascenseur (prévoir deux personnes)'] },
-    q: ['velvet sofa living room', 'modern sofa apartment', 'corner sofa grey'], photos: [2, 4],
+    q: ['green sofa living room', 'grey sofa living room', 'blue sofa living room', 'beige sofa living room', 'yellow sofa living room'], qByOpt: 'couleur', qFallback: ['modern sofa apartment'], photos: [2, 4],
   }),
   V('ameublement', 5, {
     title: 'Table à manger {matiere} {dim} + {nb} chaises',
@@ -70,7 +70,7 @@ module.exports = [
     attrs: { type_appareil: 'Lave-linge', marque: '{marque}', classe_energie: '{classe}' },
     opts: { marque: ['Bosch', 'Samsung', 'LG', 'Whirlpool', 'Miele'], modele: ['Série 4', 'EcoBubble', 'AI DD', 'FreshCare', 'W1'], kg: [7, 8, 9], tours: [1200, 1400], classe: ['A', 'B', 'C'], achat: ['en 2022', 'en 2023', 'il y a 3 ans'], detail: ['joint et filtre nettoyés', 'facture et garantie restante', 'silencieux, moteur inverter'] },
     pair: { marque: 'modele' },
-    q: ['washing machine laundry', 'front load washer'], photos: [2, 3],
+    q: ['front load washer', 'washing machine home'], photos: [2, 3],
   }),
   V('electromenager', 4, {
     title: 'Réfrigérateur {type} {marque} {litres} L',
@@ -186,7 +186,7 @@ module.exports = [
     attrs: { type_produit: 'Ordinateur portable', marque: 'Apple', processeur: 'Apple {puce}', ram: '{ram}', stockage: '{ssd} SSD', taille_ecran: '{ecran}' },
     opts: { modele: ['Air 13"', 'Pro 14"', 'Air 13"', 'Air 15"', 'Pro 13"'], puce: ['M1', 'M2', 'M2', 'M3', 'M1'], ram: ['8 Go', '16 Go', '16 Go'], ssd: ['256 Go', '512 Go', '512 Go', '1 To'], ecran: [13, 14, 13, 15, 13], annee: ['de 2021', 'de 2023', 'de 2022', 'de 2024', 'de 2020'], cycles: [40, 85, 120, 160, 210], boite: [' et boîte', '', ' et housse'] },
     pair: { modele: 'ecran', modele2: 'annee' },
-    q: ['macbook air laptop desk', 'macbook pro laptop'], photos: [2, 4],
+    q: ['macbook air laptop desk', 'macbook pro laptop', 'macbook air laptop desk', 'macbook air laptop desk', 'macbook pro laptop'], qByOpt: 'modele', photos: [2, 4],
   }),
   V('informatique', 6, {
     title: 'PC portable {marque} {modele} {ecran}" {proc}',
@@ -231,7 +231,7 @@ module.exports = [
     attrs: { plateforme: '{plateforme}', type_produit: 'Jeu' },
     opts: { nb: [4, 5, 6], plateforme: ['PlayStation 5', 'PlayStation 4', 'Nintendo Switch', 'Xbox Series', 'Xbox One', 'PlayStation 4'], liste: ['God of War Ragnarök, Spider-Man 2, Gran Turismo 7, FC 24', 'The Last of Us 2, Uncharted 4, Horizon, Red Dead 2, GTA V', 'Mario Odyssey, Luigi\'s Mansion 3, Pokémon Violet, Kirby, Mario Party', 'Forza Horizon 5, Halo Infinite, Starfield, FC 24', 'Gears 5, Forza 4, Fallout 4, Sea of Thieves', 'FIFA 21, Assassin\'s Creed Valhalla, Ghost of Tsushima, Spider-Man'] },
     pair: { plateforme: 'liste' },
-    q: ['video game cases stack', 'playstation games collection'], photos: [2, 3],
+    q: ['playstation 4 games', 'playstation 4 games', 'nintendo switch console games', 'xbox games controller', 'xbox games controller', 'playstation 4 games'], qByOpt: 'plateforme', qFallback: ['video game cases stack'], photos: [2, 3],
   }),
   V('image-son', 5, {
     title: 'TV {marque} {pouces}" {techno} 4K',
@@ -249,7 +249,7 @@ module.exports = [
     attrs: { type_produit: '{typeAttr}', marque: '{marque}' },
     opts: { produit: ['Casque', 'Enceinte', 'Appareil photo', 'Barre de son', 'Vidéoprojecteur'], typeAttr: ['Casque / Écouteurs', 'Enceinte', 'Appareil photo', 'Home cinéma', 'Vidéoprojecteur'], marque: ['Sony', 'Sonos', 'Canon', 'Samsung', 'Epson'], modele: ['WH-1000XM5', 'Era 100', 'EOS R50 + 18-45 mm', 'HW-Q700', 'EH-TW7100'], detail: ['réduction de bruit, 30 h d\'autonomie', 'Wi-Fi et Bluetooth, stéréo', 'hybride 24 Mpx, 1 200 déclenchements', '3.1.2 Dolby Atmos avec caisson', '4K PRO-UHD, 3 000 lumens, 400 h'], etat: ['Aucune trace.', 'Comme neuve.', 'Capteur nettoyé.', 'Très bon état.', 'Lampe à 15 % d\'usure.'], inclus: ['Étui et câbles inclus.', 'Câble d\'alimentation.', 'Batterie supplémentaire et sac.', 'Télécommande et câble HDMI.', 'Télécommande et câble.'] },
     pair: { produit: 'typeAttr', produit2: 'marque', produit3: 'modele', produit4: 'detail', produit5: 'etat', produit6: 'inclus' },
-    q: ['sony headphones noise cancelling', 'sonos speaker shelf', 'canon mirrorless camera', 'soundbar tv', 'home projector'], qByOpt: 'produit', photos: [2, 3],
+    q: ['sony headphones noise cancelling', 'sonos speaker shelf', 'canon mirrorless camera', 'soundbar speaker', 'home projector'], qByOpt: 'produit', photos: [2, 3],
   }),
   V('image-son', 5, {
     title: '{produit} {marque}, {detail}',
@@ -359,7 +359,7 @@ module.exports = [
     attrs: { type_velo: 'Route', taille_cadre: '{taille}', roues: '28"', materiau: '{Materiau}', marque: '{marque}' },
     opts: { marque: ['Triban', 'Trek', 'Canyon', 'Specialized'], modele: ['RC 520', 'Domane AL 3', 'Endurace CF 7', 'Allez Sprint'], taille: ['M', 'L', 'S'], materiau: ['aluminium', 'aluminium', 'carbone', 'aluminium'], groupe: ['Shimano 105', 'Shimano Tiagra', 'Shimano Ultegra', 'Shimano 105'], roues: ['Mavic Aksium', 'Bontrager', 'DT Swiss', 'Roval'], km: [3000, 5000, 4200, 2500], etat: ['jamais tombé', 'quelques éclats de peinture', 'très bon état'], pedales: ['Look Keo', 'Shimano SPD', 'automatiques'] },
     pair: { marque: 'modele', marque2: 'materiau', marque3: 'groupe', marque4: 'roues' },
-    q: ['road bike carbon', 'road bicycle wall'], photos: [2, 3],
+    q: ['road bike carbon'], photos: [2, 3],
   }),
   V('velos', 4, {
     title: 'Vélo enfant {marque} {roues} pouces, {age}',
@@ -377,7 +377,7 @@ module.exports = [
     attrs: { age: '{age}', type_jouet: 'Construction', marque: 'Lego' },
     opts: { theme: ['Technic', 'Star Wars', 'Harry Potter', 'City', 'Creator Expert'], set: ['Bugatti Chiron', 'Faucon Millenium', 'Château de Poudlard', 'Caserne de pompiers', 'Fleuriste'], pieces: [3599, 1353, 6020, 509, 2350], age: ['10 ans et plus', '10 ans et plus', '10 ans et plus', '6-9 ans', '10 ans et plus'], boite: [' et boîte', '', ' et boîte d\'origine'] },
     pair: { theme: 'set', theme2: 'pieces', theme3: 'age' },
-    q: ['lego technic car', 'lego star wars', 'lego harry potter castle', 'lego city set', 'lego creator building'], qByOpt: 'theme', photos: [2, 3],
+    q: ['lego bricks set', 'lego bricks close up'], photos: [2, 3],
   }),
   V('jeux-jouets', 5, {
     title: '{jouet}, {detail}',
