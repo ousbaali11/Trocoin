@@ -4060,3 +4060,7 @@ et 2, base réensemencée par le scénario e2e), passage automatisé de toutes l
 
 - Typecheck API et front : 0 erreur. `phase45` 6/6. Crawl : `crawl73.json` (116 visites, 149 liens) ; entrées aberrantes : `fuzz73.log` (18 cas).
 - Page de confirmation d'e-mail revérifiée à 375 px après reconstruction du front : largeur 375, aucun défilement.
+
+**Production 1.46.0 — 25 septembre 2026, 13 h 16 UTC.** CI verte (six étapes). `/health` : `version 1.46.0`,
+`paymentIssues 3`, `paymentEnvironment` inchangé. Fin de l'audit complet n° 2 : quatre livraisons (1.44.0, 1.45.0,
+1.46.0), résultat point par point dans `docs/audit-2.md`.
