@@ -22,7 +22,7 @@ test('jeton invalide, connecté : message clair et bouton de renvoi sur la page 
   await expect(renew.getByRole('button', { name: /Renvoyer dans \d+ s/ })).toBeDisabled();
 });
 
-test('jeton invalide, anonyme : message clair et bouton « Se connecter pour recevoir un nouveau lien » qui revient sur cette page', async ({ page }) => {
+test('jeton invalide, anonyme : message clair et bouton « Me connecter » qui revient sur cette page', async ({ page }) => {
   await page.goto('/confirmer-email?token=' + 'y'.repeat(43));
   await expect(page.getByTestId('confirm-email-invalid')).toContainText("Ce lien n'est plus valable");
   const login = page.getByTestId('confirm-email-login');

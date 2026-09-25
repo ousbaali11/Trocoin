@@ -46,6 +46,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     // Erreurs multer (taille, nombre de fichiers) : message utile, pas de détail interne
     const anyErr = exception as { code?: string; message?: string; stack?: string };
+    // AUDIT §73 : corps JSON au-delà de la limite (body-parser : PayloadTooLargeError, pas une HttpException) → 413 clair, plus « Erreur interne »
+    if ((anyErr as { type?: string; status?: number })?.type === 'entity.too.large' || (anyErr as { status?: number })?.status === 413) {
+      return res.status(413).json({ statusCode: 413, message: 'Corps de requête trop volumineux.' });
+    }
     if (anyErr?.code === 'LIMIT_FILE_SIZE') {
       return res
         .status(413)

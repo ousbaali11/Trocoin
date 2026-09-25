@@ -39,7 +39,8 @@ export function ConfirmEmailPanel() {
       ) : (
         <>
           <p style={{ margin: "0 0 10px" }}>Connectez-vous pour recevoir un nouveau lien : le bouton d&apos;envoi apparaîtra ici.</p>
-          <Link className="btn btn-primary" href="/connexion?next=/confirmer-email" data-testid="confirm-email-login">Se connecter pour recevoir un nouveau lien</Link>
+          {/* AUDIT §73 : libellé court — l'ancien débordait de l'écran à 375 px (bouton sans retour à la ligne) */}
+          <Link className="btn btn-primary" href="/connexion?next=/confirmer-email" data-testid="confirm-email-login">Me connecter</Link>
         </>
       )}
     </div>

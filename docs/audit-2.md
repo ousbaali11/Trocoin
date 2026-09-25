@@ -91,6 +91,21 @@ orphelins — ces derniers n'ont d'ailleurs aucune route : balayage interne, ré
 | Décisions admin : rembourser / libérer / annuler prises de façon atomique avant tout mouvement d'argent ; « annuler » possible sur un paiement ou une page de paiement inconnus du prestataire ; remboursement forcé quand l'admin supprime un compte avec des ventes sous séquestre ; suppression bloquée si une vente est expédiée ou en litige (suspension réversible possible) | **conforme** |
 | Suspension : ventes en cours conservées (l'autre partie n'est pas lésée), aucune nouvelle vente possible (corrigé ci-dessus) | **conforme** après 1.45.0 |
 
+## D ter. Passage page par page (livraison 4)
+
+Méthode du §63 rejouée sur la pile locale reconstruite (API et front à jour, base réensemencée) : les 49 pages du front
+visitées en bureau (1280 px) et sur mobile (375 px), en visiteur, en membre et en administrateur — 116 visites — avec
+relevé du statut HTTP, des erreurs console, des requêtes en échec (hors 401 attendus), du défilement horizontal, et
+vérification de chaque lien interne rencontré (149 liens distincts).
+
+| Point | Verdict |
+|---|---|
+| Statuts : 112 pages en 200, 4 en 404 attendus (page inventée, annonce inexistante) ; espace membre et console redirigés vers la connexion (`?next=`) pour un visiteur ; `/admin` renvoyé à l'accueil pour un membre | **conforme** |
+| Erreurs console et requêtes en échec : aucune (hors le 404 de la page elle-même sur les pages inexistantes) | **conforme** |
+| Liens morts : 0 sur 149 liens internes (en-tête, pied de page, menus compte et console, contenu des pages) | **conforme** |
+| Défilement horizontal sur mobile : 1 page — `/confirmer-email` sans jeton, bouton « Se connecter pour recevoir un nouveau lien » trop long à 375 px | **corrigé (1.46.0)** : libellé « Me connecter » (largeur 375 px vérifiée après reconstruction) |
+| Formulaires « qui acceptent n'importe quoi » : 18 entrées aberrantes envoyées à l'API (téléphone étranger, mot de passe court, type de compte inventé, champs injectés `isDemoAccount` / `userId` / `status`, prix négatif ou 10⁹, titre de 5 000 caractères, catégorie inconnue, balise script, message de 10 000 caractères, note 9, identifiant non UUID, pagination 100 000, tri injecté, JSON invalide, corps de 3 Mo) | **conforme** : tout est refusé en 400 avec un message clair ou ignoré (champs inconnus retirés, jamais appliqués : le propriétaire, le statut et le drapeau démo restent ceux du serveur ; la balise script est stockée comme du texte et échappée à l'affichage, y compris dans les données structurées) ; **corrigé (1.46.0)** : un corps de 3 Mo produisait « Erreur interne » (500) → 413 « Corps de requête trop volumineux » |
+
 ## E. Ce qui a été volontairement laissé de côté (toujours identifié, jamais oublié)
 
 | Point | Où c'est documenté | Verdict |

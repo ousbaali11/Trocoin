@@ -35,6 +35,18 @@ describe('Phase 45 : vendeur suspendu, courses, formules payantes, fuites mineur
   });
   afterAll(async () => { await app.close(); });
 
+  it('corps de requête trop volumineux : 413 clair (avant : « Erreur interne » 500) ; champs inconnus ignorés (userId, status, isDemoAccount)', async () => {
+    const seller = await login(app);
+    const huge = await request(server).post('/listings').set(seller.auth).set('Content-Type', 'application/json').send(JSON.stringify({ title: 'x', description: 'y'.repeat(600_000), categorySlug: 'ameublement', price: 1 }));
+    expect(huge.status).toBe(413);
+    expect(huge.body.message).toMatch(/volumineux/);
+    const forged = await request(server).post('/listings').set(seller.auth).send({ title: 'Champs inconnus', description: 'Les champs inconnus sont ignorés, jamais appliqués.', categorySlug: 'ameublement', price: 10, status: 'vendue', userId: '00000000-0000-4000-8000-000000000000', isDemoAccount: true });
+    expect(forged.status).toBe(201);
+    const stored = (await listings.findOne({ where: { id: forged.body.id } }))!;
+    expect(stored.userId).toBe(seller.id);
+    expect(stored.status).not.toBe('vendue');
+  });
+
   it('vendeur suspendu : son membre de boutique ne remet rien en ligne ni ne dépose en son nom, l\'admin ne peut pas approuver son annonce, un acheteur ne peut pas payer', async () => {
     const owner = await login(app);
     await request(server).post('/users/me/become-pro').set(owner.auth).send({ siret: '73282932000074', shopName: 'Boutique Suspendue' }).expect(201);

@@ -4033,3 +4033,30 @@ Images de conversation servies sans connexion (noms imprévisibles) ; pas de tab
 - Typecheck API : 0 erreur. `phase45` 5/5. Régression : phase26, 18, 25, 12, 13, listings, 16, 36 → 89/89 ; `phase2` adapté
   (formule payante refusée 503 quand la monétisation est activée, quota maintenu) → 60/60. 246 tests API au total.
 - Migration `1789640000000-AvisUniqueParVente` jouée par la CI (PostgreSQL 16) puis par Render au déploiement.
+
+**Production 1.45.0 — 25 septembre 2026, 12 h 58 UTC.** CI verte (six étapes, migration `1789640000000` jouée sur
+PostgreSQL 16 puis par Render). `/health` : `version 1.45.0`, `paymentIssues 3` (inchangé), `paymentEnvironment` inchangé
+(compte …Mw96, mode test, aucun changement constaté).
+
+## 73 (fin). Audit complet n° 2 — livraison 4 : passage page par page, formulaires — 25 septembre 2026
+
+Résultat dans `docs/audit-2.md` (partie D ter). Pile locale reconstruite (API et front avec les correctifs des livraisons 1
+et 2, base réensemencée par le scénario e2e), passage automatisé de toutes les pages : 49 pages × (bureau 1280 px, mobile
+375 px) × (visiteur, membre, administrateur) = **116 visites**, 149 liens internes vérifiés.
+
+- **Conforme** : 112 pages en 200 et 4 en 404 attendus ; visiteur redirigé vers la connexion avec `?next=` sur tout
+  l'espace membre et la console ; membre renvoyé à l'accueil sur `/admin` ; aucune erreur console ni requête en échec ;
+  aucun lien mort.
+- **Corrigé (1.46.0)** : `/confirmer-email` sans jeton débordait de l'écran à 375 px (bouton au libellé trop long, sans
+  retour à la ligne) → « Me connecter » ; largeur revérifiée après reconstruction (375 px, aucun défilement).
+- **Formulaires** : 18 entrées aberrantes envoyées aux formulaires clés (inscription, dépôt et modification d'annonce,
+  message, avis, ventes, recherche, JSON invalide, corps de 3 Mo). Tout est refusé en 400 avec un message en français, ou
+  ignoré sans effet (champs inconnus retirés par la validation : `userId`, `status`, `isDemoAccount` ne sont jamais
+  appliqués — vérifié en base ; balise `<script>` stockée comme texte et échappée partout, données structurées comprises).
+  **Corrigé (1.46.0)** : un corps de 3 Mo finissait en « Erreur interne » (500, journal d'erreur) → 413 « Corps de requête
+  trop volumineux ». Test `phase45` étendu (413, champs inconnus).
+
+### Vérification
+
+- Typecheck API et front : 0 erreur. `phase45` 6/6. Crawl : `crawl73.json` (116 visites, 149 liens) ; entrées aberrantes : `fuzz73.log` (18 cas).
+- Page de confirmation d'e-mail revérifiée à 375 px après reconstruction du front : largeur 375, aucun défilement.
