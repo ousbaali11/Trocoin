@@ -82,12 +82,14 @@ export class UsersController {
 
   /** Retour au compte particulier (AUDIT §68) : réversible depuis Paramètres, données d'entreprise effacées. */
   @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { limit: 5, ttl: 3_600_000 } }) // AUDIT §73 : bascule de type de compte limitée (registre des entreprises appelé)
   @Post('me/become-individual')
   async becomeIndividual(@Req() req: any) {
     return this.sanitizeSelf(await this.usersService.becomeIndividual(req.user.userId));
   }
 
   @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { limit: 5, ttl: 3_600_000 } })
   @Post('me/become-pro')
   async becomePro(@Req() req: any, @Body() dto: BecomeProDto) {
     const user = await this.usersService.becomePro(req.user.userId, dto.siret, dto.shopName);

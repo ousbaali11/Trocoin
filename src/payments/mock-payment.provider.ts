@@ -47,6 +47,15 @@ export class MockPaymentProvider implements IPaymentProvider {
   async inspect(providerPaymentId: string) {
     return { state: this.states.get(providerPaymentId) ?? ('autorisee' as const) };
   }
+  /** AUDIT §73 : empreinte d'environnement simulée (les tests la font varier pour simuler un changement de clés). */
+  fingerprint = { id: 'acct_mock_platform', livemode: false };
+  async environmentFingerprint(): Promise<{ id: string; livemode: boolean }> {
+    return { ...this.fingerprint };
+  }
+  /** Tout identifiant qui ne vient pas de ce fournisseur (`pi_…`, `cs_…` d'un autre environnement) lui est inconnu. */
+  async assertKnown(providerPaymentId: string): Promise<void> {
+    if (!providerPaymentId.startsWith('mock_')) throw new PaymentProviderError('paiement_absent', `Paiement ${providerPaymentId} inconnu du prestataire (simulé) : il appartient à un autre environnement.`);
+  }
   /** Présent seulement en mode hébergé : c'est sa présence qui fait naître la transaction « en_attente ». */
   createCheckout?: (params: CreateCheckoutParams) => Promise<CheckoutResult>;
 
@@ -83,6 +92,7 @@ export class MockPaymentProvider implements IPaymentProvider {
   }
 
   async syncCheckout(providerSessionId: string): Promise<CheckoutSync> {
+    await this.assertKnown(providerSessionId);
     const s = this.sessions.get(providerSessionId);
     if (!s || s.state === 'expiree') return { status: 'annulee' };
     if (s.state === 'payee') return { status: 'sequestre', providerPaymentId: `mock_pi_${s.id.slice(8)}`, paymentMethodType: 'card', captureBefore: new Date(Date.now() + 7 * 86_400_000) };
@@ -117,6 +127,7 @@ export class MockPaymentProvider implements IPaymentProvider {
   }
 
   async reverseTransfer(transferId: string) {
+    if (!transferId.startsWith('mock_')) throw new Error(`No such transfer: '${transferId}' (simulé : virement d'un autre environnement)`);
     this.logger.log(`Annulation de virement simulée : ${transferId}`);
   }
 }

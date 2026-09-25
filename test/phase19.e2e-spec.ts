@@ -77,7 +77,9 @@ describe('Domaine trocoin.fr', () => {
       expect(res.body.siteUrl).toMatch(/^https?:\/\//);
       // Aucune clé de configuration (origines, secrets, hôte de base) : seulement l'état, la version et la base des liens
       // AUDIT §65 : `paymentIssues` (nombre de ventes à traiter, jamais leur contenu) et, avec Stripe, la présence des secrets de webhook
-      expect(Object.keys(res.body).filter((k) => !['databaseRegion', 'stripeWebhooks'].includes(k)).sort()).toEqual(['database', 'paymentIssues', 'siteUrl', 'status', 'uptimeSeconds', 'version'].sort());
+      // AUDIT §73 : `paymentEnvironment` (compte du prestataire abrégé, mode, changement constaté) — jamais l'identifiant complet
+      expect(Object.keys(res.body).filter((k) => !['databaseRegion', 'stripeWebhooks'].includes(k)).sort()).toEqual(['database', 'paymentEnvironment', 'paymentIssues', 'siteUrl', 'status', 'uptimeSeconds', 'version'].sort());
+      expect(JSON.stringify(res.body.paymentEnvironment)).not.toMatch(/acct_[a-z0-9]{6,}/i);
       expect(typeof res.body.paymentIssues).toBe('number');
     });
   });

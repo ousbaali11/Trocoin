@@ -108,6 +108,15 @@ export class SettingsService implements OnModuleInit {
     };
   }
 
+  /** Valeurs internes (AUDIT §73 : empreinte du prestataire de paiement) — jamais exposées ni modifiables depuis la console. */
+  async readInternal<T>(key: string): Promise<T | undefined> {
+    const row = await this.settingsRepo.findOne({ where: { key } });
+    return row ? (row.value as T) : undefined;
+  }
+  async writeInternal(key: string, value: unknown): Promise<void> {
+    await this.settingsRepo.save(this.settingsRepo.create({ key, value }));
+  }
+
   async set(key: string, value: unknown, updatedBy?: string) {
     if (!Object.values(SETTING_KEYS).includes(key as any)) throw new BadRequestException(`Réglage inconnu : ${key}`);
     await this.settingsRepo.save(this.settingsRepo.create({ key, value, updatedBy }));

@@ -73,6 +73,14 @@ describe('Phase 43 : catalogue de démonstration', () => {
     expect(creds.body.items[0].password).toMatch(/-Tr0c$/);
     const again = await request(server).post('/admin/demo-catalogue/credentials').set(admin.auth).expect(200);
     expect(again.body.items).toEqual([]);
+    // AUDIT §73 : identifiants perdus (API endormie avant la lecture) → nouveaux mots de passe pour tous les comptes démo, remis une fois, utilisables
+    const regenerated = await request(server).post('/admin/demo-catalogue/credentials/regenerate').set(admin.auth).expect(200);
+    expect(regenerated.body.items.length).toBe(demoUsers.length);
+    for (const c of regenerated.body.items) expect(c.password).toMatch(/-Tr0c$/);
+    expect(regenerated.body.items.map((c: any) => c.password)).not.toEqual(creds.body.items.map((c: any) => c.password));
+    const first = regenerated.body.items[0];
+    await request(server).post('/auth/login').send({ identifier: first.email, password: first.password }).expect(200);
+    await request(server).post('/auth/login').send({ identifier: first.email, password: creds.body.items.find((c: any) => c.email === first.email).password }).expect(401);
     // Reprise : rien n'est recréé
     const second = await demo.runNow({ limit: 12 });
     expect(second.listings.created).toBe(0);

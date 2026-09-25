@@ -101,7 +101,8 @@ export class ShippingService {
   async pickupOptions(listingId: string, postalCode: string, city?: string, part: 'all' | 'points' | 'prices' = 'all'): Promise<{ postalCode: string; part: 'all' | 'points' | 'prices'; carriers: CarrierPickupOptions[]; unavailableReason?: string }> {
     if (!/^\d{5}$/.test(postalCode)) throw new BadRequestException('Code postal à 5 chiffres requis.');
     const listing = await this.listings.findOne({ where: { id: listingId } });
-    if (!listing || !listing.deliveryAvailable) throw new NotFoundException("Cette annonce ne propose pas l'envoi.");
+    // AUDIT §73 : seule une annonce en ligne est cotée (avant : brouillon, vendue ou archivée cotés par quiconque connaissait l'identifiant)
+    if (!listing || listing.status !== 'en_ligne' || !listing.deliveryAvailable) throw new NotFoundException("Cette annonce ne propose pas l'envoi.");
     const parcel = parcelOf(listing);
     if (!parcel || !listing.postalCode) return { postalCode, part, carriers: [], unavailableReason: NO_WEIGHT_MESSAGE };
     // AUDIT §61 : les deux transporteurs, et pour chacun le tarif et les points, sont demandés EN MÊME TEMPS (avant :

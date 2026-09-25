@@ -30,6 +30,7 @@ import { StripeConnectService } from '../users/stripe-connect.service';
 import { UsersService } from '../users/users.service';
 import { CheckoutSync, IPaymentProvider, PaymentProviderError, PaymentState } from './payment-provider.interface';
 import { payoutTrace, tracePayoutError } from './payout-trace';
+import { PAYMENT_ENVIRONMENT_KEY, paymentEnvironmentTrace, PaymentEnvironmentTrace } from './environment-trace';
 import { CHECKOUT_TTL_MINUTES, PAYMENT_PROVIDER } from './payments.constants';
 import { countSignatures, traceWebhookAccepted, traceWebhookRejected } from './webhook-trace';
 import { ChosenPickupPoint, DeliveryAddress, DeliveryMethod, DeliveryMode, Transaction, TransactionStatus } from './transaction.entity';
@@ -106,8 +107,75 @@ export class PaymentsService implements OnApplicationBootstrap {
   onApplicationBootstrap() {
     if (process.env.NODE_ENV === 'test' || process.env.ESCROW_RUN_ON_BOOT === '0') return;
     setTimeout(() => {
-      this.runEscrowSchedule().catch((e) => this.logger.error(`Échéances au démarrage : ${(e as Error).message}`));
+      // AUDIT §73 : l'environnement du prestataire est contrôlé AVANT de rejouer les échéances (les ventes d'un autre
+      // environnement sont signalées d'un coup, au lieu d'échouer une à une)
+      this.checkPaymentEnvironment()
+        .catch((e) => this.logger.error(`Contrôle de l'environnement du prestataire : ${(e as Error).message}`))
+        .then(() => this.runEscrowSchedule())
+        .catch((e) => this.logger.error(`Échéances au démarrage : ${(e as Error).message}`));
     }, 8_000).unref();
+  }
+
+  /**
+   * AUDIT §73 : empreinte de l'environnement du prestataire (compte plateforme + mode) comparée à celle mémorisée en base.
+   * Deux incidents (§65, §67, §70) venaient d'identifiants créés dans un ancien environnement de test et retrouvés plus tard,
+   * un par un, par des échecs silencieux. Désormais : changement constaté au démarrage → ventes ouvertes vérifiées tout de
+   * suite chez le prestataire (celles qu'il ne connaît plus sont signalées « paiement inconnu », plus de nouvel essai
+   * automatique), administrateurs prévenus, trace dans `/health.paymentEnvironment`. Les comptes de versement sont couverts
+   * par le balayage des comptes orphelins (§67), rejoué 20 s après le démarrage.
+   */
+  async checkPaymentEnvironment(): Promise<PaymentEnvironmentTrace> {
+    const trace = paymentEnvironmentTrace;
+    if (!this.paymentProvider.environmentFingerprint) return trace;
+    const now = new Date().toISOString();
+    let fingerprint: { id: string; livemode: boolean };
+    try {
+      fingerprint = await this.paymentProvider.environmentFingerprint();
+    } catch (e) {
+      trace.error = `empreinte illisible : ${(e as Error).message}`.slice(0, 200);
+      trace.checkedAt = now;
+      return trace;
+    }
+    const previous = await this.settings.readInternal<{ id: string; livemode: boolean; since: string }>(PAYMENT_ENVIRONMENT_KEY);
+    trace.checkedAt = now;
+    trace.accountLast4 = fingerprint.id.slice(-4);
+    trace.livemode = fingerprint.livemode;
+    trace.error = null;
+    const changed = !!previous && (previous.id !== fingerprint.id || previous.livemode !== fingerprint.livemode);
+    if (changed) {
+      trace.changedAt = now;
+      trace.previousLast4 = previous!.id.slice(-4);
+      this.logger.warn(`Environnement du prestataire de paiement changé : compte …${trace.previousLast4} (${previous!.livemode ? 'réel' : 'test'}, depuis ${previous!.since}) → …${trace.accountLast4} (${fingerprint.livemode ? 'réel' : 'test'}). Vérification des ventes ouvertes.`);
+      const sweep = await this.sweepOpenSales();
+      trace.sweep = { ...sweep, at: now };
+      for (const adminId of await this.usersService.findAdminIds()) {
+        await this.notifications.notify(adminId, { type: 'transaction', title: 'Environnement du prestataire de paiement changé', body: `Le compte plateforme …${trace.accountLast4} (mode ${fingerprint.livemode ? 'réel' : 'test'}) remplace …${trace.previousLast4}. ${sweep.checked} vente(s) ouverte(s) vérifiée(s), ${sweep.flagged} signalée(s) « paiement inconnu du prestataire » à trancher. Les comptes de versement sont revérifiés par le balayage des comptes orphelins.`, link: '/admin/litiges' });
+      }
+    }
+    if (!previous || changed) await this.settings.writeInternal(PAYMENT_ENVIRONMENT_KEY, { id: fingerprint.id, livemode: fingerprint.livemode, since: now });
+    return trace;
+  }
+
+  /**
+   * Ventes ouvertes dont le paiement doit encore exister chez le prestataire (page de paiement en attente, séquestre,
+   * expédiée, litige, confirmée sans virement) : celles qu'il ne connaît plus sont signalées une fois (`paymentIssue`).
+   */
+  async sweepOpenSales(): Promise<{ checked: number; flagged: number }> {
+    if (!this.paymentProvider.assertKnown) return { checked: 0, flagged: 0 };
+    const open = await this.transactionsRepo.find({ where: { status: In(['en_attente', 'sequestre', 'livree', 'litige', 'confirme']), paymentIssue: IsNull(), providerPaymentId: Not(IsNull()) }, order: { createdAt: 'ASC' }, take: 500 });
+    let checked = 0;
+    let flagged = 0;
+    for (const tx of open) {
+      if (tx.status === 'confirme' && tx.transferId && !tx.transferId.startsWith('en-cours:')) continue; // vendeur déjà payé : plus rien à demander
+      checked += 1;
+      try {
+        await this.paymentProvider.assertKnown(tx.providerPaymentId!);
+      } catch (err) {
+        if (await this.flagPaymentIssue(tx, err, "vérification après changement d'environnement du prestataire")) flagged += 1;
+        else this.logger.warn(`Vente ${tx.id} : vérification impossible (${(err as Error).message})`);
+      }
+    }
+    return { checked, flagged };
   }
 
   /**
@@ -146,7 +214,9 @@ export class PaymentsService implements OnApplicationBootstrap {
   private async flagPaymentIssue(tx: Transaction, err: unknown, step: string): Promise<boolean> {
     if (!(err instanceof PaymentProviderError) || !['paiement_absent', 'autorisation_expiree'].includes(err.code)) return false;
     const issue = `${step} : ${err.message}`;
-    await this.transactionsRepo.update({ id: tx.id, paymentIssue: IsNull() }, { paymentIssue: issue, paymentIssueAt: new Date() });
+    const res = await this.transactionsRepo.update({ id: tx.id, paymentIssue: IsNull() }, { paymentIssue: issue, paymentIssueAt: new Date() });
+    tx.paymentIssue = tx.paymentIssue ?? issue;
+    if (res.affected === 0) return true; // AUDIT §73 : déjà signalée (retour de l'acheteur, webhook, balayage) — pas de seconde alerte
     this.logger.warn(`Transaction ${tx.id} signalée à l'administration (plus de nouvel essai automatique) — ${issue}`);
     for (const adminId of await this.usersService.findAdminIds()) {
       await this.notifications.notify(adminId, { type: 'transaction', title: 'Vente à traiter : paiement inconnu du prestataire', body: `Transaction ${tx.id.slice(0, 8)} (${tx.status}, ${tx.amount} €) : ${err.message} Tranchez-la depuis la console (annuler, rembourser ou réessayer).`, link: `/admin/litiges/${tx.id}` });
@@ -593,6 +663,11 @@ export class PaymentsService implements OnApplicationBootstrap {
         tx.transferId = null;
         tx.transferredAt = null;
       } catch (e) {
+        // AUDIT §73 : virement d'un autre environnement ou déjà versé au vendeur — l'argent est à récupérer à la main,
+        // l'administration est prévenue (avant : une ligne de journal que personne ne lisait)
+        for (const adminId of await this.usersService.findAdminIds()) {
+          await this.notifications.notify(adminId, { type: 'transaction', title: 'Virement au vendeur à récupérer à la main', body: `Vente ${tx.id.slice(0, 8)} : l'acheteur est remboursé mais le virement ${tx.transferId} n'a pas pu être annulé chez le prestataire (${(e as Error).message.slice(0, 120)}). Récupérez la somme auprès du vendeur ou depuis le tableau de bord du prestataire.`, link: `/admin/litiges/${tx.id}` });
+        }
         this.logger.error(`Transaction ${tx.id} : annulation du virement ${tx.transferId} impossible (${(e as Error).message}) — remboursement de l'acheteur maintenu, virement à récupérer à la main`);
       }
     }
@@ -873,12 +948,16 @@ export class PaymentsService implements OnApplicationBootstrap {
    */
   async syncPending(tx: Transaction): Promise<{ tx: Transaction; checkoutUrl?: string }> {
     if (tx.status !== 'en_attente') return { tx };
+    if (tx.paymentIssue) return { tx }; // AUDIT §73 : page de paiement inconnue du prestataire, à trancher par l'administration
     const expired = new Date(tx.createdAt).getTime() < Date.now() - PENDING_TTL_MS - 5 * 60_000;
     let sync: CheckoutSync = { status: expired ? 'annulee' : 'en_attente' };
     if (this.paymentProvider.syncCheckout && tx.providerPaymentId) {
       try {
         sync = await this.paymentProvider.syncCheckout(tx.providerPaymentId);
       } catch (e) {
+        // AUDIT §73 : page de paiement d'un autre environnement (« No such checkout.session ») → signalée à l'administration
+        // au lieu d'être passée « annulée : paiement non finalisé » alors que l'acheteur a peut-être payé
+        if (await this.flagPaymentIssue(tx, e, 'relecture de la page de paiement')) return { tx };
         this.logger.warn(`Relecture du paiement ${tx.id} impossible : ${(e as Error).message}`);
         if (!expired) return { tx };
       }
@@ -906,7 +985,7 @@ export class PaymentsService implements OnApplicationBootstrap {
   /** Pages de paiement abandonnées : relues puis annulées toutes les 10 minutes. */
   @Cron('*/10 * * * *')
   async expirePendingCheckouts(): Promise<number> {
-    const stale = await this.transactionsRepo.find({ where: { status: 'en_attente', createdAt: LessThan(new Date(Date.now() - PENDING_TTL_MS)) }, take: 50 });
+    const stale = await this.transactionsRepo.find({ where: { status: 'en_attente', paymentIssue: IsNull(), createdAt: LessThan(new Date(Date.now() - PENDING_TTL_MS)) }, take: 50 });
     let n = 0;
     for (const tx of stale) {
       const { tx: after } = await this.syncPending(tx);
@@ -1284,8 +1363,10 @@ export class PaymentsService implements OnApplicationBootstrap {
     if (!tx) throw new NotFoundException('Transaction introuvable.');
     if (tx.resolvedAt && ['rembourse', 'annulee'].includes(tx.status)) throw new ConflictException('Cette vente a déjà été tranchée.');
     const open = ['sequestre', 'livree', 'litige'].includes(tx.status);
+    // AUDIT §73 : page de paiement signalée « inconnue du prestataire » (autre environnement) : l'administration peut la clore
+    const flaggedPending = tx.status === 'en_attente' && !!tx.paymentIssue && decision === 'annuler';
     const refundableAfterCapture = tx.status === 'confirme' && !!tx.autoResolution && !!tx.disputeAllowedUntil && new Date(tx.disputeAllowedUntil).getTime() > Date.now();
-    if (!open && !(decision === 'rembourser' && refundableAfterCapture)) {
+    if (!open && !flaggedPending && !(decision === 'rembourser' && refundableAfterCapture)) {
       throw new BadRequestException(`Aucune décision possible sur une transaction "${tx.status}".`);
     }
     // AUDIT §69 : la décision prend la vente de façon atomique (`claim`) AVANT tout mouvement d'argent — sinon une confirmation

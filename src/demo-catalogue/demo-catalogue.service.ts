@@ -134,6 +134,24 @@ export class DemoCatalogueService {
     return this.state;
   }
 
+  /**
+   * AUDIT §73 : les identifiants ne vivent qu'en mémoire jusqu'à leur lecture ; si l'API s'est endormie (offre gratuite) ou a
+   * redémarré avant, ils sont perdus. Nouveaux mots de passe pour TOUS les comptes de démonstration, remis une seule fois
+   * (sessions ouvertes de ces comptes conservées : aucun membre réel n'est concerné).
+   */
+  async regenerateCredentials(): Promise<Array<{ name: string; email: string; username: string; password: string; phone: string }>> {
+    const users = await this.usersRepo.find({ where: { isDemoAccount: true, deletedAt: IsNull() }, order: { createdAt: 'ASC' } });
+    const items: Array<{ name: string; email: string; username: string; password: string; phone: string }> = [];
+    for (const u of users) {
+      const password = randomBytes(9).toString('base64url') + '-Tr0c';
+      await this.usersService.setPasswordHash(u.id, await hashPassword(password));
+      items.push({ name: `${u.firstName} ${u.lastName}`, email: u.email ?? '', username: u.username ?? '', password, phone: u.phoneNumber ?? '' });
+    }
+    this.pendingCredentials = [];
+    this.logger.log(`Catalogue de démonstration : mots de passe régénérés pour ${items.length} compte(s)`);
+    return items;
+  }
+
   /** Identifiants des comptes créés pendant l'exécution : lus une seule fois, puis effacés de la mémoire. */
   takeCredentials() {
     const out = this.pendingCredentials;

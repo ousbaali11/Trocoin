@@ -7,6 +7,7 @@ import { resolveSiteUrl } from '../config/env.validation';
 import { describeSecret, webhookTrace } from '../payments/webhook-trace';
 import { payoutSweep } from '../users/payout-sweep';
 import { payoutTrace } from '../payments/payout-trace';
+import { paymentEnvironmentTrace } from '../payments/environment-trace';
 
 /** Version lue dans package.json à l'exécution (pas d'import JSON : il déplacerait la sortie de tsc hors de dist/). */
 const packageVersion: string = (() => {
@@ -74,6 +75,8 @@ export class HealthController {
       // Webhooks du prestataire de paiement (AUDIT §65) : présence des secrets, jamais leur valeur
       // Ventes signalées « paiement inconnu du prestataire » en attente d'une décision de l'administration (AUDIT §65)
       paymentIssues: await this.paymentIssuesCount(),
+      // AUDIT §73 : environnement du prestataire (compte plateforme abrégé, mode, changement constaté, balayage des ventes ouvertes)
+      paymentEnvironment: paymentEnvironmentTrace,
       // AUDIT §69 : l'identifiant du compte de versement d'un membre n'est plus exposé en clair (4 derniers caractères)
       ...(process.env.PAYMENT_PROVIDER === 'stripe' ? { stripeWebhooks: { platform: !!process.env.STRIPE_WEBHOOK_SECRET, connectedAccounts: !!process.env.STRIPE_CONNECT_WEBHOOK_SECRET, platformSecretFormat: describeSecret(process.env.STRIPE_WEBHOOK_SECRET), connectedAccountsSecretFormat: describeSecret(process.env.STRIPE_CONNECT_WEBHOOK_SECRET), ...webhookTrace, lastAccountId: webhookTrace.lastAccountId ? `…${webhookTrace.lastAccountId.slice(-4)}` : null }, payoutAccounts: payoutSweep, payouts: { pending: await this.pendingPayoutsCount(), ...payoutTrace } } : {}),
     };

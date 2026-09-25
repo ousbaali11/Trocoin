@@ -251,6 +251,13 @@ aux administrateurs, compteur `paymentIssues` de `/health`) et ne les retente pl
 la console (« Annuler » — aucun mouvement d'argent possible — ou « Réessayer automatiquement » après avoir remis les
 bonnes clés). Ne changez d'environnement que sans vente ouverte, ou tranchez-les ensuite.
 
+**Détection automatique (AUDIT §73).** L'API mémorise l'empreinte de l'environnement du prestataire (compte plateforme +
+mode test/réel, réglage interne `payments.provider_environment`). Au démarrage, si elle a changé, toutes les ventes ouvertes
+sont vérifiées d'un coup chez Stripe : celles qu'il ne connaît plus (page de paiement ou paiement) sont signalées, les
+administrateurs prévenus, et `/health.paymentEnvironment` montre le compte abrégé, le mode, la date du changement et le
+résultat du balayage. Les comptes de versement sont couverts par le balayage des comptes orphelins (§67). Le passage au
+mode réel suivra le même chemin : les ventes de test encore ouvertes seront signalées, pas perdues en silence.
+
 Le retour de l'acheteur (`/compte/transactions/<id>?paiement=retour`) relit la session chez
 Stripe : le webhook n'est pas indispensable pour confirmer, mais il l'est pour les annulations
 et remboursements faits depuis le tableau de bord Stripe.

@@ -3918,3 +3918,66 @@ Suite du §71 : clé d'API Pexels déposée par le propriétaire dans `private/p
 démonstration. Le jeu de données complet (600 annonces, 1 692 photos Pexels) est embarqué dans l'image ; l'ensemencement
 attend le clic du propriétaire dans la console (« Créer le catalogue de démonstration », puis « Récupérer les
 identifiants »). Aucune clé Pexels dans le dépôt (valeur de la clé recherchée dans le diff indexé avant commit : absente).
+
+## 73. Audit complet n° 2 — livraison 1 : séquelles Stripe, catalogue de démonstration, secrets, points laissés de côté — 25 septembre 2026
+
+Demande : nouveau passage complet sans rien tenir pour acquis, après PayPal, le changement d'environnement Stripe, la
+réversibilité particulier / professionnel et le catalogue de démonstration. Résultat point par point (conforme / corrigé /
+à signaler) dans **`docs/audit-2.md`** ; cette section donne le détail technique et les preuves. Découpé en quatre
+livraisons (celle-ci : parties A, B, C et E du document ; puis routes et autorisations, argent et litiges, passage page
+par page).
+
+### Séquelles du changement d'environnement Stripe (1.44.0)
+
+Inventaire de tout ce qui garde un identifiant du prestataire en base : `transactions.providerPaymentId` (`cs_…` puis
+`pi_…`), `transactions.transferId` (`tr_…`), `users.stripeAccountId` (`acct_…`), `shipments.providerRef` (Boxtal) ; rien
+d'autre (pas de client, de charge, de remboursement, de méthode de paiement ni d'évènement webhook mémorisés ; PayPal
+simulé sans réseau). Aucune table ne notait l'environnement de création : la seule protection était de reconnaître
+« introuvable » après coup, et seulement pour les paiements (§65) et les comptes de versement (§67).
+
+- **Empreinte d'environnement** (`environmentFingerprint` : compte plateforme derrière la clé + mode test/réel), mémorisée en
+  base (réglage interne) et comparée 8 s après chaque démarrage, avant les échéances. Changement constaté → **balayage des
+  ventes ouvertes** (`sweepOpenSales` : en attente, séquestre, expédiée, litige, confirmée sans virement ; `assertKnown`
+  chez le prestataire), celles qu'il ne connaît plus signalées « paiement inconnu » une seule fois (plus de nouvel essai,
+  décision dans la console), administrateurs prévenus (nombre vérifié / signalé), trace `/health.paymentEnvironment`
+  (compte abrégé, mode, date, balayage — jamais l'identifiant complet). Même environnement au redémarrage → rien.
+- **Page de paiement d'un autre environnement** (`cs_…`, « No such checkout.session ») : avant, la relecture échouait puis
+  la vente passait « annulée : paiement non finalisé » au bout du délai, en silence, alors que l'acheteur avait peut-être
+  payé. Désormais `paiement_absent` comme pour un paiement → signalée une fois, la vente reste « en attente », plus aucun
+  appel au prestataire (retour de l'acheteur, tâche des pages abandonnées), l'administration peut la **clore** (« Annuler »
+  accepté sur une page de paiement signalée). Une vente déjà signalée ne déclenche plus de seconde alerte (`affected`).
+- **Annulation de virement impossible** lors d'un remboursement après versement (`tr_…` d'un autre environnement, ou solde
+  du vendeur insuffisant) : l'acheteur restait remboursé (bien) mais seul le journal le savait. Désormais notification
+  « Virement au vendeur à récupérer à la main » aux administrateurs, avec l'identifiant et la cause.
+- Test `phase44` (3 scénarios) : empreinte mémorisée puis changée → 2 ventes vérifiées, 1 signalée, 1 alerte, `/health`,
+  pas de rejeu au démarrage suivant ; page de paiement étrangère → signalée une fois, jamais annulée en silence, close par
+  l'administration ; remboursement avec virement étranger → remboursé + alerte.
+- À signaler : Boxtal (bac à sable) mérite la même empreinte le jour du passage en production ; pas de table de
+  déduplication des évènements webhook (traitements idempotents, état relu avant chaque effet).
+
+### Catalogue de démonstration avant activation
+
+Vérifié : `isDemoAccount` absent de toute réponse publique, aucune mention visible (seule la réponse automatique, voulue,
+dit que l'annonce est gérée par l'équipe), paiement refusé (devis, achat, bouton), numéro jamais exposé, double clic →
+409 pendant l'exécution puis reprise idempotente sans doublon. **Corrigé** : identifiants perdus si l'API s'endort ou
+redémarre avant leur lecture (mémoire seulement) → `POST /admin/demo-catalogue/credentials/regenerate` et bouton
+« Régénérer les mots de passe » (tous les comptes démo, remis une fois, journalisé, 3 / 10 min) ; limites de débit sur les
+écritures (`run` 10 / 10 min). Test `phase43` étendu (nouveaux mots de passe utilisables, anciens refusés).
+
+### Secrets et journaux
+
+Balayage du dépôt, de l'historique git et de la valeur exacte de la clé Pexels : aucune valeur réelle nulle part.
+**Corrigé** : Sentry ne reçoit plus les en-têtes (jeton de session), cookies ni chaîne de requête ; diagnostic Boxtal
+réservé aux administrateurs (longueur des clés, commande de test en bac à sable) ; `.gitignore` couvre `.env.*` (sauf
+l'exemple) et tout `data/`.
+
+### Points laissés de côté
+
+Toujours identifiés et documentés (tableau E de `docs/audit-2.md`) : vérification SMS à l'inscription, relecture
+juridique, clés Stripe et Boxtal réelles, PayPal Commerce Platform, badge « Réactif ».
+
+### Vérification
+
+- Typecheck API et front : 0 erreur. `phase44` 3/3, `phase43` 3/3 (régénération), `phase19` 5/5 (forme de `/health`).
+  Régression : phase41, 42, 38, 13, 36, 19, 3 → 71/71 ; phase34, 2, listings, 43, 20 → 79/79. 241 tests API au total.
+- Aucune clé dans le diff indexé (motifs connus + valeur exacte de la clé Pexels recherchés avant commit).

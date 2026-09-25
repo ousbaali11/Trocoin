@@ -68,6 +68,7 @@ export class StripePaymentProvider implements IPaymentProvider {
    */
   private readonly webhookSecrets: string[];
   private readonly logger = new Logger('Paiement(stripe)');
+  private readonly livemode: boolean;
 
   constructor(private config: ConfigService) {
     const key = this.config.get<string>('STRIPE_SECRET_KEY');
@@ -75,6 +76,7 @@ export class StripePaymentProvider implements IPaymentProvider {
       throw new Error('STRIPE_SECRET_KEY manquant : configurez-le dans .env pour utiliser PAYMENT_PROVIDER=stripe.');
     }
     this.stripe = new Stripe(key, { timeout: 20_000, maxNetworkRetries: 2 }); // AUDIT §69 : jamais 80 s d'attente
+    this.livemode = !/^(sk|rk)_test_/.test(key);
     this.webhookSecrets = [this.config.get<string>('STRIPE_WEBHOOK_SECRET'), this.config.get<string>('STRIPE_CONNECT_WEBHOOK_SECRET')].map((s) => (s || '').trim()).filter((s) => !!s);
     const connect = this.config.get<string>('STRIPE_CONNECT_WEBHOOK_SECRET') ? ', comptes connectés signés' : ', comptes connectés NON configurés (STRIPE_CONNECT_WEBHOOK_SECRET absent : account.updated ignoré)';
     this.logger.log(`Stripe ${key.startsWith('sk_test_') ? 'MODE TEST' : 'mode réel'} · webhook ${this.webhookSecrets.length ? 'signé' + connect : 'NON configuré (STRIPE_WEBHOOK_SECRET absent)'}`);
@@ -147,7 +149,7 @@ export class StripePaymentProvider implements IPaymentProvider {
   }
 
   async syncCheckout(providerSessionId: string): Promise<CheckoutSync> {
-    const session = await this.stripe.checkout.sessions.retrieve(providerSessionId, { expand: ['payment_intent', 'payment_intent.latest_charge'] });
+    const session = await this.retrieveSession(providerSessionId, { expand: ['payment_intent', 'payment_intent.latest_charge'] });
     const intent = session.payment_intent as Stripe.PaymentIntent | null;
     if (intent && (intent.status === 'requires_capture' || intent.status === 'succeeded')) {
       // Date limite de capture réelle (réseau de la carte, autorisation prolongée ou non) : pilote les échéances du séquestre
@@ -169,7 +171,7 @@ export class StripePaymentProvider implements IPaymentProvider {
 
   /** L'acheteur abandonne : la session Checkout est expirée chez Stripe (sans effet si elle l'est déjà ou si elle est payée). */
   async expireCheckout(providerSessionId: string): Promise<void> {
-    const session = await this.stripe.checkout.sessions.retrieve(providerSessionId);
+    const session = await this.retrieveSession(providerSessionId);
     if (session.status === 'open') await this.stripe.checkout.sessions.expire(providerSessionId);
   }
 
@@ -235,10 +237,39 @@ export class StripePaymentProvider implements IPaymentProvider {
     }
   }
 
+  /**
+   * Lecture d'une page de paiement (AUDIT §73) : « No such checkout.session » (identifiant d'un autre environnement) devient
+   * `paiement_absent`, comme pour un paiement — signalé une fois à l'administration au lieu d'une annulation silencieuse.
+   */
+  private async retrieveSession(id: string, params?: Stripe.Checkout.SessionRetrieveParams): Promise<Stripe.Checkout.Session> {
+    try {
+      return await this.stripe.checkout.sessions.retrieve(id, params);
+    } catch (err) {
+      const e = err as { code?: string; statusCode?: number; message?: string };
+      if (e?.code === 'resource_missing' || e?.statusCode === 404 || /No such checkout\.session/i.test(e?.message || '')) {
+        throw new PaymentProviderError('paiement_absent', `Page de paiement ${id} inconnue du prestataire (${e?.message || 'introuvable'}) : elle appartient à un autre environnement ou a été effacée.`);
+      }
+      throw err;
+    }
+  }
+
+  /** AUDIT §73 : compte plateforme derrière la clé courante + mode ; change quand les clés changent d'environnement. */
+  async environmentFingerprint(): Promise<{ id: string; livemode: boolean }> {
+    // Sans identifiant : le compte de la plateforme (la signature typée exige un identifiant, l'API l'accepte sans)
+    const account = await (this.stripe.accounts as unknown as { retrieve: () => Promise<Stripe.Account> }).retrieve();
+    return { id: account.id, livemode: this.livemode };
+  }
+
+  /** AUDIT §73 : le prestataire connaît-il encore cette page de paiement ou ce paiement ? (`paiement_absent` sinon) */
+  async assertKnown(providerPaymentId: string): Promise<void> {
+    if (providerPaymentId.startsWith('cs_')) await this.retrieveSession(providerPaymentId);
+    else await this.retrieveIntent(providerPaymentId);
+  }
+
   /** Identifiant de session de paiement encore présent (retour et webhook manqués) : on retrouve le paiement lui-même. */
   private async intentIdOf(providerPaymentId: string): Promise<string> {
     if (!providerPaymentId.startsWith('cs_')) return providerPaymentId;
-    const session = await this.stripe.checkout.sessions.retrieve(providerPaymentId);
+    const session = await this.retrieveSession(providerPaymentId);
     const pi = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id;
     if (!pi) throw new PaymentProviderError('paiement_absent', "Aucun paiement n'a été effectué sur cette page de paiement.");
     return pi;

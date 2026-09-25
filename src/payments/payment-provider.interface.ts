@@ -118,4 +118,11 @@ export interface IPaymentProvider {
   parseWebhook?(rawBody: Buffer, signature: string | undefined): PaymentWebhookEvent;
   /** État réel du paiement chez le prestataire (AUDIT §63). */
   inspect?(providerPaymentId: string): Promise<{ state: PaymentState; detail?: string }>;
+  /**
+   * AUDIT §73 : empreinte de l'environnement du prestataire (compte plateforme + mode test/réel). Comparée au démarrage à
+   * celle mémorisée : un changement de clés rend inconnus tous les identifiants enregistrés avant.
+   */
+  environmentFingerprint?(): Promise<{ id: string; livemode: boolean }>;
+  /** Vérifie que le prestataire connaît encore ce paiement (page de paiement ou paiement) ; sinon `paiement_absent`. */
+  assertKnown?(providerPaymentId: string): Promise<void>;
 }

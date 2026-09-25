@@ -17,7 +17,13 @@ if (SENTRY_ENABLED) {
     sendDefaultPii: false, // jamais de numéro de téléphone ni d'IP par défaut
     beforeSend(event) {
       // Filtre défensif : pas de corps de requête (peut contenir un code OTP)
-      if (event.request) delete event.request.data;
+      if (event.request) {
+        delete event.request.data;
+        // AUDIT §73 : ni en-têtes (Authorization : jeton de session), ni cookies, ni chaîne de requête
+        delete event.request.headers;
+        delete event.request.cookies;
+        delete event.request.query_string;
+      }
       return event;
     },
   });

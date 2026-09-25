@@ -81,21 +81,39 @@ export default function AdminDemoCataloguePage() {
       setBusy(false);
     }
   };
-  const takeCredentials = async () => {
-    if (!(await confirm({ title: "Récupérer les identifiants ?", text: "Ils ne sont remis qu'une seule fois : après lecture, ils sont effacés de la mémoire du serveur. Enregistrez le fichier tout de suite dans un endroit sûr (jamais dans le dépôt de code).", confirmLabel: "Afficher et télécharger" }))) return;
-    try {
-      const r = await api<{ items: Credential[] }>("/admin/demo-catalogue/credentials", { method: "POST", body: {} });
-      setCredentials(r.items);
-      const lines = ["# Comptes de démonstration Trocoin — à conserver hors du dépôt", "", "| Nom | E-mail (identifiant) | Pseudo | Mot de passe | Numéro (fictif) |", "|---|---|---|---|---|", ...r.items.map((c) => `| ${c.name} | ${c.email} | ${c.username} | \`${c.password}\` | ${c.phone} |`), ""];
+  const downloadCredentials = (items: Credential[]) => {
+      setCredentials(items);
+      const lines = ["# Comptes de démonstration Trocoin — à conserver hors du dépôt", "", "| Nom | E-mail (identifiant) | Pseudo | Mot de passe | Numéro (fictif) |", "|---|---|---|---|---|", ...items.map((c) => `| ${c.name} | ${c.email} | ${c.username} | \`${c.password}\` | ${c.phone} |`), ""];
       const blob = new Blob([lines.join("\n")], { type: "text/markdown;charset=utf-8" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = `comptes-demonstration-${new Date().toISOString().slice(0, 10)}.md`;
       a.click();
       URL.revokeObjectURL(a.href);
+  };
+  const takeCredentials = async () => {
+    if (!(await confirm({ title: "Récupérer les identifiants ?", text: "Ils ne sont remis qu'une seule fois : après lecture, ils sont effacés de la mémoire du serveur. Enregistrez le fichier tout de suite dans un endroit sûr (jamais dans le dépôt de code).", confirmLabel: "Afficher et télécharger" }))) return;
+    try {
+      const r = await api<{ items: Credential[] }>("/admin/demo-catalogue/credentials", { method: "POST", body: {} });
+      downloadCredentials(r.items);
       await load();
     } catch (e) {
       toast((e as Error).message, "error");
+    }
+  };
+  // AUDIT §73 : identifiants perdus (serveur endormi ou redémarré avant la lecture) → nouveaux mots de passe pour tous les comptes démo
+  const regenerateCredentials = async () => {
+    if (!(await confirm({ title: "Régénérer tous les mots de passe ?", text: `Un nouveau mot de passe sera attribué à chacun des ${summary?.database.accounts ?? 0} comptes de démonstration existants (les anciens ne fonctionneront plus). Le fichier est remis une seule fois.`, confirmLabel: "Régénérer et télécharger" }))) return;
+    setBusy(true);
+    try {
+      const r = await api<{ items: Credential[] }>("/admin/demo-catalogue/credentials/regenerate", { method: "POST", body: {} });
+      downloadCredentials(r.items);
+      toast(`${r.items.length} mot(s) de passe régénéré(s).`, "success");
+      await load();
+    } catch (e) {
+      toast((e as Error).message, "error");
+    } finally {
+      setBusy(false);
     }
   };
   const openConversation = async (id: string) => {
@@ -167,6 +185,7 @@ export default function AdminDemoCataloguePage() {
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button type="button" className="a-btn primary" disabled={busy || run_?.status === "running" || !photosReady} onClick={run} data-testid="demo-run">{summary && summary.database.listings > 0 ? "Reprendre / compléter le catalogue" : "Créer le catalogue de démonstration"}</button>
           <button type="button" className="a-btn" disabled={!summary?.credentialsPending} onClick={takeCredentials} data-testid="demo-credentials">Récupérer les identifiants des comptes créés{summary?.credentialsPending ? ` (${summary.credentialsPending})` : ""}</button>
+          <button type="button" className="a-btn" disabled={busy || !summary || summary.database.accounts === 0 || run_?.status === "running"} onClick={regenerateCredentials} data-testid="demo-credentials-regenerate" title="Si le fichier des identifiants n'a pas pu être récupéré (serveur endormi ou redémarré avant la lecture)">Régénérer les mots de passe</button>
         </div>
         {credentials && credentials.length > 0 && (
           <div className="a-alert" style={{ marginTop: 12 }}>

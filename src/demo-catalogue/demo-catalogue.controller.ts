@@ -1,6 +1,7 @@
 import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Req, UseGuards } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsBoolean, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { Throttle } from '@nestjs/throttler';
 import { Repository } from 'typeorm';
 import { AdminAuditLog } from '../admin/admin-audit-log.entity';
 import { AdminGuard } from '../auth/admin.guard';
@@ -43,6 +44,7 @@ export class DemoCatalogueController {
 
   /** Lance (ou reprend) l'ensemencement en arrière-plan ; le résultat se lit sur GET. */
   @Post('run')
+  @Throttle({ default: { limit: 10, ttl: 600_000 } }) // AUDIT §73 : écritures d'administration bornées
   @HttpCode(202)
   async run(@Req() req: any, @Body() dto: RunDemoCatalogueDto) {
     const state = this.demo.start({ limit: dto.limit, photos: dto.photos, force: dto.force });
@@ -52,10 +54,21 @@ export class DemoCatalogueController {
 
   /** Identifiants des comptes créés par la dernière exécution : remis une seule fois (effacés de la mémoire après lecture). */
   @Post('credentials')
+  @Throttle({ default: { limit: 10, ttl: 600_000 } })
   @HttpCode(200)
   async credentials(@Req() req: any) {
     const items = this.demo.takeCredentials();
     await this.audit(req, 'demo_catalogue.credentials', 'credentials', { count: items.length });
+    return { items };
+  }
+
+  /** AUDIT §73 : identifiants perdus (API endormie avant la lecture) → nouveaux mots de passe pour tous les comptes démo, remis une fois. */
+  @Post('credentials/regenerate')
+  @Throttle({ default: { limit: 3, ttl: 600_000 } })
+  @HttpCode(200)
+  async regenerateCredentials(@Req() req: any) {
+    const items = await this.demo.regenerateCredentials();
+    await this.audit(req, 'demo_catalogue.credentials_regenerate', 'credentials', { count: items.length });
     return { items };
   }
 

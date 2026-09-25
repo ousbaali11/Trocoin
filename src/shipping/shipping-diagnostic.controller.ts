@@ -1,5 +1,7 @@
-import { Controller, Get, Inject, NotFoundException, Query } from '@nestjs/common';
+import { Controller, Get, Inject, NotFoundException, Query, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
+import { AdminGuard } from '../auth/admin.guard';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { BoxtalShippingProvider } from './boxtal-shipping.provider';
 import { IShippingProvider } from './shipping-provider.interface';
 import { SHIPPING_PROVIDER } from './shipping.constants';
@@ -10,6 +12,7 @@ import { SHIPPING_PROVIDER } from './shipping.constants';
  * suivi, puis annulation). Aucune donnée d'identification n'est renvoyée ; les clés vivent sur l'hébergeur,
  * cette route est le seul moyen de vérifier la connexion sans les copier ailleurs. 5 appels / 10 min / IP.
  */
+@UseGuards(JwtAuthGuard, AdminGuard) // AUDIT §73 : la longueur des clés et une commande de test ne regardent que l'administration
 @Controller('shipping')
 export class ShippingDiagnosticController {
   constructor(@Inject(SHIPPING_PROVIDER) private readonly provider: IShippingProvider) {}

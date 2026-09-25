@@ -23,3 +23,7 @@ data/pglite-*/
 
 # Identifiants et état des comptes de démonstration (jamais commités)
 private/
+# AUDIT §73 : aucun fichier d'environnement, quel que soit son suffixe (sauf les exemples) ; rien du dossier data/
+.env.*
+!.env.example
+data/

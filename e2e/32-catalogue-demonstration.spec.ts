@@ -18,6 +18,7 @@ test('console : page « Catalogue de démonstration » — jeu de données, rép
   const missing = page.getByTestId('demo-photos-missing');
   if (await missing.count()) await expect(page.getByTestId('demo-run')).toBeDisabled(); else await expect(page.getByTestId('demo-run')).toBeEnabled();
   await expect(page.getByTestId('demo-credentials')).toBeDisabled();
+  await expect(page.getByTestId('demo-credentials-regenerate')).toBeDisabled(); // AUDIT §73 : aucun compte démo dans la base de test
   // Lien de navigation présent dans la console
   await expect(page.getByRole('link', { name: 'Catalogue de démonstration' })).toHaveAttribute('aria-current', 'page');
 });
