@@ -4114,3 +4114,8 @@ Avant : fichiers publics sous `/uploads`, protégés par un nom imprévisible se
 - Navigateur (pile locale reconstruite) : image affichée pour le vendeur en 1,4 s (200, cache privé, ETag, cookie
   HttpOnly même site), affichée au rechargement et après navigation ; tiers connecté avec l'URL exacte → 403 ;
   anonyme → 401 ; ancien chemin public → 404.
+
+**CI 1.47.0 rouge, corrigée en 1.47.1.** Le script d'édition avait corrompu `test/phase2.e2e-spec.ts` (séquence `` $` `` du
+texte de remplacement interprétée par `String.replace`) ; le résumé local ne comptait que les tests, pas la suite qui ne
+compilait plus. Fichier restauré, assertion réécrite, `phase2` 60/60 (0 suite en échec) ; les résumés affichent désormais
+les suites en échec.
