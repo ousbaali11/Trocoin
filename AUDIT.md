@@ -4119,3 +4119,10 @@ Avant : fichiers publics sous `/uploads`, protégés par un nom imprévisible se
 texte de remplacement interprétée par `String.replace`) ; le résumé local ne comptait que les tests, pas la suite qui ne
 compilait plus. Fichier restauré, assertion réécrite, `phase2` 60/60 (0 suite en échec) ; les résumés affichent désormais
 les suites en échec.
+
+**Production 1.47.1 — 25 septembre 2026, 14 h 23 UTC.** CI verte (six étapes, migration `1789650000000` jouée). `/health` :
+`version 1.47.1`, `storage { provider: s3, publicBase: false, privateBucket: false }`, `stripeWebhooks { received: 0,
+duplicates: 0 }`. Le bucket de production n'a pas d'URL publique : le préfixe `private/` n'est joignable que par la route
+contrôlée (le relais `/uploads/<nom>` refuse les clés privées). Un bucket `S3_PRIVATE_BUCKET` reste recommandé si une URL
+publique est un jour activée (avertissement au démarrage). Les images de conversation antérieures ont été déplacées au
+premier démarrage (journal Render, non lisible d'ici ; les messages relus par les participants pointent vers la route).
