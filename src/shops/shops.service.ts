@@ -82,7 +82,11 @@ export class ShopsService {
   /** true si userId est propriétaire ou membre de la boutique ownerId. */
   async canActFor(userId: string, ownerId: string): Promise<boolean> {
     if (userId === ownerId) return true;
-    return (await this.membersRepo.count({ where: { ownerId, memberId: userId } })) > 0;
+    if ((await this.membersRepo.count({ where: { ownerId, memberId: userId } })) === 0) return false;
+    // AUDIT §73 : un membre de boutique ne peut pas agir au nom d'un propriétaire suspendu ou supprimé (il remettait ses
+    // annonces en ligne et les acheteurs pouvaient le payer malgré la suspension)
+    const owner = await this.usersRepo.findOne({ where: { id: ownerId } });
+    return !!owner && !owner.suspendedAt && !owner.deletedAt;
   }
 
   async leave(memberId: string, ownerId: string) {

@@ -376,15 +376,9 @@ export class UsersService {
   }
 
   /** Recalcule la moyenne pondérée en ajoutant une nouvelle note. */
-  async applyNewRating(userId: string, rating: number): Promise<void> {
-    const user = await this.findById(userId);
-    if (!user) return;
-    const newCount = user.ratingCount + 1;
-    const newAvg = (user.ratingAvg * user.ratingCount + rating) / newCount;
-    await this.usersRepo.update(userId, {
-      ratingAvg: Math.round(newAvg * 10) / 10,
-      ratingCount: newCount,
-    });
+  /** AUDIT §73 : note et nombre d'avis écrits tels que recalculés par le service des avis (agrégat SQL). */
+  async setRating(userId: string, ratingAvg: number, ratingCount: number): Promise<void> {
+    await this.usersRepo.update(userId, { ratingAvg, ratingCount });
   }
 
   // ----- Blocage -----

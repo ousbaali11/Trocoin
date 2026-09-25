@@ -20,6 +20,6 @@ import { Transaction } from '../payments/transaction.entity';
   ],
   controllers: [ConversationsController],
   providers: [ConversationsService, ConversationsGateway],
-  exports: [ConversationsService],
+  exports: [ConversationsService, ConversationsGateway],
 })
 export class ConversationsModule {}

@@ -55,9 +55,41 @@ celles qu'il ne connaît plus sont signalées « paiement inconnu » (plus de no
 | Diagnostic Boxtal (`GET /shipping/diagnostic`, bac à sable seulement) accessible sans compte : longueur des clés, commande de test | **corrigé (1.44.0)** : réservé aux administrateurs |
 | Front : seules `NEXT_PUBLIC_API_URL` et `NEXT_PUBLIC_SITE_URL` | **conforme** |
 
-## D. Routes et autorisations, argent et litiges, passage page par page
+## D. Routes et autorisations (livraison 2)
 
-Livraisons 2 à 4 (sections complétées au fil des tours).
+Inventaire réel : 23 contrôleurs, 131 routes (API), 49 pages (front). Chaque route prenant un identifiant a été relue
+jusqu'au contrôle de propriété dans le service (conversations, ventes, expéditions, avis, annonces et boutiques, favoris,
+notifications, recherches, blocages, abonnements) : **aucun moyen de lire ou de modifier les données d'un autre membre**
+n'a été trouvé, y compris sur les routes récentes (`become-individual` / `become-pro`, catalogue de démonstration, comptes
+orphelins — ces derniers n'ont d'ailleurs aucune route : balayage interne, résultat dans `/health`).
+
+| Point | Verdict |
+|---|---|
+| Propriété et participation vérifiées avant toute lecture privée ou écriture (messages, ventes, étiquettes, avis, annonces, favoris, notifications, recherches, blocages, abonnements) | **conforme** |
+| Acheteur / vendeur : confirmer la réception et abandonner = acheteur seul ; expédier, confirmer la disponibilité, code de remise, étiquettes = vendeur seul ; annuler et litige = les deux (litige après capture : acheteur seul) | **conforme** |
+| Téléphone / e-mail de l'autre partie jamais renvoyés (résumé public, fiche de vente, vue acheteur de l'expédition) ; adresse de l'acheteur au vendeur seulement après paiement | **conforme** ; **corrigé (1.45.0)** : plus d'adresse au vendeur une fois la vente annulée ou remboursée |
+| Compte suspendu : ses annonces sont mises en pause et ses sessions révoquées, mais un **membre de sa boutique** pouvait les remettre en ligne (statut, renouvellement, import), déposer en son nom, et un administrateur pouvait approuver une annonce en vérification ; les acheteurs pouvaient alors payer un vendeur suspendu | **corrigé (1.45.0)** : `canActFor` refuse un propriétaire suspendu ou supprimé ; toute mise en ligne (vendeur, membre, renouvellement, import, approbation admin) vérifie le compte ; le devis et l'achat refusent un vendeur suspendu ou supprimé ; les sockets temps réel d'un compte suspendu sont fermés |
+| Compte effacé : ses appartenances de boutique (comme propriétaire ou membre) restaient en base | **corrigé (1.45.0)** |
+| Double clic sur « Générer le bon d'envoi » : deux étiquettes achetées chez le transporteur | **corrigé (1.45.0)** : une création à la fois par vente (verrou), 409 pour la seconde |
+| Deux avis simultanés sur la même vente par le même membre, note recalculée par lecture-écriture | **corrigé (1.45.0)** : index unique en base (migration), note et nombre recalculés par agrégat |
+| Formules payantes : monétisation activée sans prestataire de facturation → activées gratuitement (`charged` affiché, rien prélevé) | **corrigé (1.45.0)** : refusées (503) tant que le prélèvement n'est pas branché ; formule gratuite inchangée |
+| Image envoyée dans une conversation par un membre bloqué : fichier conservé avant le refus | **corrigé (1.45.0)** : droit d'écrire vérifié avant de conserver le fichier |
+| Détail d'une conversation : « l'autre a effacé la conversation » (dates de masquage) renvoyé au membre | **corrigé (1.45.0)** |
+| Cotation d'envoi sur une annonce non en ligne (brouillon, vendue, archivée) par quiconque connaît l'identifiant | **corrigé (1.44.0)** |
+| Bascule particulier / professionnel sans limite propre (registre des entreprises appelé) | **corrigé (1.44.0)** : 5 / h |
+| Pages du front : garde côté client (`RequireAuth`) + contrôle réel par l'API ; `/compte/boutique` ouvrable par un non-pro (contenu adapté) ; aucun lien mort dans les quatre menus | **conforme** |
+| Images de conversation servies sans connexion (noms imprévisibles) ; pas de table de déduplication des webhooks | **à signaler** (limites assumées, déjà documentées) |
+
+## D bis. Argent et litiges (livraison 3)
+
+| Point | Verdict |
+|---|---|
+| Barème : commission vendeur et frais acheteur (plafonnés) figés sur la vente au paiement, jamais recalculés avec le barème du jour ; versement = prix − commission | **conforme** (tests `phase29`, régression verte) |
+| Séquestre « platform » : capture sur le solde de Trocoin avant l'échéance courte, virement au vendeur après confirmation ou réception présumée, réservation atomique du virement, clé d'idempotence liée aux paramètres, virement existant réutilisé | **conforme** (§69, §70, tests `phase41`, `phase42`) |
+| PayPal (via Stripe) : autorisation de 10 jours (+ 10 automatiques) selon la documentation Stripe ; le code capture avant 5 jours (valeur par défaut quand le prestataire ne donne pas de date de capture) | **conforme** — capture toujours avant l'expiration ; PayPal Commerce Platform en direct non retenu (prestataire simulé, jamais activé) |
+| Changement d'environnement : paiements, virements et comptes de versement d'un autre environnement signalés, jamais perdus en silence | **corrigé (1.44.0)**, partie A |
+| Décisions admin : rembourser / libérer / annuler prises de façon atomique avant tout mouvement d'argent ; « annuler » possible sur un paiement ou une page de paiement inconnus du prestataire ; remboursement forcé quand l'admin supprime un compte avec des ventes sous séquestre ; suppression bloquée si une vente est expédiée ou en litige (suspension réversible possible) | **conforme** |
+| Suspension : ventes en cours conservées (l'autre partie n'est pas lésée), aucune nouvelle vente possible (corrigé ci-dessus) | **conforme** après 1.45.0 |
 
 ## E. Ce qui a été volontairement laissé de côté (toujours identifié, jamais oublié)
 

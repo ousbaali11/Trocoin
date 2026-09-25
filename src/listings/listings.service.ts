@@ -317,6 +317,13 @@ export class ListingsService {
     if (this.phoneReveals.size > 20_000) for (const [k, v] of this.phoneReveals) if (now - v.since > 86_400_000) this.phoneReveals.delete(k);
   }
 
+  /** AUDIT §73 : un compte suspendu (ou supprimé) ne met rien en ligne, ni lui-même ni par un membre de sa boutique. */
+  async assertOwnerActive(ownerId: string): Promise<void> {
+    const owner = await this.usersService.findById(ownerId);
+    if (!owner || owner.deletedAt) throw new NotFoundException('Compte introuvable.');
+    if (owner.suspendedAt) throw new ForbiddenException('Ce compte est suspendu : aucune annonce ne peut être mise en ligne.');
+  }
+
   /** Annonce que `userId` a le droit de gérer (propriétaire ou membre de sa boutique). */
   async getManaged(listingId: string, userId: string): Promise<Listing> {
     const listing = await this.listingsRepo.findOne({ where: { id: listingId } });
@@ -409,6 +416,7 @@ export class ListingsService {
         }
         // (vente payée en cours : refusée plus haut, quel que soit le statut demandé — AUDIT §58 et §60)
         if (from !== 'en_ligne') {
+          await this.assertOwnerActive(listing.userId);
           await this.assertPhone(listing.userId);
           await this.assertQuota(listing.userId);
         }
@@ -494,6 +502,7 @@ export class ListingsService {
     if (!['en_ligne', 'expiree', 'desactivee'].includes(listing.status)) {
       throw new BadRequestException(`Impossible de renouveler une annonce "${listing.status}".`);
     }
+    await this.assertOwnerActive(listing.userId);
     if (await this.hasActiveSale(listing.id)) throw new BadRequestException("Une vente est en cours sur cette annonce : elle ne peut pas être remise en ligne tant que la vente n'est pas terminée ou annulée.");
     // AUDIT §63 : renouveler une annonce déjà en ligne la remontait en tête des résultats (et réveillait les alertes) sans
     // limite — c'est une mise en avant gratuite. Au plus une fois par semaine.

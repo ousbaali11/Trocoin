@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { ServiceUnavailableException, BadRequestException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Plan } from './plan.entity';
@@ -194,6 +194,9 @@ export class SettingsService implements OnModuleInit {
   async subscribe(userId: string, planId: string) {
     const plan = await this.getPlan(planId);
     if (!plan.active) throw new BadRequestException('Cette formule n\'est plus proposée.');
+    // AUDIT §73 : monétisation activée sans prestataire de facturation → une formule payante était activée gratuitement
+    // (« charged » affiché mais rien prélevé). Refusée tant que le prélèvement n'est pas branché.
+    if (this.isMonetizationEnabled() && plan.priceMonthly > 0) throw new ServiceUnavailableException("Les formules payantes ne sont pas encore ouvertes : aucun prélèvement n'est possible pour le moment.");
     const current = await this.activeSubscription(userId);
     if (current) await this.subsRepo.update(current.id, { status: 'cancelled', endsAt: new Date() });
     const now = new Date();

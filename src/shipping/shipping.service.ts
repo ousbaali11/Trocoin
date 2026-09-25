@@ -35,6 +35,18 @@ export type ShipmentView = Omit<Shipment, 'labelPdfBase64'> & { labelAvailable: 
 @Injectable()
 export class ShippingService {
   private readonly logger = new Logger('Shipping');
+  /** AUDIT §73 : une création de bon d'envoi à la fois par vente (deux clics rapprochés achetaient deux étiquettes). */
+  private readonly labelLocks = new Map<string, Promise<unknown>>();
+  private async lockedLabel<T>(id: string, fn: () => Promise<T>): Promise<T> {
+    const previous = this.labelLocks.get(id) ?? Promise.resolve();
+    const run = previous.catch(() => undefined).then(fn);
+    this.labelLocks.set(id, run);
+    try {
+      return await run;
+    } finally {
+      if (this.labelLocks.get(id) === run) this.labelLocks.delete(id);
+    }
+  }
 
   constructor(
     @InjectRepository(Shipment) private readonly shipments: Repository<Shipment>,
@@ -202,6 +214,9 @@ export class ShippingService {
    * peut réessayer ou saisir un numéro de suivi à la main.
    */
   async createLabel(transactionId: string, sellerId: string, dto: CreateShipmentDto): Promise<ShipmentView> {
+    return this.lockedLabel(transactionId, () => this.createLabelNow(transactionId, sellerId, dto));
+  }
+  private async createLabelNow(transactionId: string, sellerId: string, dto: CreateShipmentDto): Promise<ShipmentView> {
     const tx = await this.sellerTransaction(transactionId, sellerId);
     const carrier = tx.deliveryMethod as ShippingCarrier;
     // Livraison payée par l'acheteur (AUDIT §59) : le vendeur ne paie rien et ne choisit rien — il confirme la

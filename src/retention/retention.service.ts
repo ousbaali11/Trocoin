@@ -13,6 +13,7 @@ import { Listing } from '../listings/listing.entity';
 import { Notification } from '../notifications/notification.entity';
 import { Transaction } from '../payments/transaction.entity';
 import { Review } from '../reviews/review.entity';
+import { ShopMember } from '../shops/shop-member.entity';
 import { SavedSearch } from '../saved-searches/saved-search.entity';
 import { Subscription } from '../settings/subscription.entity';
 import { Shipment } from '../shipping/shipment.entity';
@@ -186,6 +187,8 @@ export class RetentionService {
       await m.getRepository(ListingView).delete({ userId: user.id });
       await m.getRepository(UserBlock).delete({ blockerId: user.id });
       await m.getRepository(UserBlock).delete({ blockedId: user.id });
+      await m.getRepository(ShopMember).delete({ ownerId: user.id }); // AUDIT §73 : plus de membres d'une boutique effacée, ni d'appartenance fantôme
+      await m.getRepository(ShopMember).delete({ memberId: user.id });
       await m.getRepository(SavedSearch).delete({ userId: user.id });
       await m.getRepository(Notification).delete({ userId: user.id });
       await m.getRepository(Subscription).delete({ userId: user.id });

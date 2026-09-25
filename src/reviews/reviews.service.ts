@@ -37,18 +37,33 @@ export class ReviewsService {
 
     const reviewedId = tx.buyerId === reviewerId ? tx.sellerId : tx.buyerId;
 
-    const review = await this.reviewsRepo.save(
-      this.reviewsRepo.create({
-        transactionId,
-        reviewerId,
-        reviewedId,
-        rating: dto.rating,
-        comment: dto.comment?.trim(),
-      }),
-    );
+    let review: Review;
+    try {
+      review = await this.reviewsRepo.save(
+        this.reviewsRepo.create({
+          transactionId,
+          reviewerId,
+          reviewedId,
+          rating: dto.rating,
+          comment: dto.comment?.trim(),
+        }),
+      );
+    } catch (err) {
+      // AUDIT §73 : deux envois simultanés passaient tous deux la vérification ci-dessus ; l'index unique tranche
+      if (/UNIQUE|unique|duplicate key/i.test((err as Error).message || '')) throw new BadRequestException('Vous avez déjà laissé un avis pour cette transaction.');
+      throw err;
+    }
 
-    await this.usersService.applyNewRating(reviewedId, dto.rating);
+    await this.recomputeRating(reviewedId);
     return review;
+  }
+
+  /** AUDIT §73 : note moyenne et nombre d'avis recalculés depuis la table (avant : lecture puis écriture, avis perdus en cas de concurrence). */
+  async recomputeRating(userId: string): Promise<void> {
+    const row = await this.reviewsRepo.createQueryBuilder('r').select('COUNT(*)', 'n').addSelect('AVG(r.rating)', 'avg').where('r.reviewedId = :userId', { userId }).getRawOne<{ n: string; avg: string | null }>();
+    const count = Number(row?.n ?? 0);
+    const avg = count ? Math.round(Number(row?.avg ?? 0) * 10) / 10 : 0;
+    await this.usersService.setRating(userId, avg, count);
   }
 
   /** Avis reçus, avec le pseudo public de l'auteur. */

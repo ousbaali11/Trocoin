@@ -102,7 +102,7 @@ export class ConversationsController {
     if (!file) throw new BadRequestException('Aucun fichier reçu (champ "file").');
     // Vérification d'appartenance AVANT de conserver le fichier
     try {
-      await this.conversationsService.assertMember(id, req.user.userId);
+      await this.conversationsService.assertWritable(id, req.user.userId);
     } catch (err) {
       const { deleteUploadedFile } = await import('../common/upload/image-upload');
       await deleteUploadedFile(`/uploads/${file.filename}`);

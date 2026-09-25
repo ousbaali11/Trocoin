@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { CategoriesService } from '../categories/categories.service';
 import { Conversation } from '../conversations/conversation.entity';
+import { ConversationsGateway } from '../conversations/conversations.gateway';
 import { ListingPhoto } from '../listings/listing-photo.entity';
 import { Listing } from '../listings/listing.entity';
 import { ListingsService } from '../listings/listings.service';
@@ -55,6 +56,7 @@ export class AdminService {
     private categoriesService: CategoriesService,
     private settings: SettingsService,
     private pages: PagesService,
+    private gateway: ConversationsGateway,
     private auth: AuthService,
     private usersService: UsersService,
   ) {}
@@ -250,6 +252,7 @@ export class AdminService {
       changed.suspended = { to: true, reason: patch.suspensionReason };
       await this.listingsRepo.update({ userId: id, status: 'en_ligne' }, { status: 'desactivee', moderationReason: 'Compte suspendu' });
       await this.auth.revokeAllSessions(id);
+      this.gateway.disconnectUser(id); // AUDIT §73 : les sockets temps réel ouverts recevaient encore les messages
     } else if (dto.suspended === false && user.suspendedAt) {
       patch.suspendedAt = null as any;
       patch.suspensionReason = null as any;
@@ -331,6 +334,11 @@ export class AdminService {
       // vente payée, rendait l'article achetable une seconde fois
       if (dto.status === 'en_ligne' && !['en_attente', 'refusee', 'desactivee', 'expiree'].includes(listing.status)) throw new BadRequestException(`Impossible de publier une annonce « ${listing.status} » : seules les annonces en vérification, refusées, en pause ou expirées se publient.`);
       if (dto.status === 'en_ligne' && (await this.listingsService.hasActiveSale(id))) throw new BadRequestException('Une vente payée est en cours sur cette annonce : elle ne peut pas être remise en ligne.');
+      // AUDIT §73 : approuver l'annonce d'un compte suspendu la remettait en ligne (et les acheteurs pouvaient payer)
+      if (dto.status === 'en_ligne') {
+        const owner = await this.usersRepo.findOne({ where: { id: listing.userId } });
+        if (owner?.suspendedAt) throw new BadRequestException('Ce compte est suspendu : levez la suspension avant de publier son annonce.');
+      }
       patch.status = dto.status;
       changed.status = { from: listing.status, to: dto.status };
       if (dto.status === 'en_ligne') {

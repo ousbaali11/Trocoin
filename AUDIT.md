@@ -3981,3 +3981,55 @@ juridique, clés Stripe et Boxtal réelles, PayPal Commerce Platform, badge « R
 - Typecheck API et front : 0 erreur. `phase44` 3/3, `phase43` 3/3 (régénération), `phase19` 5/5 (forme de `/health`).
   Régression : phase41, 42, 38, 13, 36, 19, 3 → 71/71 ; phase34, 2, listings, 43, 20 → 79/79. 241 tests API au total.
 - Aucune clé dans le diff indexé (motifs connus + valeur exacte de la clé Pexels recherchés avant commit).
+
+**Production 1.44.0 — 25 septembre 2026, 12 h 40 UTC.** CI verte (six étapes). `/health` : `version 1.44.0`,
+`paymentIssues 3` (inchangé), `paymentEnvironment { accountLast4: "Mw96", livemode: false, changedAt: null, sweep: null }` :
+l'empreinte de l'environnement est mémorisée au premier démarrage (compte plateforme abrégé, mode test), aucun changement
+constaté — c'est l'environnement réaligné au §66. Un prochain changement de clés déclenchera le balayage et l'alerte.
+
+## 73 (suite). Audit complet n° 2 — livraisons 2 et 3 : routes et autorisations, argent et litiges — 25 septembre 2026
+
+Résultat point par point dans `docs/audit-2.md` (parties D et D bis). Inventaire réel : 23 contrôleurs et 131 routes API,
+49 pages front, relus jusqu'au contrôle de propriété dans chaque service. Aucun accès aux données d'un autre membre ;
+les failles trouvées tiennent aux **états** (compte suspendu) et aux **courses** (double clic), pas aux identifiants.
+
+### Corrigé (1.45.0)
+
+- **Vendeur suspendu** : la suspension mettait ses annonces en pause et révoquait ses sessions, mais un membre de sa
+  boutique les remettait en ligne (statut, renouvellement, import), déposait en son nom, un administrateur pouvait
+  approuver une annonce en vérification, et les acheteurs payaient un vendeur suspendu. Désormais `canActFor` refuse
+  un propriétaire suspendu ou supprimé, toute mise en ligne passe par `assertOwnerActive` (vendeur, membre, renouvellement,
+  import, approbation admin refusée avec message), le devis et l'achat refusent un vendeur suspendu ou supprimé
+  (« Ce vendeur n'est plus actif »), et ses sockets temps réel sont fermés (`disconnectUser`).
+- **Double étiquette** : deux créations rapprochées passaient toutes deux le contrôle « une étiquette existe déjà » et
+  achetaient deux bons chez le transporteur → verrou par vente (`lockedLabel`), la seconde reçoit 409.
+- **Double avis** : deux envois simultanés créaient deux avis et la note (lecture puis écriture) pouvait perdre un avis →
+  index unique `(transactionId, reviewerId)` (migration `1789640000000`, doublons existants purgés en gardant le plus
+  ancien), violation rendue en 400, note et nombre recalculés par agrégat SQL (`recomputeRating`).
+- **Formules payantes** : monétisation activée sans prestataire de facturation → une formule payante s'activait
+  gratuitement en affichant `charged` → refusée (503) tant que le prélèvement n'est pas branché ; formule gratuite inchangée.
+- **Fuites mineures** : adresse de l'acheteur retirée au vendeur une fois la vente annulée ou remboursée ; dates de
+  masquage (« l'autre a effacé la conversation ») retirées du détail ; image de conversation d'un membre bloqué refusée
+  avant d'être conservée ; appartenances de boutique effacées avec le compte.
+- Tests `phase45` (5 scénarios) : membre d'un propriétaire suspendu (statut, renouvellement, dépôt au nom, approbation
+  admin, devis et achat refusés, droits retrouvés à la levée), deux avis simultanés → 201 + 400 et note 5/1, deux étiquettes
+  simultanées → 201 + 409, formule payante 503 / gratuite 201, adresse retirée après annulation et détail sans dates de
+  masquage.
+
+### Conforme (relu, pas de changement)
+
+Propriété et participation sur toutes les routes ; rôles acheteur / vendeur ; aucune coordonnée de l'autre partie ;
+barème figé sur la vente ; séquestre et virements (§69–§70) ; PayPal via Stripe capturé avant l'expiration (autorisation
+de 10 + 10 jours d'après la documentation Stripe, capture au plus tard à 5 jours) ; décisions admin atomiques ;
+suppression d'un compte avec ventes ouvertes (remboursement forcé, blocage si expédiée ou en litige).
+
+### À signaler
+
+Images de conversation servies sans connexion (noms imprévisibles) ; pas de table de déduplication des webhooks
+(traitements idempotents) ; `/compte/boutique` ouvrable par un non-pro (contenu adapté, rien de privé).
+
+### Vérification
+
+- Typecheck API : 0 erreur. `phase45` 5/5. Régression : phase26, 18, 25, 12, 13, listings, 16, 36 → 89/89 ; `phase2` adapté
+  (formule payante refusée 503 quand la monétisation est activée, quota maintenu) → 60/60. 246 tests API au total.
+- Migration `1789640000000-AvisUniqueParVente` jouée par la CI (PostgreSQL 16) puis par Render au déploiement.

@@ -224,8 +224,10 @@ export class ConversationsService {
     // Vendeur sans paiement sécurisé (désactivé ou compte de démonstration, AUDIT §71) : le fil ne propose pas « Acheter »
     const seller = listing ? await this.usersService.findById(listing.userId) : null;
     const securePayment = !!seller && !seller.securePaymentDisabled && !seller.isDemoAccount;
+    const { hiddenForBuyerAt, hiddenForSellerAt, ...pub } = c; // AUDIT §73 : « l'autre a effacé la conversation » ne regarde pas le membre
+    void hiddenForBuyerAt; void hiddenForSellerAt;
     return {
-      ...c,
+      ...pub,
       role: c.buyerId === userId ? 'acheteur' : 'vendeur',
       other,
       listing: listing
@@ -366,6 +368,11 @@ export class ConversationsService {
       }
     }
     return readAt;
+  }
+
+  /** AUDIT §73 : vérifié AVANT de conserver une image (un membre bloqué laissait un fichier orphelin sur le disque). */
+  async assertWritable(conversationId: string, senderId: string): Promise<void> {
+    await this.assertCanWrite(conversationId, senderId);
   }
 
   private async assertCanWrite(conversationId: string, senderId: string): Promise<{ c: Conversation; otherId: string }> {

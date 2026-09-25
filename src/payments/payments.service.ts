@@ -307,6 +307,7 @@ export class PaymentsService implements OnApplicationBootstrap {
     // Préférence du vendeur (remise en main propre seulement) ou compte de démonstration (AUDIT §46) : jamais de paiement en ligne
     const seller = await this.usersService.findById(listing.userId);
     if (!seller || seller.securePaymentDisabled || seller.isDemoAccount) return { ok: false, reason: 'Ce vendeur ne propose pas le paiement sécurisé : réglez en main propre, à la remise.' };
+    if (seller.suspendedAt || seller.deletedAt) return { ok: false, reason: "Ce vendeur n'est plus actif sur Trocoin : cette annonce ne peut pas être achetée." }; // AUDIT §73
     if (listing.price > MAX_SECURE_AMOUNT) return { ok: false, reason: `Le paiement sécurisé est limité à ${MAX_SECURE_AMOUNT} €.` };
     if (listing.rootCategoryId) {
       const rootSlug = await this.rootSlug(listing.rootCategoryId);
@@ -1473,7 +1474,7 @@ export class PaymentsService implements OnApplicationBootstrap {
       paymentIssue: rest.paymentIssue ? 'Un incident technique sur ce paiement est en cours de traitement par Trocoin.' : rest.paymentIssue,
       // Adresse de l'acheteur : le vendeur ne la voit qu'une fois la vente PAYÉE (un acheteur qui ouvre la page de paiement
       // puis renonce n'a pas à laisser son nom, son adresse et son téléphone au vendeur — AUDIT §60)
-      shippingAddress: isBuyer || tx.paidAt ? rest.shippingAddress : null,
+      shippingAddress: isBuyer || (tx.paidAt && !['annulee', 'rembourse'].includes(tx.status)) ? rest.shippingAddress : null, // AUDIT §73 : plus rien à expédier → plus d'adresse
       handoverCode: isBuyer ? handoverCode : undefined,
       checkoutUrl: isBuyer && tx.status === 'en_attente' ? checkoutUrl : undefined,
     };

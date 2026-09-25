@@ -90,13 +90,15 @@ describe('Phase 2 : monétisation désactivable, catégories, import, multi-util
     expect(boost.status).toBe(400);
     expect(boost.body.message).toMatch(/2\.99 €/);
 
-    // Abonnement "boutique-premium" (illimité) : enregistré sans paiement réel (provider mock) puis quota levé
+    // AUDIT §73 : monétisation activée sans prestataire de facturation → une formule payante ne peut PAS être activée
+    // gratuitement (avant : enregistrée « mock », quota levé sans rien prélever) ; le quota reste appliqué
     const plans = (await request(server).get('/plans')).body;
     const premium = plans.find((p: any) => p.slug === 'boutique-premium');
-    const sub = await request(server).post(`/users/me/subscription/${premium.id}`).set(part.auth).expect(201);
-    expect(sub.body.charged).toBe(79);
-    await createListing(app, part, { title: 'Troisième annonce avec abonnement' });
-    await request(server).post(`/listings/${mine.body[0].id}/promote`).set(part.auth).send({ type: 'boost' }).expect(201);
+    const sub = await request(server).post(`/users/me/subscription/${premium.id}`).set(part.auth);
+    expect(sub.status).toBe(503);
+    expect(sub.body.message).toMatch(/pas encore ouvertes/);
+    const stillLimited = await request(server).post('/listings').set(part.auth).send({ title: 'Toujours bloquée', description: 'Le quota tient sans abonnement payé.', categorySlug: 'ameublement', price: 5 });
+    expect(stillLimited.status).toBe(400);
 
     // Journal d'audit
     const audit = await request(server).get('/admin/audit-log?action=settings').set(admin.auth).expect(200);

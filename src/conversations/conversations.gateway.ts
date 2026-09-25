@@ -103,6 +103,18 @@ export class ConversationsGateway implements OnGatewayInit, OnGatewayConnection,
     return (this.online.get(userId) ?? 0) > 0;
   }
 
+  /** AUDIT §73 : compte suspendu → ses sockets sont fermés tout de suite (les sessions révoquées ne coupaient pas le temps réel). */
+  disconnectUser(userId: string): number {
+    let n = 0;
+    for (const socket of this.server?.sockets?.sockets?.values() ?? []) {
+      if (socket.data?.userId === userId) {
+        socket.disconnect(true);
+        n += 1;
+      }
+    }
+    return n;
+  }
+
   handleDisconnect(client: Socket) {
     const userId = client.data?.userId as string | undefined;
     if (userId) {
