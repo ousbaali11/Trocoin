@@ -13,9 +13,15 @@ export interface WebhookTrace {
   lastAccountId: string | null;
   lastError: string | null;
   lastErrorAt: string | null;
+  /** AUDIT §74 : livraisons répétées d'un évènement déjà traité (ignorées, réponse 200). */
+  duplicates: number;
 }
 
-export const webhookTrace: WebhookTrace = { received: 0, accepted: 0, rejected: 0, lastReceivedAt: null, lastType: null, lastAccountId: null, lastError: null, lastErrorAt: null };
+export const webhookTrace: WebhookTrace = { received: 0, accepted: 0, rejected: 0, lastReceivedAt: null, lastType: null, lastAccountId: null, lastError: null, lastErrorAt: null, duplicates: 0 };
+
+export function traceWebhookDuplicate(): void {
+  webhookTrace.duplicates += 1;
+}
 
 export function traceWebhookAccepted(type: string, accountId?: string): void {
   webhookTrace.received += 1;

@@ -42,11 +42,28 @@ export interface IStorageProvider {
 export const UPLOAD_DIR = resolve(process.cwd(), 'uploads');
 /** Clés autorisées : photo ré-encodée ou sa vignette « -min », nommées par UUID. */
 export const UPLOAD_KEY_PATTERN = /^uploads\/[0-9a-f-]{36}(-min)?\.(jpg|png|webp)$/;
+/**
+ * AUDIT §74 : images de conversation — jamais servies en statique ni par une URL publique du bucket. Sur disque : dossier
+ * `uploads-prives` (hors du dossier statique) ; sur S3 : bucket `S3_PRIVATE_BUCKET` s'il est défini, sinon le préfixe
+ * `private/` du bucket courant (à ne pas exposer publiquement). Lecture uniquement par la route contrôlée.
+ */
+export const PRIVATE_DIR = resolve(process.cwd(), 'uploads-prives');
+export const PRIVATE_KEY_PATTERN = /^private\/conversations\/[0-9a-f-]{36}\.(jpg|png|webp)$/;
+export const isPrivateKey = (key: string): boolean => PRIVATE_KEY_PATTERN.test(key);
+const CONTENT_TYPE_BY_EXT: Record<string, string> = { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
+export const privateConversationKey = (name: string): string => `private/conversations/${name}`;
 
 export class LocalDiskStorage implements IStorageProvider {
   readonly name = 'local';
   async put(key: string, body: Buffer): Promise<string> {
     const name = basename(key);
+    if (isPrivateKey(key)) {
+      const target = resolve(PRIVATE_DIR, name);
+      if (!target.startsWith(PRIVATE_DIR)) throw new Error('Chemin de fichier invalide.');
+      await fs.mkdir(PRIVATE_DIR, { recursive: true });
+      await fs.writeFile(target, body);
+      return key; // clé, jamais une URL : seule la route contrôlée sait la lire
+    }
     const target = resolve(UPLOAD_DIR, name);
     if (!target.startsWith(UPLOAD_DIR)) throw new Error('Chemin de fichier invalide.');
     await fs.mkdir(UPLOAD_DIR, { recursive: true });
@@ -54,10 +71,31 @@ export class LocalDiskStorage implements IStorageProvider {
     return `/uploads/${name}`;
   }
   async delete(url: string): Promise<void> {
-    if (!url || !url.startsWith('/uploads/')) return;
+    if (!url) return;
+    if (isPrivateKey(url)) {
+      const target = resolve(PRIVATE_DIR, basename(url));
+      if (target.startsWith(PRIVATE_DIR)) await fs.unlink(target).catch(() => undefined);
+      return;
+    }
+    if (!url.startsWith('/uploads/')) return;
     const target = resolve(UPLOAD_DIR, basename(url));
     if (!target.startsWith(UPLOAD_DIR)) return;
     await fs.unlink(target).catch(() => undefined);
+  }
+  /** Lecture d'un objet (images privées ; aussi les envois publics, pour les migrations). */
+  async get(key: string): Promise<StoredObject | null> {
+    const priv = isPrivateKey(key);
+    if (!priv && !UPLOAD_KEY_PATTERN.test(key)) return null;
+    const target = resolve(priv ? PRIVATE_DIR : UPLOAD_DIR, basename(key));
+    if (!target.startsWith(priv ? PRIVATE_DIR : UPLOAD_DIR)) return null;
+    let size: number;
+    try {
+      size = (await fs.stat(target)).size;
+    } catch {
+      return null;
+    }
+    const { createReadStream } = await import('fs');
+    return { body: createReadStream(target), contentType: CONTENT_TYPE_BY_EXT[key.split('.').pop() || ''] || 'application/octet-stream', contentLength: size };
   }
 }
 
@@ -69,6 +107,8 @@ export interface S3StorageOptions {
   secretAccessKey: string;
   /** URL publique du bucket ; absente → URL relatives relayées par l'API. */
   publicUrl?: string;
+  /** AUDIT §74 : bucket privé des images de conversation (sinon préfixe private/ du bucket courant). */
+  privateBucket?: string;
   forcePathStyle?: boolean;
 }
 
@@ -87,16 +127,22 @@ export class S3Storage implements IStorageProvider {
     this.publicBase = opts.publicUrl ? opts.publicUrl.replace(/\/$/, '') : null;
   }
 
+  private bucketFor(key: string): string {
+    return isPrivateKey(key) ? this.opts.privateBucket || this.opts.bucket : this.opts.bucket;
+  }
   async put(key: string, body: Buffer, contentType: string): Promise<string> {
+    const priv = isPrivateKey(key);
     await this.client.send(
-      new PutObjectCommand({ Bucket: this.opts.bucket, Key: key, Body: body, ContentType: contentType, CacheControl: 'public, max-age=31536000, immutable' }),
+      new PutObjectCommand({ Bucket: this.bucketFor(key), Key: key, Body: body, ContentType: contentType, CacheControl: priv ? 'private, max-age=0' : 'public, max-age=31536000, immutable' }),
     );
+    if (priv) return key; // clé, jamais une URL publique
     return this.publicBase ? `${this.publicBase}/${key}` : `/${key}`;
   }
 
   /** Clé d'objet correspondant à une URL produite par `put` (absolue ou relative) ; null si elle n'est pas à nous. */
   keyFor(url: string): string | null {
     if (!url) return null;
+    if (isPrivateKey(url)) return url;
     let key: string | null = null;
     if (this.publicBase && url.startsWith(this.publicBase + '/')) key = url.slice(this.publicBase.length + 1);
     else if (url.startsWith('/uploads/')) key = url.slice(1);
@@ -107,16 +153,16 @@ export class S3Storage implements IStorageProvider {
     const key = this.keyFor(url);
     if (!key) return; // jamais de suppression hors de notre bucket
     try {
-      await this.client.send(new DeleteObjectCommand({ Bucket: this.opts.bucket, Key: key }));
+      await this.client.send(new DeleteObjectCommand({ Bucket: this.bucketFor(key), Key: key }));
     } catch (e) {
       this.logger.warn(`Suppression impossible de ${key} : ${(e as Error).message}`);
     }
   }
 
   async get(key: string): Promise<StoredObject | null> {
-    if (!UPLOAD_KEY_PATTERN.test(key)) return null;
+    if (!UPLOAD_KEY_PATTERN.test(key) && !isPrivateKey(key)) return null;
     try {
-      const out = await this.client.send(new GetObjectCommand({ Bucket: this.opts.bucket, Key: key }));
+      const out = await this.client.send(new GetObjectCommand({ Bucket: this.bucketFor(key), Key: key }));
       if (!out.Body) return null;
       return { body: out.Body as Readable, contentType: out.ContentType || 'application/octet-stream', contentLength: out.ContentLength };
     } catch (e) {
@@ -144,8 +190,13 @@ export function getStorage(): IStorageProvider {
       accessKeyId: process.env.S3_ACCESS_KEY_ID!,
       secretAccessKey: process.env.S3_SECRET_ACCESS_KEY!,
       publicUrl: process.env.S3_PUBLIC_URL || undefined,
+      privateBucket: process.env.S3_PRIVATE_BUCKET || undefined,
       forcePathStyle: process.env.S3_FORCE_PATH_STYLE !== 'false',
     });
+    // AUDIT §74 : avec une URL publique de bucket, les images de conversation doivent avoir leur propre bucket privé
+    if (process.env.S3_PUBLIC_URL && !process.env.S3_PRIVATE_BUCKET) {
+      new Logger('Storage(s3)').warn("S3_PUBLIC_URL défini sans S3_PRIVATE_BUCKET : le préfixe private/ des images de conversation est lisible par l'URL publique du bucket. Créez un bucket privé et renseignez S3_PRIVATE_BUCKET.");
+    }
   } else {
     current = new LocalDiskStorage();
   }
@@ -157,6 +208,12 @@ export function getStorage(): IStorageProvider {
 /** Tests uniquement : remplace le fournisseur courant. */
 export function setStorageForTests(provider: IStorageProvider | null): void {
   current = provider;
+}
+
+/** AUDIT §74 : ce que /health dit du stockage (jamais de clé ni d'URL) — pour vérifier depuis l'extérieur que les images privées ont un bucket dédié. */
+export function storageInfo(): { provider: string; publicBase: boolean; privateBucket: boolean } {
+  const provider = process.env.STORAGE_PROVIDER || 'local';
+  return { provider, publicBase: provider === 's3' && !!process.env.S3_PUBLIC_URL, privateBucket: provider === 's3' && !!process.env.S3_PRIVATE_BUCKET };
 }
 
 export function publicUploadPath(name: string): string {

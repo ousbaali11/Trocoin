@@ -5,6 +5,7 @@ import { Listing } from '../listings/listing.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { UsersModule } from '../users/users.module';
 import { Conversation } from './conversation.entity';
+import { ConversationImagesController } from './conversation-images.controller';
 import { ConversationsController } from './conversations.controller';
 import { ConversationsGateway } from './conversations.gateway';
 import { ConversationsService } from './conversations.service';
@@ -18,7 +19,7 @@ import { Transaction } from '../payments/transaction.entity';
     UsersModule,
     NotificationsModule,
   ],
-  controllers: [ConversationsController],
+  controllers: [ConversationsController, ConversationImagesController],
   providers: [ConversationsService, ConversationsGateway],
   exports: [ConversationsService, ConversationsGateway],
 })

@@ -4,6 +4,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  OnApplicationBootstrap,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Not, Repository } from 'typeorm';
@@ -16,6 +17,8 @@ import { Message, SystemEvent } from './message.entity';
 import { Transaction } from '../payments/transaction.entity';
 import { Shipment } from '../shipping/shipment.entity';
 import { carrierTrackingUrl } from '../shipping/tracking-url';
+import { basename } from 'path';
+import { getStorage, isPrivateKey, privateConversationKey, StoredObject } from '../common/upload/storage.service';
 
 /** Durée de validité d'une proposition de prix acceptée : passé ce délai, l'annonce se paie de nouveau à son prix affiché. */
 export const OFFER_VALID_HOURS = Number(process.env.OFFER_VALID_HOURS) > 0 ? Number(process.env.OFFER_VALID_HOURS) : 72;
@@ -48,7 +51,15 @@ export function detectScamSignals(text: string): 'paiement_hors_site' | 'lien_ex
 }
 
 @Injectable()
-export class ConversationsService {
+export class ConversationsService implements OnApplicationBootstrap {
+  /** AUDIT §74 : images de conversation antérieures (publiques sous /uploads) déplacées dans l'espace privé, une fois, 30 s après le démarrage. */
+  onApplicationBootstrap() {
+    if (process.env.NODE_ENV === 'test') return;
+    setTimeout(() => {
+      this.migratePublicImages().catch((e) => this.logger.error(`Déplacement des images de conversation : ${(e as Error).message}`));
+    }, 30_000).unref();
+  }
+
   private readonly logger = new Logger('Conversations');
   constructor(
     @InjectRepository(Conversation) private conversationsRepo: Repository<Conversation>,
@@ -307,10 +318,67 @@ export class ConversationsService {
   onMessageEvent(fn: (e: { kind: 'new' | 'update'; message: Message; buyerId: string; sellerId: string }) => void) {
     this.messageListeners.push(fn);
   }
+  /**
+   * AUDIT §74 : une image privée n'est jamais renvoyée par sa clé de stockage mais par la route contrôlée
+   * (`/conversations/<id>/images/<fichier>`), qui vérifie l'identité et la participation à chaque requête.
+   */
+  attachmentViewFor<T extends Pick<Message, 'type' | 'attachmentUrl' | 'conversationId'>>(m: T): T {
+    if (m.type === 'image' && m.attachmentUrl && isPrivateKey(m.attachmentUrl)) return { ...m, attachmentUrl: `/conversations/${m.conversationId}/images/${basename(m.attachmentUrl)}` };
+    return m;
+  }
+
+  /** Image d'une conversation pour un membre identifié : participant ou administrateur, fichier bien rattaché à cette conversation. */
+  async serveImage(conversationId: string, name: string, viewerId: string): Promise<StoredObject> {
+    const key = privateConversationKey(name);
+    if (!isPrivateKey(key)) throw new NotFoundException('Fichier introuvable.');
+    const c = await this.conversationsRepo.findOne({ where: { id: conversationId } });
+    if (!c) throw new NotFoundException('Conversation introuvable.');
+    const viewer = await this.usersService.findById(viewerId);
+    if (!viewer || viewer.deletedAt || viewer.suspendedAt) throw new ForbiddenException('Compte indisponible.');
+    if (c.buyerId !== viewerId && c.sellerId !== viewerId && viewer.accountType !== 'admin') throw new ForbiddenException("Vous n'avez pas accès à cette conversation.");
+    const message = await this.messagesRepo.findOne({ where: { conversationId, type: 'image', attachmentUrl: key } });
+    if (!message) throw new NotFoundException('Fichier introuvable.');
+    const obj = await getStorage().get?.(key);
+    if (!obj) throw new NotFoundException('Fichier introuvable.');
+    return obj;
+  }
+
+  /**
+   * AUDIT §74 : images envoyées avant ce tour (sous /uploads, publiques) déplacées dans l'espace privé au démarrage — une
+   * fois, idempotent ; les messages pointent ensuite vers la clé privée. Rien n'est perdu si le déplacement échoue : le
+   * message garde son URL et sera repris au démarrage suivant.
+   */
+  async migratePublicImages(): Promise<{ moved: number; failed: number }> {
+    const storage = getStorage();
+    const pending = (await this.messagesRepo.find({ where: { type: 'image' }, take: 2000 })).filter((m) => m.attachmentUrl && !isPrivateKey(m.attachmentUrl));
+    let moved = 0;
+    let failed = 0;
+    for (const m of pending) {
+      try {
+        const url = m.attachmentUrl!;
+        const name = basename(url);
+        const sourceKey = /^https?:\/\//.test(url) ? `uploads/${name}` : url.replace(/^\//, '');
+        const obj = await storage.get?.(sourceKey);
+        if (!obj) { failed += 1; continue; }
+        const chunks: Buffer[] = [];
+        for await (const chunk of obj.body) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        const key = await storage.put(privateConversationKey(name), Buffer.concat(chunks), obj.contentType);
+        await this.messagesRepo.update(m.id, { attachmentUrl: key });
+        await storage.delete(url).catch(() => undefined);
+        moved += 1;
+      } catch (e) {
+        failed += 1;
+        this.logger.warn(`Image de conversation ${m.id} non déplacée : ${(e as Error).message}`);
+      }
+    }
+    if (moved || failed) this.logger.log(`Images de conversation déplacées dans l'espace privé : ${moved} (échecs : ${failed})`);
+    return { moved, failed };
+  }
+
   private broadcast(kind: 'new' | 'update', message: Message, c: Pick<Conversation, 'buyerId' | 'sellerId'>) {
     for (const fn of this.messageListeners) {
       try {
-        fn({ kind, message, buyerId: c.buyerId, sellerId: c.sellerId });
+        fn({ kind, message: this.attachmentViewFor(message), buyerId: c.buyerId, sellerId: c.sellerId });
       } catch {
         /* un abonné défaillant ne bloque pas l'écriture du message */
       }
@@ -342,7 +410,7 @@ export class ConversationsService {
   async getMessages(conversationId: string, userId: string): Promise<Message[]> {
     await this.assertMember(conversationId, userId);
     await this.markRead(conversationId, userId);
-    return this.messagesRepo.find({ where: { conversationId }, order: { createdAt: 'ASC' } });
+    return (await this.messagesRepo.find({ where: { conversationId }, order: { createdAt: 'ASC' } })).map((m) => this.attachmentViewFor(m));
   }
 
   /** Abonnés aux accusés de lecture (la passerelle WebSocket les diffuse à la conversation). */
@@ -444,7 +512,7 @@ export class ConversationsService {
   async postImage(conversationId: string, senderId: string, attachmentUrl: string, caption?: string): Promise<Message> {
     const { c, otherId } = await this.assertCanWrite(conversationId, senderId);
     const content = (caption || '').trim().slice(0, 500) || undefined;
-    return this.persist(c, otherId, this.messagesRepo.create({ conversationId, senderId, type: 'image', attachmentUrl, content }), '📷 Photo reçue');
+    return this.attachmentViewFor(await this.persist(c, otherId, this.messagesRepo.create({ conversationId, senderId, type: 'image', attachmentUrl, content }), '📷 Photo reçue'));
   }
 
   /** Proposition de prix par l'acheteur (une seule en attente à la fois). */

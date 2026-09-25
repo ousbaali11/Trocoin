@@ -4,7 +4,7 @@ import { promises as fs } from 'fs';
 import { diskStorage } from 'multer';
 import { basename, resolve } from 'path';
 import sharp from 'sharp';
-import { getStorage, publicUploadPath, UPLOAD_DIR } from './storage.service';
+import { getStorage, privateConversationKey, publicUploadPath, UPLOAD_DIR } from './storage.service';
 
 export { UPLOAD_DIR } from './storage.service';
 export const MAX_IMAGE_BYTES = 8 * 1024 * 1024; // 8 Mo
@@ -126,6 +126,39 @@ export async function finalizeUploadedImagesWithThumbs(
     return out;
   } catch (err) {
     await Promise.all(urls.map((u) => storage.delete(u).catch(() => undefined)));
+    throw err;
+  } finally {
+    await Promise.all(files.map((f) => fs.unlink(f.path).catch(() => undefined)));
+  }
+}
+
+/**
+ * AUDIT §74 : images de conversation — ré-encodées comme les autres, mais rangées dans l'espace privé
+ * (`private/conversations/<uuid>.<ext>`) : la valeur renvoyée est la CLÉ, servie uniquement par la route contrôlée.
+ */
+export async function finalizePrivateConversationImages(files: Array<{ path: string; filename: string }>): Promise<string[]> {
+  const storage = getStorage();
+  const keys: string[] = [];
+  try {
+    for (const file of files) {
+      const safePath = resolve(UPLOAD_DIR, basename(file.path));
+      if (!safePath.startsWith(UPLOAD_DIR)) throw new BadRequestException('Chemin de fichier invalide.');
+      const handle = await fs.open(safePath, 'r');
+      const head = Buffer.alloc(16);
+      try {
+        await handle.read(head, 0, 16, 0);
+      } finally {
+        await handle.close();
+      }
+      const ext = sniffImageExtension(head);
+      if (!ext) throw new BadRequestException("Le fichier envoyé n'est pas une image JPEG, PNG ou WEBP valide.");
+      const processed = await processImage(safePath, ext);
+      const base = basename(file.filename, '.tmp');
+      keys.push(await storage.put(privateConversationKey(`${base}.${ext}`), processed, CONTENT_TYPES[ext]));
+    }
+    return keys;
+  } catch (err) {
+    await Promise.all(keys.map((k) => storage.delete(k).catch(() => undefined)));
     throw err;
   } finally {
     await Promise.all(files.map((f) => fs.unlink(f.path).catch(() => undefined)));

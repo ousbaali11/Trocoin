@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
   Post,
   Req,
+  Res,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -17,7 +18,10 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { Throttle } from '@nestjs/throttler';
 import { ArrayMaxSize, ArrayMinSize, IsArray, IsIn, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { finalizeUploadedImages, imageDiskStorage, imageFileFilter, MAX_IMAGE_BYTES } from '../common/upload/image-upload';
+import { ConfigService } from '@nestjs/config';
+import type { Response } from 'express';
+import { finalizePrivateConversationImages, imageDiskStorage, imageFileFilter, MAX_IMAGE_BYTES } from '../common/upload/image-upload';
+import { IMAGE_COOKIE, IMAGE_COOKIE_TTL_S, issueImageCookie } from './image-access';
 import { ConversationsService } from './conversations.service';
 import { SendMessageDto } from './dto/send-message.dto';
 import { StartConversationDto } from './dto/start-conversation.dto';
@@ -42,7 +46,12 @@ class ImageCaptionDto {
 @UseGuards(JwtAuthGuard)
 @Controller('conversations')
 export class ConversationsController {
-  constructor(private conversationsService: ConversationsService) {}
+  constructor(private conversationsService: ConversationsService, private config: ConfigService) {}
+
+  /** AUDIT §74 : cookie d'identité (HttpOnly, même site, 24 h) pour que les balises <img> des images privées soient authentifiées. */
+  private imageCookie(res: Response, userId: string) {
+    res.cookie(IMAGE_COOKIE, issueImageCookie(this.config.get<string>('JWT_SECRET') || '', userId), { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: IMAGE_COOKIE_TTL_S * 1000, path: '/conversations' });
+  }
 
   @Post()
   @Throttle({ default: { limit: 30, ttl: 3_600_000 } })
@@ -69,7 +78,8 @@ export class ConversationsController {
   }
 
   @Get(':id')
-  detail(@Req() req: any, @Param('id', ParseUUIDPipe) id: string) {
+  detail(@Req() req: any, @Param('id', ParseUUIDPipe) id: string, @Res({ passthrough: true }) res: Response) {
+    this.imageCookie(res, req.user.userId);
     return this.conversationsService.getDetail(id, req.user.userId);
   }
 
@@ -84,7 +94,8 @@ export class ConversationsController {
   }
 
   @Get(':id/messages')
-  getMessages(@Req() req: any, @Param('id', ParseUUIDPipe) id: string) {
+  getMessages(@Req() req: any, @Param('id', ParseUUIDPipe) id: string, @Res({ passthrough: true }) res: Response) {
+    this.imageCookie(res, req.user.userId);
     return this.conversationsService.getMessages(id, req.user.userId);
   }
 
@@ -108,8 +119,8 @@ export class ConversationsController {
       await deleteUploadedFile(`/uploads/${file.filename}`);
       throw err;
     }
-    const [url] = await finalizeUploadedImages([file]);
-    return this.conversationsService.postImage(id, req.user.userId, url, dto.caption);
+    const [key] = await finalizePrivateConversationImages([file]); // AUDIT §74 : espace privé, jamais /uploads
+    return this.conversationsService.postImage(id, req.user.userId, key, dto.caption);
   }
 
   @Post(':id/offers')

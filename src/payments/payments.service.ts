@@ -32,7 +32,9 @@ import { CheckoutSync, IPaymentProvider, PaymentProviderError, PaymentState } fr
 import { payoutTrace, tracePayoutError } from './payout-trace';
 import { PAYMENT_ENVIRONMENT_KEY, paymentEnvironmentTrace, PaymentEnvironmentTrace } from './environment-trace';
 import { CHECKOUT_TTL_MINUTES, PAYMENT_PROVIDER } from './payments.constants';
-import { countSignatures, traceWebhookAccepted, traceWebhookRejected } from './webhook-trace';
+import { countSignatures, traceWebhookAccepted, traceWebhookDuplicate, traceWebhookRejected } from './webhook-trace';
+import { WebhookEvent } from './webhook-event.entity';
+import type { PaymentWebhookEvent } from './payment-provider.interface';
 import { ChosenPickupPoint, DeliveryAddress, DeliveryMethod, DeliveryMode, Transaction, TransactionStatus } from './transaction.entity';
 
 /**
@@ -261,6 +263,7 @@ export class PaymentsService implements OnApplicationBootstrap {
     @InjectRepository(Shipment) private shipments: Repository<Shipment>,
     @Inject(PAYMENT_PROVIDER) private paymentProvider: IPaymentProvider,
     private usersService: UsersService,
+    @InjectRepository(WebhookEvent) private webhookEventsRepo: Repository<WebhookEvent>,
     private stripeConnect: StripeConnectService,
     private notifications: NotificationsService,
     private settings: SettingsService,
@@ -1007,7 +1010,44 @@ export class PaymentsService implements OnApplicationBootstrap {
       throw err;
     }
     traceWebhookAccepted(event.raw, event.accountId);
+    // AUDIT §74 : livraison « au moins une fois » — un évènement déjà traité est ignoré (ni capture, ni virement, ni
+    // changement de statut, ni notification en double). Réclamé avant le traitement, libéré si celui-ci échoue.
+    if (!(await this.claimWebhookEvent(event.id, event.raw))) {
+      traceWebhookDuplicate();
+      this.logger.log(`Webhook ${event.raw} (${event.id}) déjà traité : ignoré`);
+      return { received: true, handled: 'deja_traite' };
+    }
     this.logger.log(`Webhook ${event.raw} (${event.id}) → ${event.type}`);
+    try {
+      await this.processWebhookEvent(event);
+    } catch (err) {
+      await this.releaseWebhookEvent(event.id);
+      throw err;
+    }
+    return { received: true, handled: event.type };
+  }
+
+  /** Réclame l'évènement (clé primaire) ; false s'il a déjà été traité ou est en cours de traitement. */
+  private async claimWebhookEvent(id: string, type: string): Promise<boolean> {
+    try {
+      await this.webhookEventsRepo.insert({ id: id.slice(0, 120), type: type.slice(0, 80) });
+      return true;
+    } catch (err) {
+      if (/UNIQUE|unique|duplicate key|PRIMARY KEY/i.test((err as Error).message || '')) return false;
+      throw err;
+    }
+  }
+  private async releaseWebhookEvent(id: string): Promise<void> {
+    await this.webhookEventsRepo.delete({ id: id.slice(0, 120) }).catch(() => undefined);
+  }
+  /** Historique des évènements traités : 30 jours suffisent (le prestataire relance pendant quelques jours). */
+  @Cron('20 4 * * *')
+  async purgeWebhookEvents(now = new Date()): Promise<number> {
+    const res = await this.webhookEventsRepo.delete({ receivedAt: LessThan(new Date(now.getTime() - 30 * DAY_MS)) });
+    return res.affected ?? 0;
+  }
+
+  private async processWebhookEvent(event: PaymentWebhookEvent): Promise<void> {
     if (event.type === 'checkout_completed' || event.type === 'checkout_expired') {
       const tx = await this.findByProviderRef(event.transactionId, event.providerSessionId);
       if (tx && tx.status === 'en_attente') await this.syncPending(tx);
@@ -1063,7 +1103,6 @@ export class PaymentsService implements OnApplicationBootstrap {
         await this.notifications.notify(tx.buyerId, { type: 'transaction', title: 'Remboursement effectué', body: 'Le remboursement de votre achat a été émis par le fournisseur de paiement.', link: `/compte/transactions/${tx.id}` });
       }
     }
-    return { received: true, handled: event.type };
   }
 
   private async findByProviderRef(transactionId?: string, providerSessionId?: string): Promise<Transaction | null> {

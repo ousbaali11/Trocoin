@@ -189,6 +189,8 @@ export async function api<T = unknown>(path: string, opts: RequestOptions = {}):
   const init: RequestInit & { next?: { revalidate?: number | false } } = {
     method: opts.method || "GET",
     headers,
+    // AUDIT §74 : le cookie d'identité des images de conversation (posé par l'API, même site) est envoyé et accepté
+    credentials: "include",
     body: opts.formData ?? (opts.body !== undefined ? JSON.stringify(opts.body) : undefined),
     signal: opts.signal,
   };

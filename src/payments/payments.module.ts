@@ -17,9 +17,10 @@ import { PaypalPaymentProvider } from './paypal-payment.provider';
 import { StripePaymentProvider } from './stripe-payment.provider';
 import { Shipment } from '../shipping/shipment.entity';
 import { Transaction } from './transaction.entity';
+import { WebhookEvent } from './webhook-event.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Transaction, Listing, Shipment]), ConfigModule, UsersModule, NotificationsModule, ConversationsModule, ShippingModule, RetentionModule],
+  imports: [TypeOrmModule.forFeature([Transaction, Listing, Shipment, WebhookEvent]), ConfigModule, UsersModule, NotificationsModule, ConversationsModule, ShippingModule, RetentionModule],
   controllers: [PaymentsController, MockCheckoutController],
   providers: [
     PaymentsService,

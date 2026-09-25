@@ -320,7 +320,7 @@ export class DemoCatalogueService {
     if (!c) throw new NotFoundException('Conversation introuvable.');
     const seller = await this.usersRepo.findOne({ where: { id: c.sellerId } });
     if (!seller?.isDemoAccount) throw new BadRequestException("Cette conversation n'implique pas un compte de démonstration.");
-    const messages = await this.messagesRepo.find({ where: { conversationId }, order: { createdAt: 'ASC' }, take: 200 });
+    const messages = (await this.messagesRepo.find({ where: { conversationId }, order: { createdAt: 'ASC' }, take: 200 })).map((m) => this.conversations.attachmentViewFor(m)); // AUDIT §74
     return messages.map((m) => ({ id: m.id, senderId: m.senderId, fromSeller: m.senderId === c.sellerId, type: m.type, content: m.content ?? null, createdAt: m.createdAt, readAt: m.readAt ?? null, auto: m.meta?.auto === 'demo', staff: m.meta?.staff === 1 }));
   }
 }

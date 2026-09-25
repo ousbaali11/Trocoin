@@ -22,7 +22,7 @@ création) :
 | `users.stripeAccountId` (`acct_…`) | comptes de versement | lien de configuration, lecture d'état, virement (destination), suppression | **conforme** : remise à zéro des orphelins et balayage nocturne (§67), rejoué 20 s après chaque démarrage |
 | clés d'idempotence des virements | jamais en base (calculées) | création de virement | **conforme** (§70 : clé liée aux paramètres, conflit résolu une fois) |
 | `shipments.providerRef` (Boxtal) | bons d'envoi | suivi, annulation | **à signaler** : Boxtal est encore en bac à sable ; au passage en production, les bons d'envoi de test en cours perdront leur suivi (le suivi indisponible n'est jamais présumé : la vente attend l'administration) — même mécanisme d'empreinte à prévoir le jour du passage |
-| identifiants d'évènements webhook | jamais en base | — | **à signaler** : pas de table de déduplication ; les traitements sont idempotents (état relu avant chaque effet), un évènement rejoué ne fait rien deux fois |
+| identifiants d'évènements webhook | table `webhook_events` (depuis 1.47.0) | réclamés avant traitement, libérés en cas d'échec, purgés à 30 jours | **corrigé (1.47.0, §74)** : un évènement livré plusieurs fois n'est traité qu'une fois (200 « deja_traite »), compteur dans `/health` |
 | `subscriptions.providerRef` | abonnements | aucun (jamais écrit ni lu) | conforme (colonne réservée) |
 | PayPal | rien en base (prestataire simulé, option non retenue) | aucun appel réseau | conforme |
 
@@ -78,7 +78,7 @@ orphelins — ces derniers n'ont d'ailleurs aucune route : balayage interne, ré
 | Cotation d'envoi sur une annonce non en ligne (brouillon, vendue, archivée) par quiconque connaît l'identifiant | **corrigé (1.44.0)** |
 | Bascule particulier / professionnel sans limite propre (registre des entreprises appelé) | **corrigé (1.44.0)** : 5 / h |
 | Pages du front : garde côté client (`RequireAuth`) + contrôle réel par l'API ; `/compte/boutique` ouvrable par un non-pro (contenu adapté) ; aucun lien mort dans les quatre menus | **conforme** |
-| Images de conversation servies sans connexion (noms imprévisibles) ; pas de table de déduplication des webhooks | **à signaler** (limites assumées, déjà documentées) |
+| Images de conversation servies sans connexion (noms imprévisibles) ; pas de table de déduplication des webhooks | **corrigé (1.47.0, §74)** : images réservées aux participants et à l'administration (stockage privé, route contrôlée, identité vérifiée à chaque requête) ; évènements webhook dédupliqués |
 
 ## D bis. Argent et litiges (livraison 3)
 

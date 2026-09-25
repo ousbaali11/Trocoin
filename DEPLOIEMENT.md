@@ -114,6 +114,14 @@ est recommandé (10 Go et 10 M de lectures/mois gratuits, pas de frais de sortie
    l'étape 2 a été faite). Le démarrage refuse une configuration incomplète (variable nommée).
 5. Les photos déjà envoyées sur le disque Render ne sont pas migrées (elles auront de toute
    façon disparu au redéploiement suivant).
+6. **Images de conversation (AUDIT §74)** : elles ne sont plus des fichiers publics. Sur disque, elles vont dans
+   `uploads-prives/` (jamais servi en statique) ; sur S3, dans le bucket **`S3_PRIVATE_BUCKET`** s'il est défini
+   (recommandé : un bucket `trocoin-prive` sans URL publique, même jeton d'accès), sinon sous le préfixe `private/` du
+   bucket courant — **si `S3_PUBLIC_URL` est défini, créez impérativement le bucket privé**, sinon le préfixe resterait
+   lisible par l'URL publique. `/health.storage` montre `privateBucket: true/false` sans rien révéler. Les images
+   envoyées avant ce tour sont déplacées automatiquement 30 s après le démarrage (une fois, journalisé). Elles sont
+   servies par `GET /conversations/<id>/images/<fichier>` aux deux participants et à l'administration seulement
+   (jeton de session ou cookie HttpOnly `trocoin_img`, même site, posé à l'ouverture d'une conversation).
 
 Le chemin S3 est testé en e2e contre un faux serveur S3 en mémoire (`test/phase9`, avec et sans URL
 publique, vignettes comprises) et **contre le bucket R2 réel `trocoin-photos` le 14 septembre 2026**

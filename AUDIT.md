@@ -4064,3 +4064,53 @@ et 2, base réensemencée par le scénario e2e), passage automatisé de toutes l
 **Production 1.46.0 — 25 septembre 2026, 13 h 16 UTC.** CI verte (six étapes). `/health` : `version 1.46.0`,
 `paymentIssues 3`, `paymentEnvironment` inchangé. Fin de l'audit complet n° 2 : quatre livraisons (1.44.0, 1.45.0,
 1.46.0), résultat point par point dans `docs/audit-2.md`.
+
+## 74. Déduplication des évènements webhook ; images de conversation réservées aux participants — 25 septembre 2026
+
+Deux points « à signaler » de l'audit n° 2 (§73), traités.
+
+### 1. Évènements webhook livrés « au moins une fois » (1.47.0)
+
+Stripe (et PayPal via Stripe) peut livrer plusieurs fois le même évènement (relance, délai réseau). Rien n'empêchait de
+rejouer le traitement : capture, virement, changement de statut, notification.
+
+- Table `webhook_events` (migration `1789650000000` ; identifiant de l'évènement en clé primaire, type, date). L'identifiant
+  est **réclamé avant le traitement** (`claimWebhookEvent` : une insertion ; deux livraisons simultanées ne passent pas
+  toutes deux), **libéré si le traitement échoue** (le prestataire relance et l'évènement est alors traité), et l'évènement
+  déjà traité reçoit **200 « deja_traite »** sans rien exécuter. `/health.stripeWebhooks.duplicates` compte ces rejeux.
+- **Purge** quotidienne (4 h 20) des évènements de plus de 30 jours (`purgeWebhookEvents`) : la fenêtre de relance réelle
+  est de quelques jours.
+- Les traitements restaient idempotents par relecture d'état (§73) ; la déduplication s'ajoute devant, sans dépendre
+  du contenu.
+
+### 2. Images de conversation (1.47.0)
+
+Avant : fichiers publics sous `/uploads`, protégés par un nom imprévisible seulement (quiconque tenait l'URL voyait la photo).
+
+- **Stockage privé** : disque → `uploads-prives/` (jamais servi en statique) ; S3 → bucket `S3_PRIVATE_BUCKET` (recommandé
+  dès que `S3_PUBLIC_URL` existe ; avertissement au démarrage sinon) ou préfixe `private/` du bucket courant. Les clés
+  privées ne produisent jamais d'URL publique. `/health.storage` montre `privateBucket` (sans rien révéler).
+- **Route contrôlée** `GET /conversations/<id>/images/<fichier>` : identité vérifiée **à chaque requête** — jeton de session
+  (Authorization) ou **cookie HttpOnly `trocoin_img`** (HMAC, 24 h, même site, `Path=/conversations`, `SameSite=Lax`,
+  `Secure` en production) posé par l'API à l'ouverture d'une conversation, puisque les balises `<img>` n'envoient pas
+  d'en-tête. Puis : le membre est acheteur ou vendeur de la conversation (ou administrateur, pour la modération), n'est ni
+  suspendu ni supprimé, et le fichier est bien rattaché à un message de cette conversation. Un tiers connecté avec l'URL
+  exacte → 403 ; anonyme → 401 ; un cookie falsifié → 401 ; l'ancien chemin `/uploads/<fichier>` → 404.
+- Les messages (détail, liste, temps réel, page console du catalogue de démonstration) renvoient l'URL de la route
+  contrôlée, jamais la clé. Le front envoie ses requêtes avec `credentials: "include"` (cookie accepté et renvoyé,
+  origines CORS explicites déjà en place).
+- **Migration** : les images envoyées avant ce tour sont déplacées dans l'espace privé 30 s après le démarrage (une fois,
+  idempotent, journalisé ; un échec laisse l'ancienne URL et réessaie au démarrage suivant).
+- **Cache** : `Cache-Control: private, max-age=86400` — le navigateur du membre garde l'image un jour (aucun cache partagé) ;
+  toute nouvelle requête repasse par le contrôle d'accès.
+- Test `phase46` (2 scénarios) et vérification navigateur (ci-dessous).
+
+### Vérification
+
+- Typecheck API et front : 0 erreur. `phase46` 2/2 : évènement livré 2 fois → 1 traitement, 1 notification ; `charge.refunded` 3 fois →
+  1 remboursement, 1 notification ; traitement en échec → identifiant libéré, relance traitée (2 appels, pas 3) ; purge ;
+  image : acheteur / vendeur / admin 200, tiers connecté 403, anonyme 401, cookie seul 200, cookie falsifié 401,
+  `/uploads` 404. Régression (phase13, 2, 12, 36, 16, 9, 43, 19) : 81/81. 249 tests API.
+- Navigateur (pile locale reconstruite) : image affichée pour le vendeur en 1,4 s (200, cache privé, ETag, cookie
+  HttpOnly même site), affichée au rechargement et après navigation ; tiers connecté avec l'URL exacte → 403 ;
+  anonyme → 401 ; ancien chemin public → 404.
