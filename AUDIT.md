@@ -3912,3 +3912,9 @@ Suite du §71 : clé d'API Pexels déposée par le propriétaire dans `private/p
 - Typecheck API 0 erreur ; `phase43` 3/3 avec le jeu de données résolu (bouton console actif, couverture 100 %).
 - Aucune clé ni image dans le dépôt : `photos.json` ne contient que des URL Pexels et des métadonnées ; la clé reste
   dans `private/` (grep du diff indexé avant commit).
+
+**Production 1.43.0 — 25 septembre 2026, 09 h 22 UTC.** CI verte (six étapes, déploiement Render inclus). `/health` :
+`version 1.43.0`, `payouts.pending 0`, `paymentIssues 3` (inchangé). Recherche publique : 60 annonces en ligne, aucune de
+démonstration. Le jeu de données complet (600 annonces, 1 692 photos Pexels) est embarqué dans l'image ; l'ensemencement
+attend le clic du propriétaire dans la console (« Créer le catalogue de démonstration », puis « Récupérer les
+identifiants »). Aucune clé Pexels dans le dépôt (valeur de la clé recherchée dans le diff indexé avant commit : absente).
